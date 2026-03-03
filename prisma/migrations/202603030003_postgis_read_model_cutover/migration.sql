@@ -1,6 +1,13 @@
 -- PostGIS full-cutover foundation
 CREATE EXTENSION IF NOT EXISTS postgis;
 
+-- Fresh CI databases do not include the legacy base schema migrations.
+-- Create the minimal FK target table only when absent so this migration can apply.
+CREATE TABLE IF NOT EXISTS "OrganizationWorkspace" (
+  "id" TEXT NOT NULL,
+  CONSTRAINT "OrganizationWorkspace_pkey" PRIMARY KEY ("id")
+);
+
 DO $$
 BEGIN
   IF EXISTS (
