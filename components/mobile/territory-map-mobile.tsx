@@ -17,7 +17,12 @@ interface TerritoryMapMobileProps {
 
 const FALLBACK_CENTER: LatLngExpression = [39.8283, -98.5795];
 
+function isFiniteLatLng(lat: unknown, lng: unknown) {
+  return typeof lat === 'number' && Number.isFinite(lat) && typeof lng === 'number' && Number.isFinite(lng);
+}
+
 export function TerritoryMapMobile({ stores, selectedStopIds, orderedStopIds, focusedStoreId, routeCoordinates, onSelectStore }: TerritoryMapMobileProps) {
+  const safeStores = useMemo(() => stores.filter((store) => isFiniteLatLng(store.lat, store.lng)), [stores]);
   const selectedSet = useMemo(() => new Set(selectedStopIds), [selectedStopIds]);
   const orderMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -26,13 +31,19 @@ export function TerritoryMapMobile({ stores, selectedStopIds, orderedStopIds, fo
   }, [orderedStopIds]);
 
   const center = useMemo<LatLngExpression>(() => {
-    const focused = focusedStoreId ? stores.find((store) => store.id === focusedStoreId) : null;
-    if (focused) return [focused.lat, focused.lng];
-    if (stores[0]) return [stores[0].lat, stores[0].lng];
+    const focused = focusedStoreId ? safeStores.find((store) => store.id === focusedStoreId) : null;
+    if (focused && isFiniteLatLng(focused.lat, focused.lng)) return [focused.lat, focused.lng];
+    if (safeStores[0] && isFiniteLatLng(safeStores[0].lat, safeStores[0].lng)) return [safeStores[0].lat, safeStores[0].lng];
     return FALLBACK_CENTER;
-  }, [stores, focusedStoreId]);
+  }, [safeStores, focusedStoreId]);
 
-  const routeLine = useMemo(() => routeCoordinates.map(([lng, lat]) => [lat, lng] as [number, number]), [routeCoordinates]);
+  const routeLine = useMemo(
+    () =>
+      routeCoordinates
+        .filter((coord): coord is [number, number] => Array.isArray(coord) && coord.length === 2 && isFiniteLatLng(coord[1], coord[0]))
+        .map(([lng, lat]) => [lat, lng] as [number, number]),
+    [routeCoordinates],
+  );
 
   return (
     <>
@@ -64,11 +75,11 @@ export function TerritoryMapMobile({ stores, selectedStopIds, orderedStopIds, fo
         zoomDelta={0.5}
       >
       <TileLayer attribution='&copy; OpenStreetMap contributors &copy; CARTO' url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-      <FitMapBounds stores={stores} focusedStoreId={focusedStoreId} />
+      <FitMapBounds stores={safeStores} focusedStoreId={focusedStoreId} />
       <MapClickClear onClear={() => onSelectStore(null)} />
       {routeLine.length > 1 ? <Polyline positions={routeLine} color="#3ea5ff" weight={6} opacity={0.9} /> : null}
 
-      {stores.map((store) => {
+      {safeStores.map((store) => {
         const selected = selectedSet.has(store.id);
         const order = orderMap.get(store.id);
         const focused = focusedStoreId === store.id;
@@ -91,18 +102,19 @@ function FitMapBounds({ stores, focusedStoreId }: { stores: TerritoryStorePin[];
   const map = useMap();
 
   useEffect(() => {
-    if (stores.length === 0) {
+    const validStores = stores.filter((store) => isFiniteLatLng(store.lat, store.lng));
+    if (validStores.length === 0) {
       map.setView(FALLBACK_CENTER, 4);
       return;
     }
 
-    const focused = focusedStoreId ? stores.find((store) => store.id === focusedStoreId) : null;
-    if (focused) {
+    const focused = focusedStoreId ? validStores.find((store) => store.id === focusedStoreId) : null;
+    if (focused && isFiniteLatLng(focused.lat, focused.lng)) {
       map.flyTo([focused.lat, focused.lng], Math.max(map.getZoom(), 13), { duration: 0.4 });
       return;
     }
 
-    const bounds = L.latLngBounds(stores.map((store) => [store.lat, store.lng] as [number, number]));
+    const bounds = L.latLngBounds(validStores.map((store) => [store.lat, store.lng] as [number, number]));
     map.flyToBounds(bounds, { padding: [24, 24], maxZoom: 11, duration: 0.45 });
   }, [map, stores, focusedStoreId]);
 

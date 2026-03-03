@@ -17,7 +17,12 @@ interface MapCanvasInnerProps {
 
 const FALLBACK_CENTER: LatLngExpression = [39.8283, -98.5795];
 
+function isFiniteLatLng(lat: unknown, lng: unknown) {
+  return typeof lat === 'number' && Number.isFinite(lat) && typeof lng === 'number' && Number.isFinite(lng);
+}
+
 export function TerritoryMapCanvasInner({ stores, selectedStopIds, orderedStopIds, routeCoordinates, focusedStoreId, onSelectStore }: MapCanvasInnerProps) {
+  const safeStores = useMemo(() => stores.filter((store) => isFiniteLatLng(store.lat, store.lng)), [stores]);
   const selectedSet = useMemo(() => new Set(selectedStopIds), [selectedStopIds]);
 
   const orderMap = useMemo(() => {
@@ -29,19 +34,25 @@ export function TerritoryMapCanvasInner({ stores, selectedStopIds, orderedStopId
   }, [orderedStopIds]);
 
   const mapCenter = useMemo<LatLngExpression>(() => {
-    if (stores.length === 0) {
+    if (safeStores.length === 0) {
       return FALLBACK_CENTER;
     }
 
-    const focus = focusedStoreId ? stores.find((store) => store.id === focusedStoreId) : null;
-    if (focus) {
+    const focus = focusedStoreId ? safeStores.find((store) => store.id === focusedStoreId) : null;
+    if (focus && isFiniteLatLng(focus.lat, focus.lng)) {
       return [focus.lat, focus.lng];
     }
 
-    return [stores[0].lat, stores[0].lng];
-  }, [stores, focusedStoreId]);
+    return [safeStores[0].lat, safeStores[0].lng];
+  }, [safeStores, focusedStoreId]);
 
-  const routeLatLngs = useMemo(() => routeCoordinates.map(([lng, lat]) => [lat, lng] as [number, number]), [routeCoordinates]);
+  const routeLatLngs = useMemo(
+    () =>
+      routeCoordinates
+        .filter((coord): coord is [number, number] => Array.isArray(coord) && coord.length === 2 && isFiniteLatLng(coord[1], coord[0]))
+        .map(([lng, lat]) => [lat, lng] as [number, number]),
+    [routeCoordinates],
+  );
 
   return (
     <>
@@ -77,12 +88,12 @@ export function TerritoryMapCanvasInner({ stores, selectedStopIds, orderedStopId
         url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
       />
 
-      <FitBounds stores={stores} focusedStoreId={focusedStoreId} />
+      <FitBounds stores={safeStores} focusedStoreId={focusedStoreId} />
       <MapClickClear onClear={() => onSelectStore(null)} />
 
       {routeLatLngs.length > 1 ? <Polyline positions={routeLatLngs} color="#0f172a" weight={4} opacity={0.85} /> : null}
 
-      {stores.map((store) => {
+      {safeStores.map((store) => {
         const selected = selectedSet.has(store.id);
         const order = orderMap.get(store.id);
         const focused = focusedStoreId === store.id;
@@ -116,20 +127,21 @@ function FitBounds({ stores, focusedStoreId }: { stores: TerritoryStorePin[]; fo
   const map = useMap();
 
   useEffect(() => {
-    if (stores.length === 0) {
+    const validStores = stores.filter((store) => isFiniteLatLng(store.lat, store.lng));
+    if (validStores.length === 0) {
       map.setView(FALLBACK_CENTER, 4);
       return;
     }
 
-    const focus = focusedStoreId ? stores.find((store) => store.id === focusedStoreId) : null;
-    if (focus) {
+    const focus = focusedStoreId ? validStores.find((store) => store.id === focusedStoreId) : null;
+    if (focus && isFiniteLatLng(focus.lat, focus.lng)) {
       map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 12), {
         duration: 0.45,
       });
       return;
     }
 
-    const bounds = L.latLngBounds(stores.map((store) => [store.lat, store.lng] as [number, number]));
+    const bounds = L.latLngBounds(validStores.map((store) => [store.lat, store.lng] as [number, number]));
     map.flyToBounds(bounds, { padding: [32, 32], maxZoom: 11, duration: 0.45 });
   }, [focusedStoreId, map, stores]);
 
