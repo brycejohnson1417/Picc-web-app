@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button, Input, Textarea } from '@/components/ui';
 
@@ -10,6 +10,15 @@ export function MockComposer() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+
+  const isPristine = useMemo(() => !subject.trim() && !body.trim(), [subject, body]);
+
+  function handleClear() {
+    setSubject('');
+    setBody('');
+    setError(null);
+    setStatus('Draft cleared.');
+  }
 
   async function handleSend() {
     setError(null);
@@ -35,11 +44,32 @@ export function MockComposer() {
 
   return (
     <div className="space-y-2 rounded-xl border bg-white p-3 dark:bg-slate-950">
-      <Input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Subject (optional)" disabled={sending} />
-      <Textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Compose message... (mock mode)" disabled={sending} />
+      <Input
+        value={subject}
+        onChange={(event) => {
+          setSubject(event.target.value);
+          setError(null);
+          setStatus(null);
+        }}
+        placeholder="Subject (optional)"
+        disabled={sending}
+      />
+      <Textarea
+        value={body}
+        onChange={(event) => {
+          setBody(event.target.value);
+          setError(null);
+          setStatus(null);
+        }}
+        placeholder="Compose message... (mock mode)"
+        disabled={sending}
+      />
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
       {status ? <p className="text-xs text-emerald-600">{status}</p> : null}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" className="min-h-11" onClick={handleClear} disabled={sending || isPristine}>
+          Clear
+        </Button>
         <Button className="min-h-11" onClick={handleSend} disabled={sending || !body.trim()}>
           {sending ? (
             <>
