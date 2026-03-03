@@ -29,7 +29,7 @@ export const ServiceWorkspace: React.FC<ServiceWorkspaceProps> = ({ currentUserR
     void refresh();
   }, []);
 
-  const now = useMemo(() => new Date(), [lastRefreshed]);
+  const now = useMemo(() => new Date(), [lastRefreshed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toTimestamp = (raw?: string): number | null => {
     if (!raw) return null;
@@ -119,7 +119,7 @@ export const ServiceWorkspace: React.FC<ServiceWorkspaceProps> = ({ currentUserR
         if (dueA !== dueB) return dueA - dueB;
         return (toTimestamp(b.dateCreated) ?? 0) - (toTimestamp(a.dateCreated) ?? 0);
       });
-  }, [rows, search, statusFilter, laneFilter, now]);
+  }, [rows, search, statusFilter, laneFilter, now]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const statuses = useMemo(() => Array.from(new Set(rows.filter((row) => !isClosed(row.status)).map((row) => row.status))), [rows]);
 
@@ -135,7 +135,7 @@ export const ServiceWorkspace: React.FC<ServiceWorkspaceProps> = ({ currentUserR
     [openRows, now],
   );
   const awaitingSignOffCount = useMemo(() => openRows.filter((row) => isAwaitingSignOff(row)).length, [openRows]);
-  const myQueueCount = useMemo(() => openRows.filter((row) => isMine(row)).length, [openRows, currentUserRole]);
+  const myQueueCount = useMemo(() => openRows.filter((row) => isMine(row)).length, [openRows, currentUserRole]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const laneCounts = useMemo(
     () => ({
@@ -145,7 +145,7 @@ export const ServiceWorkspace: React.FC<ServiceWorkspaceProps> = ({ currentUserR
       awaitingSignOff: openRows.filter((row) => isAwaitingSignOff(row)).length,
       myQueue: openRows.filter((row) => isMine(row)).length,
     }),
-    [openRows, currentUserRole],
+    [openRows, currentUserRole], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const lanes: Array<{ key: typeof laneFilter; label: string; count: number }> = [

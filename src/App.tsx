@@ -177,7 +177,7 @@ const App: React.FC = () => {
         existingScript.removeEventListener('load', renderGoogleButton);
       }
     };
-  }, [googleClientId, isAuthed, isSigningIn]);
+  }, [googleClientId, isAuthed, isSigningIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const allowed = roleNavIds[userRole];

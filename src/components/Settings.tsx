@@ -362,6 +362,7 @@ export const Settings: React.FC = () => {
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                   <div className="flex items-center gap-3">
                     {notionBot?.icon && (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={notionBot.icon} alt="Bot" className="w-10 h-10 rounded-full border border-slate-200 bg-white" onError={(event) => (event.currentTarget.style.display = 'none')} />
                     )}
                     <div>

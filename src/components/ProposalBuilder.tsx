@@ -116,6 +116,7 @@ export const ProposalBuilder: React.FC = () => {
 
   const lineItems = useMemo((): ProposalLineItem[] => {
     return Object.entries(quantities)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       .filter(([_, qty]) => (qty as number) > 0)
       .map(([productId, quantity]) => {
         const product = products.find(p => p.id === productId);

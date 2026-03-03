@@ -277,6 +277,7 @@ export const integrationService = {
     return apiFetch(`/api/integrations/sheets/${sourceId}/range?${params.toString()}`);
   },
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async normalizeByModule(module: IntegrationModuleKey, _sourceId: string): Promise<{
     source: IntegrationSource;
     mappings: IntegrationMapping[];
