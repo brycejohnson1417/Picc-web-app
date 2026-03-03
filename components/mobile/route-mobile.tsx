@@ -40,6 +40,7 @@ export function RouteMobile() {
   const [currentLocation, setCurrentLocation] = useState<GeoPoint | null>(null);
   const [optimizing, setOptimizing] = useState(false);
   const [optimized, setOptimized] = useState<TerritoryOptimizedRouteResponse | null>(null);
+  const [savedConfirmation, setSavedConfirmation] = useState<string | null>(null);
 
   const storesQuery = useQuery({
     queryKey: ['route-mobile-stores'],
@@ -78,6 +79,9 @@ export function RouteMobile() {
   }, [selectedStops, currentLocation]);
 
   const legs = optimized?.legs ?? [];
+  const needsCurrentLocation = startChoice === 'current' || endChoice === 'current';
+  const missingCurrentLocation = needsCurrentLocation && !currentLocation;
+  const hasEnoughStopsToOptimize = selectedStops.length >= (startChoice !== 'none' || endChoice !== 'none' ? 1 : 2);
 
   function resolveChoice(choice: string): TerritoryRouteAnchor | null {
     if (choice === 'none') return null;
@@ -214,6 +218,8 @@ export function RouteMobile() {
     window.open(`https://www.google.com/maps/dir/?${params.toString()}`, '_blank', 'noopener,noreferrer');
   }
 
+  const hasEnoughPointsToLaunch = routeSequence().length >= 2;
+
   return (
     <div className="min-h-[calc(100dvh-84px)] bg-[#e6e6e9]">
       <MobileHeader
@@ -265,9 +271,11 @@ export function RouteMobile() {
               </select>
               <button type="button" onClick={requestCurrentLocation} disabled={locating} className="inline-flex items-center gap-1 rounded-lg border border-[#c9cad0] bg-white px-3 py-2 text-[13px]">
                 {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <LocateFixed className="h-4 w-4" />}
-                Use Current
+                {locating ? 'Capturing...' : 'Use Current'}
               </button>
             </div>
+
+            {missingCurrentLocation ? <p className="mt-2 text-[12px] text-[#b3261e]">Select &quot;Use Current&quot; to continue with current location.</p> : null}
 
             <div className="mt-2">
               <select
@@ -301,7 +309,7 @@ export function RouteMobile() {
                   + Add Location
                 </button>
                 <p className="mt-2 text-center text-[13px] font-semibold text-[#595c62]">
-                  <Check className="mr-1 inline h-4 w-4" /> Route Updated
+                  <Check className="mr-1 inline h-4 w-4" /> {selectedStops.length} stop{selectedStops.length === 1 ? '' : 's'} selected
                 </p>
               </div>
 
@@ -353,30 +361,44 @@ export function RouteMobile() {
       {tab === 'current' ? (
         <div className="fixed bottom-[84px] left-0 right-0 z-[2600]">
           <div className="mx-auto grid max-w-[480px] grid-cols-5 border-t border-[#c4c5cc] bg-[#f3f3f6] py-2 text-[#5a95e7]">
-            <button onClick={launchGo} className="mx-2 rounded-2xl bg-[#3ac128] px-2 py-2 text-[15px] font-bold text-white">
+            <button onClick={launchGo} disabled={!hasEnoughPointsToLaunch} className="mx-2 rounded-2xl bg-[#3ac128] px-2 py-2 text-[15px] font-bold text-white disabled:opacity-50">
               GO
             </button>
-            <ActionIconButton label="optimize" onClick={optimizeRoute} icon={optimizing ? <Loader2 className="h-5 w-5 animate-spin" /> : <RotateCcw className="h-5 w-5" />} disabled={optimizing} />
             <ActionIconButton
-              label="save"
+              label={optimizing ? 'optimizing...' : hasEnoughStopsToOptimize ? 'optimize' : 'add stops'}
+              onClick={optimizeRoute}
+              icon={optimizing ? <Loader2 className="h-5 w-5 animate-spin" /> : <RotateCcw className="h-5 w-5" />}
+              disabled={optimizing || !hasEnoughStopsToOptimize || missingCurrentLocation}
+            />
+            <ActionIconButton
+              label={selectedStops.length === 0 ? 'no route' : 'save'}
               onClick={() => {
                 const name = `Route ${new Date().toLocaleDateString()}`;
                 routePlan.saveCurrentRoute(name);
+                setSavedConfirmation(`Saved as ${name}`);
                 toast.success('Route saved');
               }}
               icon={<Save className="h-5 w-5" />}
+              disabled={selectedStops.length === 0}
             />
             <ActionIconButton
-              label="clear"
+              label={selectedStops.length === 0 ? 'empty' : 'clear'}
               onClick={() => {
+                const shouldClear = window.confirm('Clear all stops from the current route?');
+                if (!shouldClear) return;
                 routePlan.clearStops();
                 routePlan.setOrderedStopIds([]);
                 setOptimized(null);
+                setSavedConfirmation(null);
+                toast.success('Route cleared');
               }}
               icon={<X className="h-5 w-5" />}
+              disabled={selectedStops.length === 0}
             />
             <ActionIconButton label="calendar" onClick={() => router.push('/calendar')} icon={<CalendarDays className="h-5 w-5" />} />
           </div>
+          {savedConfirmation ? <p className="bg-[#f3f3f6] px-4 pb-2 text-center text-[12px] text-[#2f7d34]">{savedConfirmation}</p> : null}
+          {!hasEnoughPointsToLaunch ? <p className="bg-[#f3f3f6] px-4 pb-2 text-center text-[12px] text-[#6a6d74]">Add at least 2 route points to enable GO.</p> : null}
         </div>
       ) : null}
 
@@ -505,7 +527,11 @@ function AddLocationModal({
 
 function ActionIconButton({ label, icon, onClick, disabled = false }: { label: string; icon: ReactNode; onClick: () => void; disabled?: boolean }) {
   return (
-    <button onClick={onClick} className="flex min-h-[52px] flex-col items-center justify-center gap-1 text-[11px]" disabled={disabled}>
+    <button
+      onClick={onClick}
+      className="flex min-h-[52px] flex-col items-center justify-center gap-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={disabled}
+    >
       {icon}
       <span>{label}</span>
     </button>

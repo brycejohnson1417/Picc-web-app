@@ -31,6 +31,9 @@ export function StoreFilterSheet({
     return null;
   }
 
+  const activeFilters = selectedStatuses.length + selectedReps.length;
+  const hasActiveFilters = activeFilters > 0;
+
   return (
     <div className="fixed inset-0 z-[5400] bg-black/35">
       <div className="mx-auto flex h-full max-w-[480px] flex-col bg-[#e6e6e9]">
@@ -57,11 +60,16 @@ export function StoreFilterSheet({
         </div>
 
         <div className="grid grid-cols-2 gap-2 border-t border-[#c8c9cf] bg-[#f2f2f5] px-4 py-3">
-          <button type="button" onClick={onReset} className="rounded-lg border border-[#c6c7cc] bg-white px-3 py-2 text-[14px] font-medium text-[#3e4046]">
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={!hasActiveFilters}
+            className="rounded-lg border border-[#c6c7cc] bg-white px-3 py-2 text-[14px] font-medium text-[#3e4046] disabled:cursor-not-allowed disabled:opacity-50"
+          >
             Reset
           </button>
           <button type="button" onClick={onClose} className="rounded-lg bg-[#cd3814] px-3 py-2 text-[14px] font-semibold text-white">
-            Apply
+            {hasActiveFilters ? `Apply (${activeFilters})` : 'Apply'}
           </button>
         </div>
       </div>
