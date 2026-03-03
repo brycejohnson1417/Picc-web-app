@@ -66,6 +66,8 @@ export function AccountsTable({ rows }: { rows: AccountTableRow[] }) {
       columns={columns}
       data={rows}
       searchPlaceholder="Search dispensary or license..."
+      getRowHref={(row) => `/accounts/${row.id}`}
+      rowAriaLabel={(row) => `Open account ${row.name}`}
       mobileCardRenderer={(row) => (
         <>
           <div className="flex items-start justify-between gap-3">

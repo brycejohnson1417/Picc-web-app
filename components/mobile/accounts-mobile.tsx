@@ -1,6 +1,6 @@
 'use client';
 
-import { Filter } from 'lucide-react';
+import { ChevronRight, Filter } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -114,9 +114,18 @@ export function AccountsMobile() {
           >
             <div className="border-b border-[#c6c7cb] px-1 py-1.5 text-[14px] font-semibold text-[#8a8d95]">{letter}</div>
             {list.map((store) => (
-              <button key={store.id} type="button" onClick={() => setDetailStoreId(store.id)} className="w-full border-b border-[#d0d1d4] px-1 py-2.5 text-left">
-                <p className="truncate text-[15px] text-[#15171c]">{store.name}</p>
-                <p className="truncate text-[12px] text-[#8c8f97]">{store.status} · {store.repNames[0] ?? 'Unassigned'}</p>
+              <button
+                key={store.id}
+                type="button"
+                onClick={() => setDetailStoreId(store.id)}
+                className="flex w-full items-center justify-between gap-3 border-b border-[#d0d1d4] px-2 py-3 text-left active:bg-black/5"
+                aria-label={`Open ${store.name}`}
+              >
+                <span className="min-w-0">
+                  <p className="truncate text-[15px] text-[#15171c]">{store.name}</p>
+                  <p className="truncate text-[12px] text-[#8c8f97]">{store.status} · {store.repNames[0] ?? 'Unassigned'}</p>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-[#9b9ea6]" />
               </button>
             ))}
           </section>

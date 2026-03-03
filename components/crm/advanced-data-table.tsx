@@ -13,6 +13,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { Download, Filter, Settings2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Button, Input } from '@/components/ui';
@@ -24,6 +25,8 @@ interface Props<TData, TValue> {
   searchPlaceholder?: string;
   onExportCsv?: () => void;
   mobileCardRenderer?: (row: TData) => ReactNode;
+  getRowHref?: (row: TData) => string | null;
+  rowAriaLabel?: (row: TData) => string;
 }
 
 export function AdvancedDataTable<TData, TValue>({
@@ -33,7 +36,10 @@ export function AdvancedDataTable<TData, TValue>({
   searchPlaceholder = 'Search...',
   onExportCsv,
   mobileCardRenderer,
+  getRowHref,
+  rowAriaLabel,
 }: Props<TData, TValue>) {
+  const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
@@ -96,22 +102,42 @@ export function AdvancedDataTable<TData, TValue>({
 
       <div className="space-y-2 md:hidden">
         {table.getRowModel().rows?.length ? (
-          table.getRowModel().rows.map((row) => (
-            <article key={row.id} className="space-y-2 rounded-xl border bg-white p-3 dark:bg-slate-950">
-              {mobileCardRenderer ? (
-                mobileCardRenderer(row.original)
-              ) : (
-                row.getVisibleCells().map((cell) => (
-                  <div key={cell.id} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-slate-500">
-                      {typeof cell.column.columnDef.header === 'string' ? cell.column.columnDef.header : String(cell.column.id)}
-                    </span>
-                    <span className="text-right">{flexRender(cell.column.columnDef.cell, cell.getContext())}</span>
-                  </div>
-                ))
-              )}
-            </article>
-          ))
+          table.getRowModel().rows.map((row) => {
+            const rowHref = getRowHref?.(row.original);
+            return (
+              <article
+                key={row.id}
+                className={`space-y-2 rounded-xl border bg-white p-3 dark:bg-slate-950 ${rowHref ? 'cursor-pointer active:bg-slate-50 dark:active:bg-slate-900' : ''}`}
+                role={rowHref ? 'link' : undefined}
+                tabIndex={rowHref ? 0 : undefined}
+                aria-label={rowHref ? rowAriaLabel?.(row.original) : undefined}
+                onClick={rowHref ? () => router.push(rowHref) : undefined}
+                onKeyDown={
+                  rowHref
+                    ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          router.push(rowHref);
+                        }
+                      }
+                    : undefined
+                }
+              >
+                {mobileCardRenderer ? (
+                  mobileCardRenderer(row.original)
+                ) : (
+                  row.getVisibleCells().map((cell) => (
+                    <div key={cell.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-slate-500">
+                        {typeof cell.column.columnDef.header === 'string' ? cell.column.columnDef.header : String(cell.column.id)}
+                      </span>
+                      <span className="text-right">{flexRender(cell.column.columnDef.cell, cell.getContext())}</span>
+                    </div>
+                  ))
+                )}
+              </article>
+            );
+          })
         ) : (
           <div className="rounded-xl border p-6 text-center text-slate-500">No results.</div>
         )}
@@ -135,19 +161,39 @@ export function AdvancedDataTable<TData, TValue>({
             </thead>
             <tbody>
               {table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row, idx) => (
-                  <tr
-                    key={row.id}
-                    data-state={row.getIsSelected() && 'selected'}
-                    className={idx % 2 === 0 ? 'bg-white dark:bg-slate-950' : 'bg-slate-50/50 dark:bg-slate-900/30'}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="border-b px-3 py-2 align-top">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))
+                table.getRowModel().rows.map((row, idx) => {
+                  const rowHref = getRowHref?.(row.original);
+                  return (
+                    <tr
+                      key={row.id}
+                      data-state={row.getIsSelected() && 'selected'}
+                      className={[
+                        idx % 2 === 0 ? 'bg-white dark:bg-slate-950' : 'bg-slate-50/50 dark:bg-slate-900/30',
+                        rowHref ? 'cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-800/70' : '',
+                      ].join(' ')}
+                      role={rowHref ? 'link' : undefined}
+                      tabIndex={rowHref ? 0 : undefined}
+                      aria-label={rowHref ? rowAriaLabel?.(row.original) : undefined}
+                      onClick={rowHref ? () => router.push(rowHref) : undefined}
+                      onKeyDown={
+                        rowHref
+                          ? (event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                router.push(rowHref);
+                              }
+                            }
+                          : undefined
+                      }
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="border-b px-3 py-2 align-top">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={columns.length} className="h-28 text-center text-slate-500">
