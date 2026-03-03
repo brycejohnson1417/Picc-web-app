@@ -14,7 +14,7 @@ import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import type { TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 
 function firstLetter(name: string) {
-  const normalized = name.trim().toUpperCase();
+  const normalized = String(name ?? '').trim().toUpperCase();
   const char = normalized[0] ?? '#';
   return /[A-Z]/.test(char) ? char : '#';
 }
