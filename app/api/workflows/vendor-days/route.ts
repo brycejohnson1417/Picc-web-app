@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { guard } from '@/lib/auth/api-guard';
 import { prisma } from '@/lib/db/prisma';
 import { writeActivity } from '@/lib/activity-log/write';
+import { loadNotionVendorDayEvents } from '@/lib/server/notion-vendor-days';
 
 const schema = z.object({
   accountId: z.string().cuid(),
@@ -21,8 +22,31 @@ const schema = z.object({
 export async function GET() {
   const ctx = await guard();
   if ('error' in ctx) return ctx.error;
-  const rows = await prisma.vendorDayEvent.findMany({ where: { orgId: ctx.orgId }, include: { account: true }, orderBy: { eventDate: 'asc' } });
-  return NextResponse.json(rows);
+  const [rows, notionRows] = await Promise.all([
+    prisma.vendorDayEvent.findMany({ where: { orgId: ctx.orgId }, include: { account: true }, orderBy: { eventDate: 'asc' } }),
+    loadNotionVendorDayEvents().catch(() => []),
+  ]);
+
+  const normalizedLocalKey = new Set(rows.map((row) => `${row.account?.name ?? ''}::${row.eventDate.toISOString().slice(0, 10)}`));
+  const bridged = notionRows
+    .filter((row) => !normalizedLocalKey.has(`${row.accountName}::${row.eventDate.slice(0, 10)}`))
+    .map((row) => ({
+      id: row.id,
+      orgId: ctx.orgId,
+      accountId: `notion-${row.id}`,
+      eventDate: new Date(row.eventDate),
+      repName: row.repName,
+      ambassadorName: row.ambassadorName,
+      notes: row.notes,
+      account: {
+        id: `notion-account-${row.id}`,
+        name: row.accountName,
+      },
+    }));
+
+  return NextResponse.json(
+    [...rows, ...bridged].sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime()),
+  );
 }
 
 export async function POST(req: Request) {

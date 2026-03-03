@@ -81,13 +81,9 @@ export function TerritoryMobile() {
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
 
   const focusedStore = useMemo(() => {
-    if (!stores.length) return null;
-    if (focusedId) {
-      const focused = storeById.get(focusedId);
-      if (focused) return focused;
-    }
-    return stores[0];
-  }, [stores, focusedId, storeById]);
+    if (!focusedId) return null;
+    return storeById.get(focusedId) ?? null;
+  }, [focusedId, storeById]);
 
   const orderedStops = useMemo(() => {
     const ids = routePlan.orderedStopIds.length > 0 ? routePlan.orderedStopIds : routePlan.selectedStopIds;
@@ -124,7 +120,7 @@ export function TerritoryMobile() {
       </MobileHeader>
 
       {view === 'map' ? (
-        <div className="relative h-[calc(100dvh-226px)] min-h-[360px]">
+        <div className="relative h-[calc(100dvh-142px)] min-h-[420px]">
           <TerritoryMapMobile
             stores={stores}
             selectedStopIds={routePlan.selectedStopIds}

@@ -1,8 +1,8 @@
 import 'server-only';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
-const NOTION_VERSION = '2022-06-28';
-const DEFAULT_MEETING_NOTES_DATABASE_ID = '2cba86d9999881b7bc4dc863b58ef347';
+const NOTION_VERSION = '2025-09-03';
+const DEFAULT_MEETING_NOTES_ID = '2cba86d9999881b7bc4dc863b58ef347';
 
 interface MeetingCheckInInput {
   store: {
@@ -16,10 +16,13 @@ interface MeetingCheckInInput {
   actorEmail?: string;
 }
 
-type NotionDatabaseProperty = {
+type ParentKind = 'data_source' | 'database';
+
+type NotionPropertySchema = {
   type: string;
   relation?: {
     database_id?: string;
+    data_source_id?: string;
   };
   select?: {
     options?: Array<{ name?: string }>;
@@ -29,14 +32,42 @@ type NotionDatabaseProperty = {
   };
 };
 
+type NotionDataSourceResponse = {
+  id: string;
+  object: 'data_source';
+  properties?: Record<string, NotionPropertySchema>;
+};
+
 type NotionDatabaseResponse = {
-  properties?: Record<string, NotionDatabaseProperty>;
+  id: string;
+  object: 'database';
+  properties?: Record<string, NotionPropertySchema>;
+  data_sources?: Array<{ id?: string }>;
+};
+
+type NotionSearchResponse = {
+  results?: Array<{
+    id: string;
+    object?: string;
+    title?: Array<{ plain_text?: string }>;
+  }>;
 };
 
 type NotionCreatePageResponse = {
   id?: string;
   url?: string;
 };
+
+class NotionApiError extends Error {
+  status: number;
+  payload: unknown;
+
+  constructor(status: number, payload: unknown) {
+    super(`Notion request failed (${status}): ${JSON.stringify(payload)}`);
+    this.status = status;
+    this.payload = payload;
+  }
+}
 
 function normalize(value: string) {
   return value
@@ -54,8 +85,8 @@ function requiredEnv(name: 'NOTION_API_KEY') {
   return value;
 }
 
-function meetingNotesDatabaseId() {
-  return process.env.NOTION_MEETING_NOTES_DATABASE_ID?.trim() || DEFAULT_MEETING_NOTES_DATABASE_ID;
+function meetingNotesId() {
+  return process.env.NOTION_MEETING_NOTES_DATABASE_ID?.trim() || DEFAULT_MEETING_NOTES_ID;
 }
 
 function notionHeaders() {
@@ -85,7 +116,7 @@ async function notionRequest<T>(path: string, init?: RequestInit, attempt = 0): 
   const payload = payloadText ? JSON.parse(payloadText) : {};
 
   if (!response.ok) {
-    throw new Error(`Notion request failed (${response.status}): ${JSON.stringify(payload)}`);
+    throw new NotionApiError(response.status, payload);
   }
 
   return payload as T;
@@ -97,13 +128,13 @@ function normalizePageId(id: string) {
   return `${trimmed.slice(0, 8)}-${trimmed.slice(8, 12)}-${trimmed.slice(12, 16)}-${trimmed.slice(16, 20)}-${trimmed.slice(20)}`;
 }
 
-function findTitlePropertyName(properties: Record<string, NotionDatabaseProperty>) {
+function findTitlePropertyName(properties: Record<string, NotionPropertySchema>) {
   const titleEntry = Object.entries(properties).find(([, value]) => value.type === 'title');
   return titleEntry?.[0] ?? null;
 }
 
 function findPropertyByCandidates(
-  properties: Record<string, NotionDatabaseProperty>,
+  properties: Record<string, NotionPropertySchema>,
   candidates: string[],
   allowedTypes?: string[],
 ) {
@@ -121,18 +152,26 @@ function findPropertyByCandidates(
 }
 
 function findRelationToMasterListProperty(
-  properties: Record<string, NotionDatabaseProperty>,
-  masterListDatabaseId: string,
+  properties: Record<string, NotionPropertySchema>,
+  masterListId: string,
 ) {
-  const normalizedMasterId = normalizePageId(masterListDatabaseId);
+  const normalizedMaster = normalizePageId(masterListId);
+
   for (const [name, property] of Object.entries(properties)) {
     if (property.type !== 'relation') continue;
     const relationDbId = property.relation?.database_id;
-    if (relationDbId && normalizePageId(relationDbId) === normalizedMasterId) {
+    const relationDsId = property.relation?.data_source_id;
+
+    if (relationDbId && normalizePageId(relationDbId) === normalizedMaster) {
+      return name;
+    }
+    if (relationDsId && normalizePageId(relationDsId) === normalizedMaster) {
       return name;
     }
   }
-  return null;
+
+  const fallbackByName = findPropertyByCandidates(properties, ['Account', 'Dispensary', 'Store'], ['relation']);
+  return fallbackByName;
 }
 
 function findCheckInStatusOption(options: Array<{ name?: string }> | undefined) {
@@ -142,29 +181,129 @@ function findCheckInStatusOption(options: Array<{ name?: string }> | undefined) 
 
   const partial = safe.find((option) => {
     const normalized = normalize(option.name ?? '');
-    return normalized.includes('check in') || normalized.includes('check-in');
+    return normalized.includes('check in') || normalized.includes('checkin');
   });
 
   return partial?.name ?? null;
 }
 
-export async function createMeetingCheckIn(input: MeetingCheckInInput) {
-  const databaseId = meetingNotesDatabaseId();
-  const masterListDatabaseId = process.env.NOTION_MASTER_LIST_DATABASE_ID?.trim() ?? '';
+async function tryResolveDataSourceById(id: string) {
+  try {
+    return await notionRequest<NotionDataSourceResponse>(`/data_sources/${id}`);
+  } catch (error) {
+    if (error instanceof NotionApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
 
-  const database = await notionRequest<NotionDatabaseResponse>(`/databases/${databaseId}`);
-  const properties = database.properties ?? {};
+async function tryResolveDatabaseById(id: string) {
+  try {
+    return await notionRequest<NotionDatabaseResponse>(`/databases/${id}`);
+  } catch (error) {
+    if (error instanceof NotionApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function resolveMeetingNotesParent(configuredId: string): Promise<{ kind: ParentKind; id: string; properties: Record<string, NotionPropertySchema> }> {
+  const normalizedId = normalizePageId(configuredId);
+
+  const dataSource = await tryResolveDataSourceById(normalizedId);
+  if (dataSource) {
+    return {
+      kind: 'data_source',
+      id: dataSource.id,
+      properties: dataSource.properties ?? {},
+    };
+  }
+
+  const database = await tryResolveDatabaseById(normalizedId);
+  if (database?.data_sources?.[0]?.id) {
+    const ds = await tryResolveDataSourceById(database.data_sources[0].id);
+    if (ds) {
+      return {
+        kind: 'data_source',
+        id: ds.id,
+        properties: ds.properties ?? {},
+      };
+    }
+  }
+  if (database) {
+    return {
+      kind: 'database',
+      id: database.id,
+      properties: database.properties ?? {},
+    };
+  }
+
+  const search = await notionRequest<NotionSearchResponse>('/search', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: 'meeting notes',
+      page_size: 20,
+    }),
+  });
+
+  for (const result of search.results ?? []) {
+    if (result.object !== 'data_source' && result.object !== 'database') {
+      continue;
+    }
+
+    if (result.object === 'data_source') {
+      const found = await tryResolveDataSourceById(result.id);
+      if (found) {
+        return {
+          kind: 'data_source',
+          id: found.id,
+          properties: found.properties ?? {},
+        };
+      }
+      continue;
+    }
+
+    const foundDb = await tryResolveDatabaseById(result.id);
+    if (foundDb?.data_sources?.[0]?.id) {
+      const foundDs = await tryResolveDataSourceById(foundDb.data_sources[0].id);
+      if (foundDs) {
+        return {
+          kind: 'data_source',
+          id: foundDs.id,
+          properties: foundDs.properties ?? {},
+        };
+      }
+    }
+  }
+
+  throw new Error(
+    'Meeting Notes data source not found. Share the Meeting Notes database with this Notion integration, then retry check-in.',
+  );
+}
+
+function normalizeNotionPageReference(id: string) {
+  return normalizePageId(id);
+}
+
+export async function createMeetingCheckIn(input: MeetingCheckInInput) {
+  const configuredId = meetingNotesId();
+  const masterListId = process.env.NOTION_MASTER_LIST_DATABASE_ID?.trim() ?? '';
+
+  const parent = await resolveMeetingNotesParent(configuredId);
+  const properties = parent.properties ?? {};
 
   const titlePropertyName = findTitlePropertyName(properties);
   if (!titlePropertyName) {
-    throw new Error('Meeting Notes database is missing a title property');
+    throw new Error('Meeting Notes schema is missing a title property');
   }
 
-  const relationPropertyName = masterListDatabaseId ? findRelationToMasterListProperty(properties, masterListDatabaseId) : null;
+  const relationPropertyName = masterListId ? findRelationToMasterListProperty(properties, masterListId) : null;
   const datePropertyName = findPropertyByCandidates(properties, ['Date', 'Meeting Date', 'Check-in Date'], ['date']);
   const accountTextPropertyName = findPropertyByCandidates(properties, ['Account', 'Dispensary', 'Store', 'Store Name'], ['rich_text', 'title']);
   const addressPropertyName = findPropertyByCandidates(properties, ['Address', 'Location'], ['rich_text']);
-  const repPropertyName = findPropertyByCandidates(properties, ['Rep', 'PICC Rep', 'Sales Rep', 'Owner'], ['rich_text', 'people']);
+  const repPropertyName = findPropertyByCandidates(properties, ['Rep', 'PICC Rep', 'Sales Rep', 'Owner'], ['rich_text']);
   const statusPropertyName = findPropertyByCandidates(properties, ['Status', 'Type', 'Meeting Type'], ['status', 'select']);
 
   const checkInTitle = `Check-in: ${input.store.name} (${new Date().toLocaleDateString('en-US')})`;
@@ -177,7 +316,7 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
 
   if (relationPropertyName) {
     notionProperties[relationPropertyName] = {
-      relation: [{ id: normalizePageId(input.store.notionPageId) }],
+      relation: [{ id: normalizeNotionPageReference(input.store.notionPageId) }],
     };
   }
 
@@ -202,12 +341,9 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
   }
 
   if (repPropertyName && input.store.repName) {
-    const repProperty = properties[repPropertyName];
-    if (repProperty?.type === 'rich_text') {
-      notionProperties[repPropertyName] = {
-        rich_text: [{ text: { content: input.store.repName } }],
-      };
-    }
+    notionProperties[repPropertyName] = {
+      rich_text: [{ text: { content: input.store.repName } }],
+    };
   }
 
   if (statusPropertyName) {
@@ -230,12 +366,21 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
     }
   }
 
+  const parentPayload =
+    parent.kind === 'data_source'
+      ? {
+          type: 'data_source_id',
+          data_source_id: parent.id,
+        }
+      : {
+          type: 'database_id',
+          database_id: parent.id,
+        };
+
   const created = await notionRequest<NotionCreatePageResponse>('/pages', {
     method: 'POST',
     body: JSON.stringify({
-      parent: {
-        database_id: databaseId,
-      },
+      parent: parentPayload,
       properties: notionProperties,
       children: [
         {

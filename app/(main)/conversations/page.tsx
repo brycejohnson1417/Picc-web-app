@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { Channel } from '@prisma/client';
-import { Card, CardContent, CardHeader, CardTitle, Input, Textarea, Button, Badge } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
+import { MockComposer } from '@/components/conversations/mock-composer';
 import { getConversationOverview } from '@/lib/data/queries';
 
 export default async function ConversationsPage({
@@ -89,13 +90,7 @@ export default async function ConversationsPage({
                 </div>
               ))}
 
-              <div className="space-y-2 rounded-xl border bg-white p-3 dark:bg-slate-950">
-                <Input placeholder="Subject (optional)" />
-                <Textarea placeholder="Compose message... (mock mode)" />
-                <div className="flex justify-end">
-                  <Button className="min-h-11">Send (mock)</Button>
-                </div>
-              </div>
+              <MockComposer />
             </CardContent>
           </Card>
         ) : (
@@ -155,12 +150,8 @@ export default async function ConversationsPage({
               </div>
             ))}
 
-            <div className="sticky bottom-0 space-y-2 rounded-xl border bg-white p-3 dark:bg-slate-950">
-              <Input placeholder="Subject (optional)" />
-              <Textarea placeholder="Compose message... (mock mode)" />
-              <div className="flex justify-end">
-                <Button>Send (mock)</Button>
-              </div>
+            <div className="sticky bottom-0">
+              <MockComposer />
             </div>
           </CardContent>
         </Card>
