@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(payload, {
       headers: {
-        'X-Territory-Data-Source': payload.meta.dataSource,
+        'X-Territory-Data-Source': payload.meta.sourceEngine ?? payload.meta.dataSource,
       },
     });
   } catch (error) {
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
       {
         status: 500,
         headers: {
-          'X-Territory-Data-Source': 'notion-live-cache',
+          'X-Territory-Data-Source': 'postgis',
         },
       },
     );

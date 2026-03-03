@@ -8,6 +8,13 @@ import {
   type NotionCacheSnapshot,
   writeNotionCacheSnapshot,
 } from '@/lib/server/notion-cache-store';
+import {
+  loadTerritoryStoreFromReadModel,
+  loadTerritoryStoresFromReadModel,
+  patchTerritoryStoreReadModel,
+  recordTerritoryCheckInEvent,
+  syncTerritoryStoresReadModel,
+} from '@/lib/server/territory-read-model';
 import { colorForStatus, normalizeStatus, pinKindForStatus, type TerritoryStoreContact, type TerritoryStoresResponse, type TerritoryStorePin } from '@/lib/territory/types';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
@@ -602,6 +609,7 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
     unresolvedLocationCount,
     lastEditedMax,
   });
+  await syncTerritoryStoresReadModel(stores);
 
   const snapshot: NotionCacheSnapshot<TerritoryStorePin[]> = {
     key: TERRITORY_SNAPSHOT_KEY,
@@ -771,7 +779,7 @@ async function patchStoreInSnapshot(storeId: string, updater: (store: TerritoryS
 
 export async function loadTerritoryStoreDetail(storeId: string) {
   const snapshot = await getTerritorySnapshot();
-  const store = findStoreById(snapshot.stores, storeId);
+  const store = (await loadTerritoryStoreFromReadModel(storeId)) ?? findStoreById(snapshot.stores, storeId);
   if (!store) {
     throw new Error('Store not found');
   }
@@ -841,6 +849,9 @@ export async function updateTerritoryStoreNotes(storeId: string, notes: string) 
     notes: trimmed || null,
     lastEditedTime: now,
   }));
+  await patchTerritoryStoreReadModel(store.id, {
+    notes: trimmed || null,
+  });
 
   return {
     storeId: store.id,
@@ -888,6 +899,16 @@ export async function recordTerritoryStoreCheckIn(storeId: string) {
     lastCheckIn: checkedInAt,
     lastEditedTime: checkedInAt,
   }));
+  await patchTerritoryStoreReadModel(store.id, {
+    lastCheckIn: checkedInAt,
+  });
+  await recordTerritoryCheckInEvent({
+    storeId: store.id,
+    lat: store.lat,
+    lng: store.lng,
+    noteText: `Check-in recorded at ${checkedInAt}`,
+    happenedAt: checkedInAt,
+  });
 
   return {
     storeId: store.id,
@@ -917,85 +938,24 @@ export async function loadTerritoryStores(input?: {
     refresh: input?.refresh,
     maxLiveGeocodeLookups: input?.maxLiveGeocodeLookups,
   });
-
-  const filters = {
-    status: new Set((input?.statuses ?? []).map((value) => normalizeStatus(value))),
-    rep: new Set((input?.reps ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean)),
-    q: input?.query?.trim().toLowerCase() ?? '',
-  };
-
-  const statusCounts = new Map<string, number>();
-  const repCounts = new Map<string, number>();
-
-  for (const pin of snapshot.stores) {
-    statusCounts.set(pin.status, (statusCounts.get(pin.status) ?? 0) + 1);
-
-    if (pin.repNames.length === 0 && pin.repEmails.length === 0) {
-      repCounts.set('Unassigned', (repCounts.get('Unassigned') ?? 0) + 1);
-      continue;
-    }
-
-    for (const repName of pin.repNames) {
-      repCounts.set(repName, (repCounts.get(repName) ?? 0) + 1);
-    }
-  }
-
-  const filteredStores = snapshot.stores.filter((pin) => {
-    if (filters.status.size > 0 && !filters.status.has(pin.statusKey)) {
-      return false;
-    }
-
-    if (filters.rep.size > 0) {
-      const repSet = buildRepLabelSet(pin);
-      let repMatch = false;
-      for (const filterValue of filters.rep) {
-        if (repSet.has(filterValue)) {
-          repMatch = true;
-          break;
-        }
-      }
-      if (!repMatch) {
-        return false;
-      }
-    }
-
-    if (filters.q) {
-      const searchable = [
-        pin.name,
-        pin.locationAddress ?? '',
-        pin.city ?? '',
-        pin.state ?? '',
-        pin.status,
-        pin.repNames.join(' '),
-      ]
-        .join(' ')
-        .toLowerCase();
-
-      if (!searchable.includes(filters.q)) {
-        return false;
-      }
-    }
-
-    return true;
+  await syncTerritoryStoresReadModel(snapshot.stores);
+  const readModel = await loadTerritoryStoresFromReadModel({
+    statuses: input?.statuses,
+    reps: input?.reps,
+    query: input?.query,
   });
 
-  filteredStores.sort((a, b) => a.name.localeCompare(b.name));
-
-  const statusFilterCounts = [...statusCounts.entries()]
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => a.value.localeCompare(b.value));
-
-  const repFilterCounts = [...repCounts.entries()]
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => a.value.localeCompare(b.value));
-
   return {
-    stores: filteredStores,
+    stores: readModel.stores,
     filters: {
-      statuses: statusFilterCounts,
-      reps: repFilterCounts,
+      statuses: readModel.filters.statuses,
+      reps: readModel.filters.reps,
     },
-    meta: snapshot.meta,
+    meta: {
+      ...snapshot.meta,
+      sourceEngine: 'postgis',
+      recordsRead: readModel.recordsRead,
+    },
   };
 }
 
