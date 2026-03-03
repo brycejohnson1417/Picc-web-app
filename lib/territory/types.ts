@@ -25,6 +25,15 @@ export interface TerritoryStorePin {
   followUpDate?: string | null;
   notes?: string | null;
   lastCheckIn?: string | null;
+  geometry?: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
+  metrics?: {
+    interactionsScore: number;
+    purchasesScore: number;
+    followUpUrgencyScore: number;
+  };
 }
 
 export interface TerritoryStoreContact {
@@ -55,6 +64,7 @@ export interface TerritoryStoresResponse {
   };
   meta: {
     dataSource: 'notion-live-cache' | 'notion-live-cache-stale';
+    sourceEngine?: 'postgis';
     lastEditedMax: string | null;
     recordsRead: number;
     unresolvedLocationCount: number;
