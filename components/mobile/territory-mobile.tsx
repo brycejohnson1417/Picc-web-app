@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
-import { Filter, LocateFixed, Navigation, Plus, Search } from 'lucide-react';
+import { ChevronRight, Filter, LocateFixed, Navigation, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MobileHeader } from '@/components/mobile/mobile-header';
@@ -178,11 +178,18 @@ export function TerritoryMobile() {
               {list.map((store) => {
                 const selected = routePlan.selectedStopIds.includes(store.id);
                 return (
-                  <button key={store.id} type="button" onClick={() => setDetailStoreId(store.id)} className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-1 py-2.5 text-left">
+                  <button
+                    key={store.id}
+                    type="button"
+                    onClick={() => setDetailStoreId(store.id)}
+                    className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-2 py-3 text-left active:bg-black/5"
+                    aria-label={`Open ${store.name}`}
+                  >
                     <span className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 text-xs', selected ? 'border-[#4fb649] text-[#4fb649]' : 'border-[#b8bac0] text-transparent')}>
                       ✓
                     </span>
-                    <span className="truncate text-[15px] text-[#15171c]">{store.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] text-[#15171c]">{store.name}</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-[#9b9ea6]" />
                   </button>
                 );
               })}
