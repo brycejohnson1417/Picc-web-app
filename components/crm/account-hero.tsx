@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Badge, Button, Card, CardContent } from '@/components/ui';
 
 type Props = {
@@ -20,7 +21,7 @@ export function AccountHero({ title, subtitle, status, onQuickLogHref = '#' }: P
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild>
-            <a href={onQuickLogHref}>Quick Log</a>
+            <Link href={onQuickLogHref === '#' ? '/conversations' : onQuickLogHref}>Quick Log</Link>
           </Button>
           <Button variant="secondary">New Task</Button>
           <Button variant="outline">Schedule Appointment</Button>

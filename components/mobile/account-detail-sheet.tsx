@@ -70,7 +70,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
       <div className="mx-auto h-full max-w-[480px] bg-[#e6e6e9]">
         <div className="bg-[#c93412] px-4 pb-2 pt-[max(10px,env(safe-area-inset-top))] text-white">
           <div className="relative flex items-center justify-between py-1.5">
-            <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-lg" aria-label="Close">
+            <button type="button" onClick={onClose} className="grid h-11 w-11 place-items-center rounded-lg" aria-label="Close">
               <X className="h-6 w-6" />
             </button>
             <h1 className="absolute left-1/2 -translate-x-1/2 text-[18px] font-semibold">Account Details</h1>
@@ -103,7 +103,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           ))}
         </div>
 
-        <div className="fixed bottom-[84px] left-0 right-0 z-[5100]">
+        <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] left-0 right-0 z-[5100]">
           <div className="mx-auto grid max-w-[480px] grid-cols-4 border-t border-[#c6c7cb] bg-[#f2f2f5] py-2 text-[#5a96e8]">
             <ActionButton
               label={routeSelected ? 'remove' : 'add to...'}
