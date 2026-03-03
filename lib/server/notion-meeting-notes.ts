@@ -18,6 +18,13 @@ interface MeetingCheckInInput {
   mode: CheckInMode;
   noteText?: string;
   actorEmail?: string;
+  associatedContact?: {
+    id?: string;
+    name: string;
+    roleTitle?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  };
 }
 
 interface MeetingCheckInHistoryInput {
@@ -395,6 +402,11 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
   const accountPropertyName = propertyByCandidates(properties, ['Account', 'Dispensary', 'Store', 'Store Name'], ['rich_text', 'title']);
   const addressPropertyName = propertyByCandidates(properties, ['Address', 'Location'], ['rich_text']);
   const repPropertyName = propertyByCandidates(properties, ['Rep', 'PICC Rep', 'Sales Rep', 'Owner'], ['rich_text']);
+  const associatedContactPropertyName = propertyByCandidates(
+    properties,
+    ['Associated Contact', 'Contact', 'Primary Contact', 'Contact Name'],
+    ['rich_text'],
+  );
   const statusPropertyName = propertyByCandidates(properties, ['Status', 'Type', 'Meeting Type'], ['status', 'select']);
   const notesPropertyName = propertyByCandidates(properties, ['Notes', 'Meeting Notes', 'Summary'], ['rich_text']);
 
@@ -435,6 +447,20 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
   if (repPropertyName && input.store.repName) {
     notionProperties[repPropertyName] = {
       rich_text: [{ text: { content: input.store.repName } }],
+    };
+  }
+
+  if (associatedContactPropertyName && input.associatedContact?.name) {
+    const contactLabel = [
+      input.associatedContact.name,
+      input.associatedContact.roleTitle?.trim() ? `(${input.associatedContact.roleTitle.trim()})` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    notionProperties[associatedContactPropertyName] = {
+      rich_text: [{ text: { content: contactLabel } }],
     };
   }
 
@@ -483,6 +509,30 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
       },
     },
   ] as Array<Record<string, unknown>>;
+
+  if (input.associatedContact?.name) {
+    const contactParts = [
+      input.associatedContact.name.trim(),
+      input.associatedContact.roleTitle?.trim() || '',
+      input.associatedContact.email?.trim() || '',
+      input.associatedContact.phone?.trim() || '',
+    ].filter(Boolean);
+
+    children.push({
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: [
+          {
+            type: 'text',
+            text: {
+              content: `Associated contact: ${contactParts.join(' · ')}`,
+            },
+          },
+        ],
+      },
+    });
+  }
 
   if (input.noteText?.trim()) {
     children.push({

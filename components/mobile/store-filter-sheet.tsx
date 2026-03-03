@@ -1,6 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
+import type { PinColorMode } from '@/lib/territory/pin-colors';
 import type { TerritoryFilterCount } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
@@ -13,7 +14,11 @@ interface StoreFilterSheetProps {
   selectedReps: string[];
   onToggleStatus: (value: string) => void;
   onToggleRep: (value: string) => void;
-  onReset: () => void;
+  pinColorMode: PinColorMode;
+  onSetPinColorMode: (mode: PinColorMode) => void;
+  onSaveSelection: () => void;
+  onClearAll: () => void;
+  savedFiltersLabel?: string | null;
 }
 
 export function StoreFilterSheet({
@@ -25,7 +30,11 @@ export function StoreFilterSheet({
   selectedReps,
   onToggleStatus,
   onToggleRep,
-  onReset,
+  pinColorMode,
+  onSetPinColorMode,
+  onSaveSelection,
+  onClearAll,
+  savedFiltersLabel = null,
 }: StoreFilterSheetProps) {
   if (!open) {
     return null;
@@ -38,13 +47,40 @@ export function StoreFilterSheet({
     <div className="fixed inset-0 z-[5400] bg-black/35">
       <div className="mx-auto flex h-full max-w-[480px] flex-col bg-[#e6e6e9]">
         <div className="flex items-center justify-between border-b border-[#c8c9cf] bg-[#c93412] px-4 py-3 text-white">
-          <h2 className="text-[17px] font-semibold">Filters</h2>
+          <h2 className="text-[17px] font-semibold">Filters & Visualization</h2>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-black/10" aria-label="Close filters">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
+          <section className="mb-4 rounded-xl border border-[#c7c9cf] bg-white p-3">
+            <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Pin Colors</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className={cn(
+                  'rounded-lg border px-3 py-2 text-[13px] font-medium',
+                  pinColorMode === 'status' ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                )}
+                onClick={() => onSetPinColorMode('status')}
+              >
+                By Status
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'rounded-lg border px-3 py-2 text-[13px] font-medium',
+                  pinColorMode === 'rep' ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                )}
+                onClick={() => onSetPinColorMode('rep')}
+              >
+                By Rep
+              </button>
+            </div>
+            <p className="mt-2 text-[12px] text-[#72757d]">Filter results are still applied. This only changes pin coloring.</p>
+          </section>
+
           <FilterSection
             title="Account Status"
             options={statuses.map((entry) => ({ label: entry.value, value: entry.value, count: entry.count }))}
@@ -59,18 +95,27 @@ export function StoreFilterSheet({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2 border-t border-[#c8c9cf] bg-[#f2f2f5] px-4 py-3">
-          <button
-            type="button"
-            onClick={onReset}
-            disabled={!hasActiveFilters}
-            className="rounded-lg border border-[#c6c7cc] bg-white px-3 py-2 text-[14px] font-medium text-[#3e4046] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Reset
-          </button>
-          <button type="button" onClick={onClose} className="rounded-lg bg-[#cd3814] px-3 py-2 text-[14px] font-semibold text-white">
-            {hasActiveFilters ? `Apply (${activeFilters})` : 'Apply'}
-          </button>
+        <div className="border-t border-[#c8c9cf] bg-[#f2f2f5] px-4 py-3">
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={onClearAll}
+              className="rounded-lg border border-[#c6c7cc] bg-white px-2 py-2 text-[13px] font-medium text-[#3e4046]"
+            >
+              Clear All
+            </button>
+            <button
+              type="button"
+              onClick={onSaveSelection}
+              className="rounded-lg border border-[#b95b45] bg-[#f8ede9] px-2 py-2 text-[13px] font-semibold text-[#9d2f12]"
+            >
+              Save Filters
+            </button>
+            <button type="button" onClick={onClose} className="rounded-lg bg-[#cd3814] px-2 py-2 text-[13px] font-semibold text-white">
+              {hasActiveFilters ? `Apply (${activeFilters})` : 'Apply'}
+            </button>
+          </div>
+          {savedFiltersLabel ? <p className="mt-2 text-center text-[12px] text-[#6d7078]">Saved filters: {savedFiltersLabel}</p> : null}
         </div>
       </div>
     </div>

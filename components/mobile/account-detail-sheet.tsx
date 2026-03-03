@@ -1,14 +1,16 @@
 'use client';
 
+import Link from 'next/link';
 import { type ReactNode, useEffect, useState } from 'react';
-import { MapPinned, Navigation, PencilLine, X } from 'lucide-react';
+import { Copy, MapPinned, Navigation, PencilLine, PhoneCall, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { TerritoryStoreDetailResponse, TerritoryStorePin } from '@/lib/territory/types';
+import type { TerritoryStoreContact, TerritoryStoreDetailResponse, TerritoryStorePin } from '@/lib/territory/types';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { Button, Textarea } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
 type DetailTab = 'detail' | 'location' | 'notes' | 'history';
+type CheckInMode = 'written' | 'voice';
 
 function formatCheckInLabel(value: string | null | undefined) {
   if (!value) return 'No check-ins';
@@ -22,6 +24,20 @@ function formatDateLabel(value: string | null | undefined, fallback: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return fallback;
   return date.toLocaleDateString();
+}
+
+function cleanContactField(value: string | null | undefined) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '—') return undefined;
+  return trimmed;
+}
+
+function toDialablePhone(value: string | null | undefined) {
+  const trimmed = cleanContactField(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^+\d]/g, '');
+  return normalized.length > 0 ? normalized : null;
 }
 
 interface AccountDetailSheetProps {
@@ -39,15 +55,30 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   const [notesDraft, setNotesDraft] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [checkInModalOpen, setCheckInModalOpen] = useState(false);
+  const [checkInMode, setCheckInMode] = useState<CheckInMode>('written');
+  const [checkInDraft, setCheckInDraft] = useState('');
+  const [checkInContact, setCheckInContact] = useState<TerritoryStoreContact | null>(null);
+  const [streetViewLoadError, setStreetViewLoadError] = useState(false);
 
   useEffect(() => {
     if (!store) {
       setDetail(null);
       setNotesDraft('');
+      setCheckInModalOpen(false);
+      setCheckInMode('written');
+      setCheckInDraft('');
+      setCheckInContact(null);
+      setStreetViewLoadError(false);
       return;
     }
 
     setTab('detail');
+    setCheckInModalOpen(false);
+    setCheckInMode('written');
+    setCheckInDraft('');
+    setCheckInContact(null);
+    setStreetViewLoadError(false);
 
     const controller = new AbortController();
 
@@ -93,19 +124,81 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   const notionUrl = `https://www.notion.so/${activeStore.notionPageId.replace(/-/g, '')}`;
   const persistedNotes = (detail?.store.notes ?? store.notes ?? '').trim();
   const canSaveNotes = notesDraft.trim() !== persistedNotes;
+  const addressValue = activeStore.locationAddress ?? activeStore.locationLabel ?? 'No address';
+  const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${activeStore.lat},${activeStore.lng}`;
+  const streetViewPreviewUrl = `https://maps.googleapis.com/maps/api/streetview?size=900x420&location=${activeStore.lat},${activeStore.lng}&fov=85&pitch=0`;
 
-  async function handleCheckIn() {
+  async function copyAddress() {
+    if (!addressValue || addressValue === 'No address') {
+      toast.message('No address available to copy');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(addressValue);
+      toast.success('Address copied');
+    } catch {
+      toast.error('Unable to copy address');
+    }
+  }
+
+  function launchDial(value: string | null | undefined, fallbackLabel: string) {
+    const dialable = toDialablePhone(value);
+    if (!dialable) {
+      toast.error(`No phone available for ${fallbackLabel}.`);
+      return;
+    }
+    window.location.href = `tel:${dialable}`;
+  }
+
+  function callStore() {
+    launchDial(activeStore.phoneNumber, activeStore.name);
+  }
+
+  function callFromContactCard(contact: TerritoryStoreContact) {
+    const number = cleanContactField(activeStore.phoneNumber) ?? cleanContactField(contact.phone);
+    launchDial(number, activeStore.name);
+  }
+
+  function openCheckInModal(contact: TerritoryStoreContact | null = null) {
+    setCheckInContact(contact);
+    setCheckInMode('written');
+    setCheckInDraft('');
+    setCheckInModalOpen(true);
+  }
+
+  async function handleCheckInSubmit() {
     setCheckingIn(true);
     try {
       const response = await fetch('/api/territory/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId: activeStore.id }),
+        body: JSON.stringify({
+          store: {
+            id: activeStore.id,
+            name: activeStore.name,
+            notionPageId: activeStore.notionPageId,
+            lat: activeStore.lat,
+            lng: activeStore.lng,
+            address: activeStore.locationAddress ?? activeStore.locationLabel ?? undefined,
+            repName: activeStore.repNames[0] ?? null,
+          },
+          mode: checkInMode,
+          noteText: cleanContactField(checkInDraft),
+          associatedContact: checkInContact
+            ? {
+                id: checkInContact.id,
+                name: checkInContact.name,
+                roleTitle: cleanContactField(checkInContact.roleTitle),
+                email: cleanContactField(checkInContact.email),
+                phone: cleanContactField(checkInContact.phone),
+              }
+            : undefined,
+        }),
       });
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload?.error ?? 'Failed to record check-in');
+        throw new Error(payload?.error ?? 'Failed to create check-in');
       }
 
       const checkedInAt = typeof payload?.checkedInAt === 'string' ? payload.checkedInAt : new Date().toISOString();
@@ -122,9 +215,18 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
         };
       });
 
-      toast.success(`Check-in recorded for ${activeStore.name}`);
+      if (checkInMode === 'voice' && typeof payload?.url === 'string') {
+        window.open(payload.url, '_blank', 'noopener,noreferrer');
+      }
+
+      const contactLabel = checkInContact ? ` with ${checkInContact.name}` : '';
+      toast.success(`${checkInMode === 'voice' ? 'Voice' : 'Written'} check-in saved${contactLabel}`);
+      setCheckInModalOpen(false);
+      setCheckInContact(null);
+      setCheckInDraft('');
+      setCheckInMode('written');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to record check-in');
+      toast.error(error instanceof Error ? error.message : 'Failed to create check-in');
     } finally {
       setCheckingIn(false);
     }
@@ -231,7 +333,28 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                 {contacts.length === 0 ? <p className="mt-1 text-[21px] text-[#1d1f23]">No contacts linked.</p> : null}
                 {contacts.map((contact) => (
                   <div key={contact.id} className="mt-2 rounded-lg border border-[#c7c8cd] bg-[#f3f3f6] px-3 py-2">
-                    <p className="text-[19px] font-medium text-[#202229]">{contact.name}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <Link href={`/contacts/${encodeURIComponent(contact.id)}`} className="text-[19px] font-medium text-[#1f4e9f] underline-offset-2 hover:underline">
+                        {contact.name}
+                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          className="rounded-md border border-[#b4b7bf] px-2.5 py-1 text-[13px] font-medium text-[#27303f] hover:bg-[#e8eaf0]"
+                          onClick={() => callFromContactCard(contact)}
+                        >
+                          Call Store
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-md border border-[#b4b7bf] px-2.5 py-1 text-[13px] font-medium text-[#27303f] hover:bg-[#e8eaf0]"
+                          onClick={() => openCheckInModal(contact)}
+                          disabled={checkingIn}
+                        >
+                          Check-in
+                        </button>
+                      </div>
+                    </div>
                     <p className="text-[16px] text-[#5e6169]">{contact.roleTitle || '—'}</p>
                     <p className="text-[16px] text-[#5e6169]">{contact.email || '—'} · {contact.phone || '—'}</p>
                   </div>
@@ -242,7 +365,57 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
 
           {tab === 'location' ? (
             <>
-              <DetailRow label="Address" value={activeStore.locationAddress ?? activeStore.locationLabel ?? 'No address'} strong />
+              <div className="border-b border-[#c6c7cb] px-5 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[20px] text-[#a2a3a8]">Address</p>
+                    <p className="mt-1 text-[21px] font-medium text-[#1d1f23]">{addressValue}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copyAddress}
+                    className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg border border-[#9ab9ea] px-3 text-[15px] font-medium text-[#2872d1]"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-b border-[#c6c7cb] px-5 py-4">
+                <p className="text-[20px] text-[#a2a3a8]">Street View</p>
+                <div className="mt-2 overflow-hidden rounded-xl border border-[#c4c6cc] bg-[#dfe2e8]">
+                  {streetViewLoadError ? (
+                    <button
+                      type="button"
+                      className="grid h-[210px] w-full place-items-center bg-[#eef0f5] px-5 text-center text-[15px] text-[#4d515b]"
+                      onClick={() => window.open(streetViewUrl, '_blank', 'noopener,noreferrer')}
+                    >
+                      Street View preview unavailable. Tap to open Street View.
+                    </button>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={streetViewPreviewUrl}
+                      alt={`Street view near ${activeStore.name}`}
+                      className="h-[210px] w-full object-cover"
+                      loading="lazy"
+                      onError={() => setStreetViewLoadError(true)}
+                    />
+                  )}
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button type="button" className="h-11" onClick={() => window.open(streetViewUrl, '_blank', 'noopener,noreferrer')}>
+                    Open Street View
+                  </Button>
+                  <Button type="button" variant="secondary" className="h-11" onClick={callStore}>
+                    <PhoneCall className="mr-1 h-4 w-4" />
+                    Call Store
+                  </Button>
+                </div>
+              </div>
+
               <DetailRow label="Coordinates" value={`${activeStore.lat.toFixed(5)}, ${activeStore.lng.toFixed(5)}`} />
               <DetailRow label="City / State" value={activeStore.city && activeStore.state ? `${activeStore.city}, ${activeStore.state}` : 'Not available'} />
               <DetailRow label="Location Source" value={activeStore.locationSource} />
@@ -275,10 +448,87 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           ) : null}
         </div>
 
+        {checkInModalOpen ? (
+          <div className="fixed inset-0 z-[5200] bg-black/40" onClick={() => !checkingIn && setCheckInModalOpen(false)}>
+            <div className="absolute inset-x-0 bottom-0 mx-auto max-w-[480px] rounded-t-2xl bg-[#f8f8fb] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4" onClick={(event) => event.stopPropagation()}>
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[20px] font-semibold text-[#1d1f23]">Create Check-in</h3>
+                  <p className="text-[14px] text-[#5f6269]">
+                    {checkInContact ? `${checkInContact.name} · ${activeStore.name}` : activeStore.name}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md p-1 text-[#5f6269] hover:bg-[#ececf1]"
+                  onClick={() => setCheckInModalOpen(false)}
+                  disabled={checkingIn}
+                  aria-label="Close check-in modal"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className={cn(
+                    'rounded-lg border px-3 py-2 text-sm font-medium',
+                    checkInMode === 'written' ? 'border-[#1f4e9f] bg-[#dce8ff] text-[#123a7c]' : 'border-[#c3c5cc] bg-white text-[#3f4249]',
+                  )}
+                  onClick={() => setCheckInMode('written')}
+                  disabled={checkingIn}
+                >
+                  Written
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'rounded-lg border px-3 py-2 text-sm font-medium',
+                    checkInMode === 'voice' ? 'border-[#1f4e9f] bg-[#dce8ff] text-[#123a7c]' : 'border-[#c3c5cc] bg-white text-[#3f4249]',
+                  )}
+                  onClick={() => setCheckInMode('voice')}
+                  disabled={checkingIn}
+                >
+                  Voice
+                </button>
+              </div>
+
+              {checkInMode === 'written' ? (
+                <div className="mt-3">
+                  <Textarea
+                    value={checkInDraft}
+                    onChange={(event) => setCheckInDraft(event.target.value)}
+                    className="min-h-[130px] bg-white text-[16px]"
+                    placeholder={
+                      checkInContact
+                        ? `Capture notes from your check-in with ${checkInContact.name}...`
+                        : 'Capture notes from this check-in...'
+                    }
+                  />
+                </div>
+              ) : (
+                <p className="mt-3 rounded-lg border border-[#cfd2d9] bg-white px-3 py-2 text-[14px] text-[#5f6269]">
+                  A voice check-in note will open in Notion so you can capture details quickly.
+                </p>
+              )}
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Button type="button" variant="secondary" className="h-11" onClick={() => setCheckInModalOpen(false)} disabled={checkingIn}>
+                  Cancel
+                </Button>
+                <Button type="button" className="h-11" onClick={handleCheckInSubmit} disabled={checkingIn}>
+                  {checkingIn ? 'Saving...' : checkInMode === 'voice' ? 'Start Voice' : 'Save Check-in'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="fixed bottom-[92px] left-0 right-0 z-[5100]">
           <div className="mx-auto grid max-w-[480px] grid-cols-4 border-t border-[#c6c7cb] bg-[#f2f2f5] py-3 text-[#5a96e8]">
             <ActionButton label={routeSelected ? 'remove' : 'add to...'} onClick={() => onAddToRoute(activeStore.id)} icon={<MapPinned className="h-6 w-6" />} />
-            <ActionButton label={checkingIn ? 'saving...' : 'check-in'} onClick={handleCheckIn} icon={<PencilLine className="h-6 w-6" />} disabled={checkingIn} />
+            <ActionButton label={checkingIn ? 'saving...' : 'check-in'} onClick={() => openCheckInModal()} icon={<PencilLine className="h-6 w-6" />} disabled={checkingIn} />
             <ActionButton label="center" onClick={handleCenter} icon={<MapPinned className="h-6 w-6" />} />
             <a href={navigateUrl} target="_blank" rel="noreferrer" className={cn(actionBaseClass, 'text-center')}>
               <Navigation className="h-6 w-6" />

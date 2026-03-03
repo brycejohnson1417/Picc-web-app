@@ -4,6 +4,7 @@ import { useEffect, useMemo } from 'react';
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import type { LatLngExpression } from 'leaflet';
+import { pinColorForStore } from '@/lib/territory/pin-colors';
 import type { TerritoryStorePin } from '@/lib/territory/types';
 
 interface MapCanvasInnerProps {
@@ -81,7 +82,7 @@ export function TerritoryMapCanvasInner({ stores, selectedStopIds, orderedStopId
       <MapContainer
         center={mapCenter}
         zoom={6}
-        className="h-full w-full"
+        className="h-full w-full [filter:saturate(1.08)_contrast(1.03)]"
         zoomControl={false}
         preferCanvas
         zoomAnimation
@@ -93,14 +94,19 @@ export function TerritoryMapCanvasInner({ stores, selectedStopIds, orderedStopId
         zoomDelta={0.5}
       >
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        attribution='&copy; OpenStreetMap contributors &copy; CARTO'
+        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
 
       <FitBounds stores={safeStores} focusedStoreId={focusedStoreId} />
       <MapClickClear onClear={() => onSelectStore(null)} />
 
-      {routeLatLngs.length > 1 ? <Polyline positions={routeLatLngs} color="#0f172a" weight={4} opacity={0.85} /> : null}
+      {routeLatLngs.length > 1 ? (
+        <>
+          <Polyline positions={routeLatLngs} color="#0f5f9e" weight={8} opacity={0.28} />
+          <Polyline positions={routeLatLngs} color="#20a8ff" weight={5} opacity={0.95} />
+        </>
+      ) : null}
 
       {safeStores.map((store) => {
         const selected = selectedSet.has(store.id);
@@ -111,7 +117,7 @@ export function TerritoryMapCanvasInner({ stores, selectedStopIds, orderedStopId
           <Marker
             key={store.id}
             position={[store.lat, store.lng]}
-            icon={buildMarkerIcon(store.statusColor, selected, order, focused)}
+            icon={buildMarkerIcon(pinColorForStore(store, 'status'), selected, order, focused)}
             bubblingMouseEvents={false}
             eventHandlers={{
               click: () => onSelectStore(store.id),
@@ -173,14 +179,20 @@ function buildMarkerIcon(color: string, selected: boolean, order: number | undef
 
   const size = focused ? 30 : selected ? 24 : 22;
   const borderColor = focused ? '#3b82f6' : selected ? '#0f172a' : '#ffffff';
-  const shadow = focused ? '0 0 0 3px rgba(59,130,246,0.25)' : selected ? '0 0 0 2px rgba(15,23,42,0.25)' : '0 1px 3px rgba(15,23,42,0.25)';
+  const shadow = focused ? '0 0 0 3px rgba(59,130,246,0.25)' : selected ? '0 0 0 2px rgba(15,23,42,0.25)' : '0 3px 8px rgba(15,23,42,0.28)';
   const focusedClass = focused ? ' picc-focused-pin' : '';
+  const pinShape = selected
+    ? `position:relative;width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid ${borderColor};box-shadow:${shadow};transform:translateZ(0);`
+    : `position:relative;width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;background:${color};border:3px solid ${borderColor};box-shadow:${shadow};transform:rotate(-45deg) translateZ(0);`;
+  const innerLabelStyle = selected
+    ? ''
+    : 'display:none;';
 
   return L.divIcon({
     className: '',
-    html: `<div class="${focusedClass.trim()}" style="position:relative;width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid ${borderColor};box-shadow:${shadow};transform:translateZ(0);">${badge}</div>`,
+    html: `<div class="${focusedClass.trim()}" style="${pinShape}"><span style="${innerLabelStyle}"></span>${badge}</div>`,
     iconSize: [size, size],
-    iconAnchor: [Math.round(size / 2), Math.round(size / 2)],
+    iconAnchor: selected ? [Math.round(size / 2), Math.round(size / 2)] : [Math.round(size / 2) - 1, size],
     popupAnchor: [0, -10],
   });
 }
