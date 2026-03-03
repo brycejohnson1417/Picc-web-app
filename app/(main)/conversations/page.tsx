@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { Channel } from '@prisma/client';
-import { Card, CardContent, CardHeader, CardTitle, Input, Textarea, Button, Badge } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
+import { MockComposer } from '@/components/conversations/mock-composer';
 import { getConversationOverview } from '@/lib/data/queries';
 
 export default async function ConversationsPage({
@@ -89,13 +91,7 @@ export default async function ConversationsPage({
                 </div>
               ))}
 
-              <div className="space-y-2 rounded-xl border bg-white p-3 dark:bg-slate-950">
-                <Input placeholder="Subject (optional)" />
-                <Textarea placeholder="Compose message... (mock mode)" />
-                <div className="flex justify-end">
-                  <Button className="min-h-11">Send (mock)</Button>
-                </div>
-              </div>
+              <MockComposer />
             </CardContent>
           </Card>
         ) : (
@@ -104,16 +100,27 @@ export default async function ConversationsPage({
               <CardTitle>Inbox</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {conversations.map((conversation) => (
-                <Link key={conversation.id} href={`/conversations?channel=${activeChannel}&selected=${conversation.id}`} className="block rounded-lg border p-3 hover:bg-slate-50 dark:hover:bg-slate-900">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold">{conversation.account.name}</p>
-                    {conversation.unreadCount > 0 && <Badge>{conversation.unreadCount}</Badge>}
-                  </div>
-                  <p className="text-xs text-slate-500">{conversation.channel} · {conversation.contact ? `${conversation.contact.firstName} ${conversation.contact.lastName}` : 'No contact'}</p>
-                  <p className="truncate text-sm text-slate-600 dark:text-slate-300">{conversation.messages[0]?.body ?? 'No messages yet.'}</p>
-                </Link>
-              ))}
+              {conversations.map((conversation) => {
+                const isSelected = selected?.id === conversation.id;
+                return (
+                  <Link
+                    key={conversation.id}
+                    href={`/conversations?channel=${activeChannel}&selected=${conversation.id}`}
+                    className={`block rounded-lg border p-3 transition hover:bg-slate-50 dark:hover:bg-slate-900 ${isSelected ? 'border-primary/40 bg-primary/5' : ''}`}
+                    aria-current={isSelected ? 'page' : undefined}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold">{conversation.account.name}</p>
+                      <div className="flex items-center gap-2">
+                        {conversation.unreadCount > 0 && <Badge>{conversation.unreadCount}</Badge>}
+                        <ChevronRight className="h-4 w-4 text-slate-400" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500">{conversation.channel} · {conversation.contact ? `${conversation.contact.firstName} ${conversation.contact.lastName}` : 'No contact'}</p>
+                    <p className="truncate text-sm text-slate-600 dark:text-slate-300">{conversation.messages[0]?.body ?? 'No messages yet.'}</p>
+                  </Link>
+                );
+              })}
             </CardContent>
           </Card>
         )}
@@ -125,16 +132,27 @@ export default async function ConversationsPage({
             <CardTitle>Inbox</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {conversations.map((conversation) => (
-              <Link key={conversation.id} href={`/conversations?channel=${activeChannel}&selected=${conversation.id}`} className="block rounded-lg border p-3 hover:bg-slate-50 dark:hover:bg-slate-900">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold">{conversation.account.name}</p>
-                  {conversation.unreadCount > 0 && <Badge>{conversation.unreadCount}</Badge>}
-                </div>
-                <p className="text-xs text-slate-500">{conversation.channel} · {conversation.contact ? `${conversation.contact.firstName} ${conversation.contact.lastName}` : 'No contact'}</p>
-                <p className="truncate text-sm text-slate-600 dark:text-slate-300">{conversation.messages[0]?.body ?? 'No messages yet.'}</p>
-              </Link>
-            ))}
+            {conversations.map((conversation) => {
+              const isSelected = selected?.id === conversation.id;
+              return (
+                <Link
+                  key={conversation.id}
+                  href={`/conversations?channel=${activeChannel}&selected=${conversation.id}`}
+                  className={`block rounded-lg border p-3 transition hover:bg-slate-50 dark:hover:bg-slate-900 ${isSelected ? 'border-primary/40 bg-primary/5' : ''}`}
+                  aria-current={isSelected ? 'page' : undefined}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold">{conversation.account.name}</p>
+                    <div className="flex items-center gap-2">
+                      {conversation.unreadCount > 0 && <Badge>{conversation.unreadCount}</Badge>}
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500">{conversation.channel} · {conversation.contact ? `${conversation.contact.firstName} ${conversation.contact.lastName}` : 'No contact'}</p>
+                  <p className="truncate text-sm text-slate-600 dark:text-slate-300">{conversation.messages[0]?.body ?? 'No messages yet.'}</p>
+                </Link>
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -155,12 +173,8 @@ export default async function ConversationsPage({
               </div>
             ))}
 
-            <div className="sticky bottom-0 space-y-2 rounded-xl border bg-white p-3 dark:bg-slate-950">
-              <Input placeholder="Subject (optional)" />
-              <Textarea placeholder="Compose message... (mock mode)" />
-              <div className="flex justify-end">
-                <Button>Send (mock)</Button>
-              </div>
+            <div className="sticky bottom-0">
+              <MockComposer />
             </div>
           </CardContent>
         </Card>
