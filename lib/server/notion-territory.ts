@@ -70,7 +70,34 @@ type NotionPropertyValue = {
   status?: {
     name?: string;
   } | null;
+  select?: {
+    name?: string;
+  } | null;
+  multi_select?: Array<{
+    name?: string;
+  }>;
   people?: NotionPerson[];
+  email?: string | null;
+  phone_number?: string | null;
+  url?: string | null;
+  number?: number | null;
+  checkbox?: boolean;
+  date?: {
+    start?: string | null;
+    end?: string | null;
+  } | null;
+  formula?: {
+    type?: 'string' | 'number' | 'boolean' | 'date';
+    string?: string | null;
+    number?: number | null;
+    boolean?: boolean | null;
+    date?: {
+      start?: string | null;
+    } | null;
+  } | null;
+  relation?: Array<{
+    id?: string;
+  }>;
   place?: NotionPlace | null;
 };
 
@@ -175,6 +202,85 @@ function textFromTitleProperty(property: NotionPropertyValue | undefined) {
 function textFromRichTextProperty(property: NotionPropertyValue | undefined) {
   const textArray = Array.isArray(property?.rich_text) ? property.rich_text : [];
   return textArray.map((item) => item?.plain_text ?? '').join('').trim();
+}
+
+function normalizePropertyName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function propertyByCandidates(properties: Record<string, NotionPropertyValue>, candidates: string[]) {
+  const normalizedMap = new Map<string, NotionPropertyValue>();
+  for (const [name, value] of Object.entries(properties)) {
+    normalizedMap.set(normalizePropertyName(name), value);
+  }
+
+  for (const candidate of candidates) {
+    const match = normalizedMap.get(normalizePropertyName(candidate));
+    if (match) {
+      return match;
+    }
+  }
+
+  return undefined;
+}
+
+function notionPropertyToString(property: NotionPropertyValue | undefined): string | null {
+  if (!property) return null;
+
+  const title = textFromTitleProperty(property);
+  if (title) return title;
+
+  const richText = textFromRichTextProperty(property);
+  if (richText) return richText;
+
+  if (property.status?.name) return property.status.name.trim();
+  if (property.select?.name) return property.select.name.trim();
+
+  if (Array.isArray(property.multi_select) && property.multi_select.length > 0) {
+    const value = property.multi_select.map((item) => item?.name ?? '').filter(Boolean).join(', ').trim();
+    if (value) return value;
+  }
+
+  if (Array.isArray(property.people) && property.people.length > 0) {
+    const value = property.people.map((person) => person?.name ?? person?.person?.email ?? '').filter(Boolean).join(', ').trim();
+    if (value) return value;
+  }
+
+  if (property.phone_number && property.phone_number.trim()) return property.phone_number.trim();
+  if (property.email && property.email.trim()) return property.email.trim();
+  if (property.url && property.url.trim()) return property.url.trim();
+  if (typeof property.number === 'number' && Number.isFinite(property.number)) return String(property.number);
+  if (typeof property.checkbox === 'boolean') return property.checkbox ? 'Yes' : 'No';
+  if (property.date?.start) return property.date.start;
+
+  if (property.formula) {
+    if (property.formula.type === 'string' && property.formula.string) return property.formula.string.trim();
+    if (property.formula.type === 'number' && typeof property.formula.number === 'number' && Number.isFinite(property.formula.number)) return String(property.formula.number);
+    if (property.formula.type === 'boolean' && typeof property.formula.boolean === 'boolean') return property.formula.boolean ? 'Yes' : 'No';
+    if (property.formula.type === 'date' && property.formula.date?.start) return property.formula.date.start;
+  }
+
+  if (property.place) {
+    const place = firstNonEmpty([property.place.name, property.place.address]);
+    if (place) return place;
+  }
+
+  return null;
+}
+
+function detailFieldFromCandidates(
+  properties: Record<string, NotionPropertyValue>,
+  label: string,
+  candidates: string[],
+) {
+  const property = propertyByCandidates(properties, candidates);
+  const value = notionPropertyToString(property);
+  if (!value) return null;
+  return { label, value };
 }
 
 function readFormulaNumber(property: NotionPropertyValue | undefined) {
@@ -415,17 +521,22 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
   for (const row of rows) {
     const properties = row.properties ?? {};
 
-    const name = textFromTitleProperty(properties['Dispensary Name']) || 'Untitled Store';
-    const statusName = properties['Account Status']?.status?.name ?? 'Unspecified';
+    const nameProperty = propertyByCandidates(properties, ['Dispensary Name', 'Name']);
+    const statusProperty = propertyByCandidates(properties, ['Account Status', 'Dispensary Account Status']);
+    const repProperty = propertyByCandidates(properties, ['Rep', 'Sales Rep', 'Account Owner']);
+    const mapLocationProperty = propertyByCandidates(properties, ['Map Location', 'Location']);
+
+    const name = textFromTitleProperty(nameProperty) || notionPropertyToString(nameProperty) || 'Untitled Store';
+    const statusName = statusProperty?.status?.name ?? notionPropertyToString(statusProperty) ?? 'Unspecified';
     const statusKey = normalizeStatus(statusName);
 
-    const repPeople = Array.isArray(properties['Rep']?.people) ? properties['Rep'].people : [];
+    const repPeople = Array.isArray(repProperty?.people) ? repProperty.people : [];
     const repNames = repPeople.map((person) => person?.name).filter((value: unknown): value is string => Boolean(value));
     const repEmails = repPeople
       .map((person) => person?.person?.email)
       .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
 
-    const place = properties['Map Location']?.place;
+    const place = mapLocationProperty?.place;
     const notionLat = typeof place?.lat === 'number' ? place.lat : null;
     const notionLng = typeof place?.lon === 'number' ? place.lon : null;
     const hasPlaceCoords = notionLat !== null && notionLng !== null;
@@ -433,12 +544,12 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
     const placeName = typeof place?.name === 'string' ? place.name.trim() : '';
     const placeAddress = typeof place?.address === 'string' ? place.address.trim() : '';
 
-    const fullAddress = textFromRichTextProperty(properties['Full Address']);
-    const address1 = textFromRichTextProperty(properties['Address 1']);
-    const city = textFromRichTextProperty(properties['City']);
-    const zipcode = textFromRichTextProperty(properties['Zipcode']);
-    const licenseNumber = textFromRichTextProperty(properties['License Number']);
-    const daysOverdue = readFormulaNumber(properties['Days Overdue']);
+    const fullAddress = notionPropertyToString(propertyByCandidates(properties, ['Full Address', 'Address'])) ?? '';
+    const address1 = notionPropertyToString(propertyByCandidates(properties, ['Address 1', 'Street Address'])) ?? '';
+    const city = notionPropertyToString(propertyByCandidates(properties, ['City'])) ?? '';
+    const zipcode = notionPropertyToString(propertyByCandidates(properties, ['Zipcode', 'Zip Code', 'ZIP'])) ?? '';
+    const licenseNumber = notionPropertyToString(propertyByCandidates(properties, ['License Number', 'License #'])) ?? '';
+    const daysOverdue = readFormulaNumber(propertyByCandidates(properties, ['Days Overdue']));
 
     const fallbackAddress = firstNonEmpty([placeAddress, placeName, fullAddress, [address1, city, zipcode].filter(Boolean).join(', ')]);
 
@@ -467,6 +578,36 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
 
     const resolvedLat: number = lat;
     const resolvedLng: number = lng;
+    const detailCandidates: Array<{ label: string; candidates: string[] }> = [
+      { label: 'Phone', candidates: ['Phone', 'Phone Number', 'Store Phone'] },
+      { label: 'Email', candidates: ['Email', 'Store Email'] },
+      { label: 'Follow-up Date', candidates: ['Follow-up Date', 'Follow Up Date', 'Next Follow-up'] },
+      { label: 'Account Owner', candidates: ['Account Owner', 'Owner', 'Rep'] },
+      { label: 'What Point of Sales are Needed', candidates: ['What Point of Sales are Needed', 'What Point of Sales are Needed?', 'Point of Sales Needed'] },
+      { label: 'PICC Rep', candidates: ['PICC Rep', 'Rep'] },
+      { label: 'What did we drop off', candidates: ['What did we drop off', 'Drop Off Items', 'What did we drop off?'] },
+      { label: 'Current Customer or Lead?', candidates: ['Current Customer or Lead?', 'Current Customer or Lead', 'Customer Type'] },
+      { label: 'Route', candidates: ['Matt_Bryce Route', 'Route'] },
+      { label: 'Full Address', candidates: ['Full Address', 'Address'] },
+      { label: 'License Number', candidates: ['License Number', 'License #'] },
+    ];
+
+    const detailFields = detailCandidates
+      .map((entry) => detailFieldFromCandidates(properties, entry.label, entry.candidates))
+      .filter((entry): entry is { label: string; value: string } => Boolean(entry));
+
+    if (!detailFields.find((entry) => entry.label === 'Account Owner')) {
+      detailFields.push({
+        label: 'Account Owner',
+        value: repNames[0] ?? 'Unassigned',
+      });
+    }
+    if (!detailFields.find((entry) => entry.label === 'Account Status')) {
+      detailFields.push({
+        label: 'Account Status',
+        value: statusName,
+      });
+    }
 
     const pin: TerritoryStorePin = {
       id: row.id,
@@ -487,6 +628,7 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
       city: city || null,
       state: parseStateFromAddress(firstNonEmpty([resolvedAddress, fullAddress, fallbackAddress])),
       daysOverdue,
+      detailFields,
     };
 
     if (!lastEditedMax || row.last_edited_time > lastEditedMax) {

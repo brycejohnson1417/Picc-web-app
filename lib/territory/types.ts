@@ -19,6 +19,10 @@ export interface TerritoryStorePin {
   city?: string | null;
   state?: string | null;
   daysOverdue?: number | null;
+  detailFields?: Array<{
+    label: string;
+    value: string;
+  }>;
 }
 
 export interface TerritoryFilterCount {
@@ -52,6 +56,13 @@ export interface TerritoryRouteStop {
   lng: number;
 }
 
+export interface TerritoryRouteAnchor {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+}
+
 export interface TerritoryOptimizedLeg {
   fromStopId: string;
   toStopId: string;
@@ -65,6 +76,8 @@ export interface TerritoryOptimizedRouteResponse {
   totalDistanceMeters: number;
   totalDurationSeconds: number;
   legs: TerritoryOptimizedLeg[];
+  start?: TerritoryRouteAnchor | null;
+  end?: TerritoryRouteAnchor | null;
   geometry: {
     type: 'LineString';
     coordinates: [number, number][];
