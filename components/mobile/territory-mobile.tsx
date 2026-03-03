@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { ListFilter, MapPinned, MessageCircleMore, Navigation, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
@@ -124,7 +125,18 @@ export function TerritoryMobile() {
           />
 
           <div className="absolute left-3 top-6 z-[1500] flex flex-col gap-3">
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow">
+            <button
+              type="button"
+              onClick={() => {
+                if (focusedStore) {
+                  setDetailStoreId(focusedStore.id);
+                  return;
+                }
+                toast.message('Select a pin to view details');
+              }}
+              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              aria-label="Open focused location"
+            >
               <MapPinned className="h-6 w-6 text-[#7f828a]" />
             </button>
             <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setRefreshNonce((v) => v + 1)}>
@@ -136,10 +148,20 @@ export function TerritoryMobile() {
             <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setView('list')}>
               <Search className="h-6 w-6 text-[#7f828a]" />
             </button>
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow">
+            <button
+              type="button"
+              onClick={() => toast.message('Map filters are coming soon')}
+              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              aria-label="Filter map locations"
+            >
               <ListFilter className="h-6 w-6 text-[#7f828a]" />
             </button>
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow">
+            <button
+              type="button"
+              onClick={() => toast.message('Messaging tools are coming soon')}
+              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              aria-label="Open messaging"
+            >
               <MessageCircleMore className="h-6 w-6 text-[#d25a3f]" />
             </button>
           </div>
@@ -191,7 +213,7 @@ export function TerritoryMobile() {
               <p className="truncate text-[17px] text-[#b6bac3]">{focusedStore.locationAddress ?? focusedStore.locationLabel ?? 'No address'}</p>
             </button>
             <div className="grid grid-cols-[1fr_72px_72px] border-b border-[#30333b]">
-              <button type="button" className="flex items-center gap-2 px-4 py-2 text-[17px] text-[#d5d9e1]">
+              <button type="button" onClick={() => setDetailStoreId(focusedStore.id)} className="flex items-center gap-2 px-4 py-2 text-[17px] text-[#d5d9e1]">
                 <span className="inline-block h-4 w-4 rounded-full bg-[#f45a34]" />
                 {focusedStore.repNames[0] ?? 'Unassigned'}
               </button>

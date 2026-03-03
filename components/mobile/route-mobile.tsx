@@ -109,7 +109,13 @@ export function RouteMobile() {
       <MobileHeader
         title="Route"
         right={
-          tab === 'saved' ? <button className="text-[24px]">Edit</button> : <Plus className="ml-auto h-10 w-10" />
+          tab === 'saved' ? (
+            <button type="button" onClick={() => toast.message('Saved route editing is coming soon')} className="text-[24px]">Edit</button>
+          ) : (
+            <button type="button" onClick={() => setShowAddModal(true)} aria-label="Add location" className="leading-none">
+              <Plus className="ml-auto h-10 w-10" />
+            </button>
+          )
         }
       >
         <SegmentedControl

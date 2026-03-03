@@ -1,6 +1,7 @@
 'use client';
 
 import { ChevronLeft } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 
 const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -20,12 +21,14 @@ const aprilRows = [
 ];
 
 export function CalendarMobile() {
+  const router = useRouter();
+
   return (
     <div className="min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
       <MobileHeader
         title="March - 2026"
         left={
-          <button className="flex items-center gap-1 text-[22px]">
+          <button type="button" onClick={() => router.back()} className="flex items-center gap-1 text-[22px]">
             <ChevronLeft className="h-8 w-8" />
             <span>Calendar</span>
           </button>
