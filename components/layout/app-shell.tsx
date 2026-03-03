@@ -51,27 +51,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#cfd0d4]">
       {commandMounted ? <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} /> : null}
       <div className="mx-auto min-h-screen max-w-[480px] bg-[#e6e6e9] shadow-[0_0_0_1px_rgba(0,0,0,0.12)]">
-        <main className="pb-[92px]">{children}</main>
+        <main className="pb-[84px]">{children}</main>
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 z-[4000] bg-[#1f232b] text-white" aria-label="Primary navigation">
-        <div className="mx-auto grid h-[92px] max-w-[480px] grid-cols-5 border-t border-[#2f3540] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
+        <div className="mx-auto grid h-[84px] max-w-[480px] grid-cols-5 border-t border-[#2f3540] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5">
           {tabs.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
             const showBadge = item.href === '/route' && routePlan.selectedCount > 0;
 
             return (
-              <Link key={item.href} href={item.href} className="relative flex min-h-[44px] flex-col items-center justify-center gap-1" aria-current={active ? 'page' : undefined}>
+              <Link key={item.href} href={item.href} className="relative flex min-h-[40px] flex-col items-center justify-center gap-1" aria-current={active ? 'page' : undefined}>
                 <div className={cn('relative rounded-full p-1.5', active ? 'text-white' : 'text-[#7f8691]')}>
-                  <Icon className="h-7 w-7" strokeWidth={2.2} />
+                  <Icon className="h-6 w-6" strokeWidth={2.2} />
                   {showBadge ? (
                     <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#ff4d4f] px-1 text-[11px] font-bold leading-none text-white">
                       {Math.min(99, routePlan.selectedCount)}
                     </span>
                   ) : null}
                 </div>
-                <span className={cn('text-[12px] font-medium', active ? 'text-white' : 'text-[#8f949e]')}>{item.label}</span>
+                <span className={cn('text-[11px] font-medium', active ? 'text-white' : 'text-[#8f949e]')}>{item.label}</span>
               </Link>
             );
           })}

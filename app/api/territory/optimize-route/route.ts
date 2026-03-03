@@ -12,9 +12,18 @@ const stopSchema = z.object({
   lng: z.number().finite(),
 });
 
+const anchorSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  lat: z.number().finite(),
+  lng: z.number().finite(),
+});
+
 const requestSchema = z.object({
   mode: z.enum(['car', 'bike']),
-  stops: z.array(stopSchema).min(2).max(25),
+  stops: z.array(stopSchema).min(1).max(25),
+  start: anchorSchema.optional(),
+  end: anchorSchema.optional(),
 });
 
 type TerritoryStop = z.infer<typeof stopSchema>;
@@ -107,6 +116,8 @@ async function optimizeTwoStopRoute(mode: 'car' | 'bike', stops: TerritoryStop[]
         durationSeconds: Math.round(route.legs?.[0]?.duration ?? route.duration ?? 0),
       },
     ],
+    start: null,
+    end: null,
     geometry: asLineGeometry(route.geometry),
   };
 
@@ -121,16 +132,36 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { mode, stops } = requestSchema.parse(body);
+    const { mode, stops, start, end } = requestSchema.parse(body);
+    const hasAnchors = Boolean(start || end);
+    if (!hasAnchors && stops.length < 2) {
+      return NextResponse.json(
+        {
+          error: 'At least 2 stops are required when no start/end anchor is provided',
+        },
+        { status: 400 },
+      );
+    }
 
-    if (stops.length === 2) {
-      const payload = await optimizeTwoStopRoute(mode, stops);
+    const routeStops: TerritoryStop[] = [
+      ...(start ? [start] : []),
+      ...stops,
+      ...(end ? [end] : []),
+    ];
+
+    if (routeStops.length === 2) {
+      const payload = await optimizeTwoStopRoute(mode, routeStops);
+      payload.orderedStopIds = payload.orderedStopIds.filter((id) => stops.some((stop) => stop.id === id));
+      payload.start = start ?? null;
+      payload.end = end ?? null;
       return NextResponse.json(payload);
     }
 
     const profile = mode === 'car' ? 'driving' : 'cycling';
-    const coordinates = stops.map(formatCoord).join(';');
-    const url = `https://router.project-osrm.org/trip/v1/${profile}/${coordinates}?source=first&destination=last&roundtrip=false&steps=true&overview=full&geometries=geojson`;
+    const coordinates = routeStops.map(formatCoord).join(';');
+    const sourceParam = start ? 'first' : 'first';
+    const destinationParam = end ? 'last' : 'last';
+    const url = `https://router.project-osrm.org/trip/v1/${profile}/${coordinates}?source=${sourceParam}&destination=${destinationParam}&roundtrip=false&steps=true&overview=full&geometries=geojson`;
 
     const response = await fetch(url, { cache: 'no-store' });
     const payload = (await response.json()) as OsrmTripResponse;
@@ -147,7 +178,7 @@ export async function POST(request: Request) {
     const trip = payload.trips?.[0];
     const waypoints = Array.isArray(payload.waypoints) ? payload.waypoints : [];
 
-    if (!trip || waypoints.length !== stops.length) {
+    if (!trip || waypoints.length !== routeStops.length) {
       return NextResponse.json(
         {
           error: 'OSRM optimization response malformed',
@@ -159,7 +190,7 @@ export async function POST(request: Request) {
     const orderedStops: TerritoryStop[] = waypoints
       .map((waypoint: { waypoint_index: number }, inputIndex: number) => ({ waypoint, inputIndex }))
       .sort((a: { waypoint: { waypoint_index: number }; inputIndex: number }, b: { waypoint: { waypoint_index: number }; inputIndex: number }) => a.waypoint.waypoint_index - b.waypoint.waypoint_index)
-      .map((item: { waypoint: { waypoint_index: number }; inputIndex: number }) => stops[item.inputIndex]);
+      .map((item: { waypoint: { waypoint_index: number }; inputIndex: number }) => routeStops[item.inputIndex]);
 
     const legs = (trip.legs ?? []).map((leg: OsrmLeg, index: number) => ({
       fromStopId: orderedStops[index]?.id ?? '',
@@ -168,12 +199,17 @@ export async function POST(request: Request) {
       durationSeconds: Math.round(leg.duration ?? 0),
     }));
 
+    const selectedIds = new Set(stops.map((stop) => stop.id));
+    const orderedSelectedStopIds = orderedStops.filter((stop) => selectedIds.has(stop.id)).map((stop) => stop.id);
+
     const result: TerritoryOptimizedRouteResponse = {
       mode,
-      orderedStopIds: orderedStops.map((stop: TerritoryStop) => stop.id),
+      orderedStopIds: orderedSelectedStopIds,
       totalDistanceMeters: Math.round(trip.distance ?? 0),
       totalDurationSeconds: Math.round(trip.duration ?? 0),
       legs,
+      start: start ?? null,
+      end: end ?? null,
       geometry: asLineGeometry(trip.geometry),
     };
 
