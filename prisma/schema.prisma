@@ -794,3 +794,13 @@ model SpatialGeocodeCache {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
+
+model NotionCacheSnapshot {
+  key                     String   @id
+  payload                 Json
+  recordsRead             Int      @default(0)
+  unresolvedLocationCount Int      @default(0)
+  lastEditedMax           DateTime?
+  syncedAt                DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
