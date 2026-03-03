@@ -33,6 +33,7 @@ type SavedFiltersPayload = {
   selectedReps: string[];
   showRouteOnly: boolean;
   pinColorMode: PinColorMode;
+  layerMode: 'pins' | 'heatmap' | 'hex';
   savedAt: string;
 };
 
@@ -66,6 +67,7 @@ export function TerritoryMobile() {
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [pinColorMode, setPinColorMode] = useState<PinColorMode>('status');
+  const [layerMode, setLayerMode] = useState<'pins' | 'heatmap' | 'hex'>('pins');
   const [savedFiltersAt, setSavedFiltersAt] = useState<string | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -89,6 +91,7 @@ export function TerritoryMobile() {
       setSelectedReps(Array.isArray(parsed.selectedReps) ? parsed.selectedReps.filter((value): value is string => typeof value === 'string') : []);
       setShowRouteOnly(Boolean(parsed.showRouteOnly));
       setPinColorMode(parsed.pinColorMode === 'rep' ? 'rep' : 'status');
+      setLayerMode(parsed.layerMode === 'heatmap' || parsed.layerMode === 'hex' ? parsed.layerMode : 'pins');
       setSavedFiltersAt(typeof parsed.savedAt === 'string' ? parsed.savedAt : null);
       toast.success('Loaded saved territory filters');
     } catch {
@@ -195,6 +198,7 @@ export function TerritoryMobile() {
       selectedReps,
       showRouteOnly,
       pinColorMode,
+      layerMode,
       savedAt: new Date().toISOString(),
     };
     window.localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(payload));
@@ -209,6 +213,7 @@ export function TerritoryMobile() {
     setSelectedReps([]);
     setShowRouteOnly(false);
     setPinColorMode('status');
+    setLayerMode('pins');
     setSavedFiltersAt(null);
     window.localStorage.removeItem(FILTER_STORAGE_KEY);
     toast.success('Filters cleared');
@@ -264,9 +269,45 @@ export function TerritoryMobile() {
               focusedStoreId={focusedStore?.id ?? null}
               routeCoordinates={routeCoordinates}
               pinColorMode={pinColorMode}
+              layerMode={layerMode}
               onSelectStore={setFocusedId}
             />
           </MapRenderBoundary>
+
+          <div className="absolute left-1/2 top-6 z-[1550] -translate-x-1/2 rounded-xl bg-white/92 p-1 shadow">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className={cn(
+                  'rounded-lg px-2.5 py-1 text-[12px] font-semibold',
+                  layerMode === 'pins' ? 'bg-[#cd3814] text-white' : 'text-[#4b4e55]',
+                )}
+                onClick={() => setLayerMode('pins')}
+              >
+                Pins
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'rounded-lg px-2.5 py-1 text-[12px] font-semibold',
+                  layerMode === 'heatmap' ? 'bg-[#cd3814] text-white' : 'text-[#4b4e55]',
+                )}
+                onClick={() => setLayerMode('heatmap')}
+              >
+                Heat
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'rounded-lg px-2.5 py-1 text-[12px] font-semibold',
+                  layerMode === 'hex' ? 'bg-[#cd3814] text-white' : 'text-[#4b4e55]',
+                )}
+                onClick={() => setLayerMode('hex')}
+              >
+                Grid
+              </button>
+            </div>
+          </div>
 
           {routePlan.selectedStopIds.length >= 2 ? (
             <div className="absolute bottom-4 left-3 z-[1500] rounded-xl bg-black/70 px-3 py-2 text-[13px] text-white">
