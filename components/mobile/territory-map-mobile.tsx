@@ -19,6 +19,19 @@ interface TerritoryMapMobileProps {
 
 const FALLBACK_CENTER: LatLngExpression = [39.8283, -98.5795];
 
+function isFiniteLatLng(lat: unknown, lng: unknown) {
+  return (
+    typeof lat === 'number' &&
+    Number.isFinite(lat) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    typeof lng === 'number' &&
+    Number.isFinite(lng) &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
 export function TerritoryMapMobile({
   stores,
   selectedStopIds,
@@ -28,6 +41,7 @@ export function TerritoryMapMobile({
   pinColorMode,
   onSelectStore,
 }: TerritoryMapMobileProps) {
+  const safeStores = useMemo(() => stores.filter((store) => isFiniteLatLng(store.lat, store.lng)), [stores]);
   const selectedSet = useMemo(() => new Set(selectedStopIds), [selectedStopIds]);
   const orderMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -36,13 +50,19 @@ export function TerritoryMapMobile({
   }, [orderedStopIds]);
 
   const center = useMemo<LatLngExpression>(() => {
-    const focused = focusedStoreId ? stores.find((store) => store.id === focusedStoreId) : null;
-    if (focused) return [focused.lat, focused.lng];
-    if (stores[0]) return [stores[0].lat, stores[0].lng];
+    const focused = focusedStoreId ? safeStores.find((store) => store.id === focusedStoreId) : null;
+    if (focused && isFiniteLatLng(focused.lat, focused.lng)) return [focused.lat, focused.lng];
+    if (safeStores[0] && isFiniteLatLng(safeStores[0].lat, safeStores[0].lng)) return [safeStores[0].lat, safeStores[0].lng];
     return FALLBACK_CENTER;
-  }, [stores, focusedStoreId]);
+  }, [safeStores, focusedStoreId]);
 
-  const routeLine = useMemo(() => routeCoordinates.map(([lng, lat]) => [lat, lng] as [number, number]), [routeCoordinates]);
+  const routeLine = useMemo(
+    () =>
+      routeCoordinates
+        .filter((coord): coord is [number, number] => Array.isArray(coord) && coord.length === 2 && isFiniteLatLng(coord[1], coord[0]))
+        .map(([lng, lat]) => [lat, lng] as [number, number]),
+    [routeCoordinates],
+  );
 
   return (
     <>
@@ -73,8 +93,8 @@ export function TerritoryMapMobile({
         zoomSnap={0.25}
         zoomDelta={0.5}
       >
-        <TileLayer attribution='&copy; OpenStreetMap contributors &copy; CARTO' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
-        <FitMapBounds stores={stores} focusedStoreId={focusedStoreId} />
+        <TileLayer attribution="&copy; OpenStreetMap contributors &copy; CARTO" url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+        <FitMapBounds stores={safeStores} focusedStoreId={focusedStoreId} />
         <MapClickClear onClear={() => onSelectStore(null)} />
 
         {routeLine.length > 1 ? (
@@ -84,7 +104,7 @@ export function TerritoryMapMobile({
           </>
         ) : null}
 
-        {stores.map((store) => {
+        {safeStores.map((store) => {
           const selected = selectedSet.has(store.id);
           const order = orderMap.get(store.id);
           const focused = focusedStoreId === store.id;
@@ -115,7 +135,7 @@ function FitMapBounds({ stores, focusedStoreId }: { stores: TerritoryStorePin[];
     }
 
     const focused = focusedStoreId ? stores.find((store) => store.id === focusedStoreId) : null;
-    if (focused) {
+    if (focused && isFiniteLatLng(focused.lat, focused.lng)) {
       map.flyTo([focused.lat, focused.lng], Math.max(map.getZoom(), 13), { duration: 0.4 });
       return;
     }

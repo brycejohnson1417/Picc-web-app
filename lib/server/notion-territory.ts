@@ -434,10 +434,43 @@ function normalizeSnapshotPayload(payload: unknown): TerritoryStorePin[] {
       return false;
     }
     const candidate = item as TerritoryStorePin;
-    return Boolean(candidate.id && candidate.notionPageId && candidate.name && Number.isFinite(candidate.lat) && Number.isFinite(candidate.lng));
+    return Boolean(candidate.id && candidate.notionPageId && Number.isFinite(candidate.lat) && Number.isFinite(candidate.lng));
   });
 
-  return rows;
+  return rows
+    .map((row) => {
+      const id = typeof row.id === 'string' ? row.id : '';
+      const notionPageId = typeof row.notionPageId === 'string' ? row.notionPageId : id;
+      const name = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : 'Untitled Store';
+      const status = typeof row.status === 'string' && row.status.trim() ? row.status.trim() : 'Unspecified';
+      const lat = typeof row.lat === 'number' ? row.lat : Number.NaN;
+      const lng = typeof row.lng === 'number' ? row.lng : Number.NaN;
+
+      if (!id || !notionPageId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return null;
+      }
+
+      return {
+        ...row,
+        id,
+        notionPageId,
+        name,
+        status,
+        statusKey: typeof row.statusKey === 'string' && row.statusKey ? row.statusKey : normalizeStatus(status),
+        statusColor: typeof row.statusColor === 'string' && row.statusColor ? row.statusColor : colorForStatus(status),
+        pinKind: row.pinKind ?? pinKindForStatus(status),
+        repNames: Array.isArray(row.repNames) ? row.repNames.filter((value): value is string => typeof value === 'string') : [],
+        repEmails: Array.isArray(row.repEmails) ? row.repEmails.filter((value): value is string => typeof value === 'string') : [],
+        locationLabel: typeof row.locationLabel === 'string' ? row.locationLabel : null,
+        locationAddress: typeof row.locationAddress === 'string' ? row.locationAddress : null,
+        locationSource:
+          row.locationSource === 'notion-place' || row.locationSource === 'nominatim-cache' || row.locationSource === 'nominatim-live'
+            ? row.locationSource
+            : 'nominatim-cache',
+        lastEditedTime: typeof row.lastEditedTime === 'string' && row.lastEditedTime ? row.lastEditedTime : new Date().toISOString(),
+      };
+    })
+    .filter((row): row is TerritoryStorePin => Boolean(row));
 }
 
 async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?: number }) {
