@@ -120,7 +120,7 @@ export function TerritoryMobile() {
       </MobileHeader>
 
       {view === 'map' ? (
-        <div className="relative h-[calc(100dvh-142px)] min-h-[420px]">
+        <div className={cn('relative min-h-[460px]', focusedStore ? 'h-[calc(100dvh-146px)]' : 'h-[calc(100dvh-98px)]')}>
           <TerritoryMapMobile
             stores={stores}
             selectedStopIds={routePlan.selectedStopIds}

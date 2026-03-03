@@ -62,7 +62,7 @@ export function TerritoryMapCanvasInner({ stores, selectedStopIds, orderedStopId
           <Marker
             key={store.id}
             position={[store.lat, store.lng]}
-            icon={buildMarkerIcon(store.statusColor, selected, order)}
+            icon={buildMarkerIcon(store.statusColor, store.pinKind, selected, order)}
             eventHandlers={{
               click: () => onSelectStore(store.id),
             }}
@@ -103,17 +103,23 @@ function FitBounds({ stores, focusedStoreId }: { stores: TerritoryStorePin[]; fo
   return null;
 }
 
-function buildMarkerIcon(color: string, selected: boolean, order?: number) {
+function buildMarkerIcon(color: string, pinKind: 'lead' | 'customer' | 'other', selected: boolean, order?: number) {
   const badge = order
     ? `<span style="position:absolute;bottom:-8px;right:-8px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#0f172a;color:#fff;font-size:10px;line-height:18px;font-weight:700;text-align:center;">${order}</span>`
     : '';
 
   const borderColor = selected ? '#0f172a' : '#ffffff';
   const shadow = selected ? '0 0 0 2px rgba(15,23,42,0.25)' : '0 1px 3px rgba(15,23,42,0.25)';
+  const shapeStyle =
+    pinKind === 'customer'
+      ? 'border-radius:6px;transform:rotate(45deg);'
+      : pinKind === 'lead'
+        ? 'border-radius:50% 50% 50% 0;transform:rotate(-45deg);'
+        : 'border-radius:50%;transform:none;';
 
   return L.divIcon({
     className: '',
-    html: `<div style="position:relative;width:22px;height:22px;border-radius:50%;background:${color};border:3px solid ${borderColor};box-shadow:${shadow};">${badge}</div>`,
+    html: `<div style="position:relative;width:22px;height:22px;${shapeStyle}background:${color};border:3px solid ${borderColor};box-shadow:${shadow};">${badge}</div>`,
     iconSize: [22, 22],
     iconAnchor: [11, 11],
     popupAnchor: [0, -10],

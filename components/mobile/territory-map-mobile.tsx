@@ -47,7 +47,7 @@ export function TerritoryMapMobile({ stores, selectedStopIds, orderedStopIds, fo
           <Marker
             key={store.id}
             position={[store.lat, store.lng]}
-            icon={selected ? buildSelectedPin(order ?? 1) : buildDefaultPin(store.statusColor)}
+            icon={selected ? buildSelectedPin(order ?? 1) : buildDefaultPin(store.statusColor, store.pinKind)}
             eventHandlers={{ click: () => onSelectStore(store.id) }}
           />
         );
@@ -78,10 +78,17 @@ function FitMapBounds({ stores, focusedStoreId }: { stores: TerritoryStorePin[];
   return null;
 }
 
-function buildDefaultPin(color: string) {
+function buildDefaultPin(color: string, pinKind: 'lead' | 'customer' | 'other') {
+  const shapeStyle =
+    pinKind === 'customer'
+      ? 'border-radius:6px;transform:rotate(45deg);'
+      : pinKind === 'lead'
+        ? 'border-radius:50% 50% 50% 0;transform:rotate(-45deg);'
+        : 'border-radius:50%;transform:none;';
+
   return L.divIcon({
     className: '',
-    html: `<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:2px solid #ffffff;box-shadow:0 3px 7px rgba(0,0,0,0.25);"></div>`,
+    html: `<div style="width:18px;height:18px;${shapeStyle}background:${color};border:2px solid #ffffff;box-shadow:0 3px 7px rgba(0,0,0,0.25);"></div>`,
     iconSize: [18, 18],
     iconAnchor: [9, 17],
   });
