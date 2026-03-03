@@ -1,7 +1,6 @@
-# Services
+# Integration Services
 
-Service modules that run outside the Next.js runtime.
-
-- `directus-sync`: synchronization adapters and transformation rules.
-- `odoo-sync`: ERP synchronization adapters and reconciliation tools.
+- `directus-sync`: publishes geospatial CRM read-model data into Directus collections.
+- `odoo-sync`: reconciles account/order entities with Odoo using idempotent runs.
+- `sync-common`: shared audit + mapping utilities.
 - `routing`: reserved for routing compute service (deferred in this wave).
