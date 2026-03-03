@@ -25,6 +25,15 @@ export interface TerritoryStorePin {
   followUpDate?: string | null;
   notes?: string | null;
   lastCheckIn?: string | null;
+  geometry?: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
+  metrics?: {
+    interactionsScore: number;
+    purchasesScore: number;
+    followUpUrgencyScore: number;
+  };
 }
 
 export interface TerritoryStoreContact {
