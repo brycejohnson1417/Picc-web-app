@@ -1,5 +1,5 @@
 export function initNativeSentry() {
-  const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+  const dsn = (globalThis as { process?: { env?: Record<string, string | undefined> } })?.process?.env?.EXPO_PUBLIC_SENTRY_DSN;
   if (!dsn) {
     return { enabled: false };
   }
@@ -7,6 +7,8 @@ export function initNativeSentry() {
   return {
     enabled: true,
     dsn,
-    environment: process.env.NODE_ENV ?? 'development',
+    environment:
+      (globalThis as { process?: { env?: Record<string, string | undefined> } })?.process?.env?.NODE_ENV ??
+      'development',
   };
 }

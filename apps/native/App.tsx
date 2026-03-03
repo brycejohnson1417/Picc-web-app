@@ -13,7 +13,7 @@ type Store = {
   phoneNumber?: string | null;
 };
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+const API_BASE = ((globalThis as { process?: { env?: Record<string, string | undefined> } })?.process?.env?.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3000').trim();
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('map');
