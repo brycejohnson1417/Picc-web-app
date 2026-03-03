@@ -44,7 +44,7 @@ export function RouteSheet({
         </div>
         <Button variant="ghost" size="sm" onClick={onClearStops} disabled={selectedStops.length === 0}>
           <Trash2 className="mr-1 h-4 w-4" />
-          Clear
+          {selectedStops.length === 0 ? 'Clear (empty)' : 'Clear'}
         </Button>
       </div>
 
@@ -53,7 +53,7 @@ export function RouteSheet({
         <ModeButton icon={Bike} label="Bike" active={mode === 'bike'} onClick={() => onSetMode('bike')} />
         <Button variant="outline" size="sm" className="h-9" onClick={onLaunchTransit} disabled={selectedStops.length < 2}>
           <Train className="mr-1 h-4 w-4" />
-          Transit
+          {selectedStops.length < 2 ? 'Transit (need 2 stops)' : 'Transit'}
           <ExternalLink className="ml-1 h-3.5 w-3.5" />
         </Button>
       </div>
@@ -71,8 +71,9 @@ export function RouteSheet({
 
       <Button className="h-10 w-full" onClick={onOptimize} disabled={selectedStops.length < 2 || optimizing}>
         <Navigation2 className="mr-2 h-4 w-4" />
-        {optimizing ? 'Optimizing...' : `Optimize ${mode === 'car' ? 'Car' : 'Bike'} Route`}
+        {optimizing ? 'Optimizing...' : selectedStops.length < 2 ? 'Add 2 stops to optimize' : `Optimize ${mode === 'car' ? 'Car' : 'Bike'} Route`}
       </Button>
+      {selectedStops.length < 2 ? <p className="text-xs text-slate-500">Pick at least two stops to calculate route order and ETA.</p> : null}
 
       <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
         {orderedStops.length === 0 ? (
