@@ -28,25 +28,25 @@ export function CalendarMobile() {
       <MobileHeader
         title="March - 2026"
         left={
-          <button type="button" onClick={() => router.push('/dashboard')} className="flex items-center gap-1 text-[22px]" aria-label="Back to dashboard">
-            <ChevronLeft className="h-8 w-8" />
+          <button type="button" onClick={() => router.push('/dashboard')} className="flex items-center gap-0.5 text-[16px]" aria-label="Back to dashboard">
+            <ChevronLeft className="h-5 w-5" />
             <span>Calendar</span>
           </button>
         }
       />
 
-      <div className="grid grid-cols-7 border-b border-[#c8c9cf] bg-[#efeff2] px-2 py-1 text-center text-[18px] text-[#232428]">
+      <div className="grid grid-cols-7 border-b border-[#c8c9cf] bg-[#efeff2] px-2 py-1.5 text-center text-[13px] font-medium text-[#232428]">
         {days.map((day) => (
           <span key={day}>{day}</span>
         ))}
       </div>
 
-      <div className="border-b border-[#c8c9cf] px-6 py-5">
-        <span className="text-[42px] font-semibold text-[#cc2f20]">MAR</span>
+      <div className="border-b border-[#c8c9cf] px-5 py-3">
+        <span className="text-[20px] font-semibold text-[#cc2f20]">MAR</span>
       </div>
 
       {monthRows.map((row, rowIndex) => (
-        <div key={`mar-${rowIndex}`} className="grid grid-cols-7 border-b border-[#c8c9cf] px-3 py-4">
+        <div key={`mar-${rowIndex}`} className="grid grid-cols-7 border-b border-[#c8c9cf] px-3 py-2">
           {row.map((day, index) => {
             const isSelectedBlack = day === 2;
             const isSelectedBlue = day === 3;
@@ -54,7 +54,7 @@ export function CalendarMobile() {
               <span
                 key={`${rowIndex}-${index}`}
                 className={[
-                  'mx-auto grid h-12 w-12 place-items-center rounded-full text-[22px]',
+                  'mx-auto grid h-9 w-9 place-items-center rounded-full text-[17px]',
                   day === null ? 'opacity-0' : 'text-[#22242a]',
                   isSelectedBlack ? 'bg-black text-white' : '',
                   isSelectedBlue ? 'bg-[#4c8fdf] text-white' : '',
@@ -70,15 +70,15 @@ export function CalendarMobile() {
         </div>
       ))}
 
-      <div className="border-b border-[#c8c9cf] px-6 py-5 text-center text-[42px] font-medium text-[#25272d]">APR</div>
+      <div className="border-b border-[#c8c9cf] px-5 py-3 text-[20px] font-semibold text-[#25272d]">APR</div>
 
       {aprilRows.map((row, rowIndex) => (
-        <div key={`apr-${rowIndex}`} className="grid grid-cols-7 border-b border-[#c8c9cf] px-3 py-4">
+        <div key={`apr-${rowIndex}`} className="grid grid-cols-7 border-b border-[#c8c9cf] px-3 py-2">
           {row.map((day, index) => (
             <span
               key={`apr-${rowIndex}-${index}`}
               className={[
-                'mx-auto grid h-12 w-12 place-items-center rounded-full text-[22px]',
+                'mx-auto grid h-9 w-9 place-items-center rounded-full text-[17px]',
                 day === null ? 'opacity-0' : 'text-[#22242a]',
                 day === 4 || day === 5 || day === 11 || day === 12 || day === 18 ? 'text-[#8a8d94]' : '',
               ].join(' ')}

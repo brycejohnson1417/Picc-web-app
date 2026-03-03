@@ -56,10 +56,10 @@ export function SettingsMobile() {
             onClick={() => {
               void handleItemClick(item);
             }}
-            className="grid w-full grid-cols-[1fr_24px] items-center border-b border-[#c9cad0] px-5 py-4 text-left"
+            className="grid w-full grid-cols-[1fr_20px] items-center border-b border-[#c9cad0] px-5 py-3.5 text-left"
           >
-            <span className="text-[23px] text-[#2a2c31]">{item.label}</span>
-            <ChevronRight className="h-7 w-7 text-[#bcc0c7]" />
+            <span className="text-[17px] text-[#2a2c31]">{item.label}</span>
+            <ChevronRight className="h-5 w-5 text-[#bcc0c7]" />
           </button>
         ))}
       </div>

@@ -62,16 +62,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const showBadge = item.href === '/route' && routePlan.selectedCount > 0;
 
             return (
-              <Link key={item.href} href={item.href} className="relative flex min-h-[40px] flex-col items-center justify-center gap-1" aria-current={active ? 'page' : undefined}>
-                <div className={cn('relative rounded-full p-1.5', active ? 'text-white' : 'text-[#7f8691]')}>
-                  <Icon className="h-6 w-6" strokeWidth={2.2} />
+              <Link key={item.href} href={item.href} className="relative flex min-h-[44px] flex-col items-center justify-center gap-0.5" aria-current={active ? 'page' : undefined}>
+                <div className={cn('relative rounded-xl px-3 py-1', active ? 'bg-white/10 text-white' : 'text-[#7f8691]')}>
+                  <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.4 : 2} />
                   {showBadge ? (
-                    <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#ff4d4f] px-1 text-[11px] font-bold leading-none text-white">
+                    <span className="absolute -right-0.5 -top-0.5 grid h-4.5 min-w-[18px] place-items-center rounded-full bg-[#ff4d4f] px-1 text-[10px] font-bold leading-none text-white">
                       {Math.min(99, routePlan.selectedCount)}
                     </span>
                   ) : null}
                 </div>
-                <span className={cn('text-[11px] font-medium', active ? 'text-white' : 'text-[#8f949e]')}>{item.label}</span>
+                <span className={cn('text-[10px] font-medium tracking-[0.02em]', active ? 'text-white' : 'text-[#8f949e]')}>{item.label}</span>
               </Link>
             );
           })}

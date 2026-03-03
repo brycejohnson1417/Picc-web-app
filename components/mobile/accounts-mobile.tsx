@@ -104,11 +104,11 @@ export function AccountsMobile() {
         right={(
           <button
             type="button"
-            className="text-[42px] leading-none"
+            className="flex items-center justify-end"
             onClick={() => toast.message('Create account is available in desktop mode.')}
             aria-label="Create account"
           >
-            <Plus className="ml-auto h-9 w-9" />
+            <Plus className="ml-auto h-6 w-6" />
           </button>
         )}
       >
@@ -134,11 +134,11 @@ export function AccountsMobile() {
               sectionRefs.current[letter] = element;
             }}
           >
-            <div className="border-b border-[#c6c7cb] px-1 py-2 text-[38px] text-[#8a8d95]">{letter}</div>
+            <div className="border-b border-[#c6c7cb] px-2 py-1.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#8a8d95]">{letter}</div>
             {list.map((store) => (
-              <button key={store.id} type="button" onClick={() => setDetailStoreId(store.id)} className="w-full border-b border-[#d0d1d4] px-1 py-3 text-left">
-                <p className="truncate text-[22px] text-[#15171c]">{store.name}</p>
-                <p className="truncate text-[17px] text-[#8c8f97]">{store.locationAddress ?? store.locationLabel ?? 'No address'}</p>
+              <button key={store.id} type="button" onClick={() => setDetailStoreId(store.id)} className="w-full border-b border-[#d0d1d4] px-2 py-2.5 text-left">
+                <p className="truncate text-[17px] font-medium text-[#15171c]">{store.name}</p>
+                <p className="truncate text-[13px] text-[#8c8f97]">{store.locationAddress ?? store.locationLabel ?? 'No address'}</p>
               </button>
             ))}
           </section>

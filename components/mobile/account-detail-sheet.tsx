@@ -283,17 +283,13 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   return (
     <div className="fixed inset-0 z-[5000] bg-black/35">
       <div className="mx-auto h-full max-w-[480px] bg-[#e6e6e9]">
-        <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
-          <div className="mb-2 flex items-center justify-between text-sm opacity-90">
-            <span className="font-semibold">12:20</span>
-            <span className="font-semibold">100%</span>
-          </div>
+        <div className="bg-[#c93412] px-4 pb-3 pt-[max(10px,env(safe-area-inset-top))] text-white">
           <div className="relative flex items-center justify-between py-2">
             <button onClick={onClose} className="min-w-14 text-left" aria-label="Close">
-              <X className="h-8 w-8" />
+              <X className="h-6 w-6" />
             </button>
-            <h1 className="absolute left-1/2 -translate-x-1/2 text-[28px] font-semibold">Account Details</h1>
-            <button type="button" onClick={() => window.open(notionUrl, '_blank', 'noopener,noreferrer')} className="min-w-14 text-right text-[24px]" aria-label="Open account in Notion">
+            <h1 className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold">Account Details</h1>
+            <button type="button" onClick={() => window.open(notionUrl, '_blank', 'noopener,noreferrer')} className="min-w-14 text-right text-[16px] font-medium" aria-label="Open account in Notion">
               Edit
             </button>
           </div>
@@ -311,10 +307,10 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
         </div>
 
         <div className="pb-[170px]">
-          <div className="border-y border-[#c6c7cb] bg-[#e6e6e9] px-5 py-6">
-            <h2 className="text-[50px] font-medium text-[#111217]">{activeStore.name}</h2>
-            <p className="text-[34px] text-[#8e9096]">{activeStore.locationAddress ?? activeStore.locationLabel ?? 'No address'}</p>
-            {loadingDetail ? <p className="mt-2 text-[15px] text-[#6e7078]">Syncing account details...</p> : null}
+          <div className="border-y border-[#c6c7cb] bg-[#e6e6e9] px-4 py-4">
+            <h2 className="text-[22px] font-semibold leading-tight text-[#111217]">{activeStore.name}</h2>
+            <p className="mt-0.5 text-[14px] text-[#8e9096]">{activeStore.locationAddress ?? activeStore.locationLabel ?? 'No address'}</p>
+            {loadingDetail ? <p className="mt-1.5 text-[13px] text-[#6e7078]">Syncing account details...</p> : null}
           </div>
 
           {tab === 'detail' ? (
@@ -328,26 +324,26 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
               <DetailRow label="PICC Rep" value={activeStore.repNames.join(', ') || '—'} />
               <DetailRow label="License" value={activeStore.licenseNumber ?? '—'} />
 
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
-                <p className="text-[20px] text-[#a2a3a8]">Associated Contacts</p>
-                {contacts.length === 0 ? <p className="mt-1 text-[21px] text-[#1d1f23]">No contacts linked.</p> : null}
+              <div className="border-b border-[#c6c7cb] px-4 py-3">
+                <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-[#a2a3a8]">Associated Contacts</p>
+                {contacts.length === 0 ? <p className="mt-1 text-[15px] text-[#1d1f23]">No contacts linked.</p> : null}
                 {contacts.map((contact) => (
                   <div key={contact.id} className="mt-2 rounded-lg border border-[#c7c8cd] bg-[#f3f3f6] px-3 py-2">
                     <div className="flex items-start justify-between gap-3">
-                      <Link href={`/contacts/${encodeURIComponent(contact.id)}`} className="text-[19px] font-medium text-[#1f4e9f] underline-offset-2 hover:underline">
+                      <Link href={`/contacts/${encodeURIComponent(contact.id)}`} className="text-[15px] font-semibold text-[#1f4e9f] underline-offset-2 hover:underline">
                         {contact.name}
                       </Link>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
-                          className="rounded-md border border-[#b4b7bf] px-2.5 py-1 text-[13px] font-medium text-[#27303f] hover:bg-[#e8eaf0]"
+                          className="rounded-md border border-[#b4b7bf] px-2.5 py-1 text-[12px] font-medium text-[#27303f] hover:bg-[#e8eaf0]"
                           onClick={() => callFromContactCard(contact)}
                         >
                           Call Store
                         </button>
                         <button
                           type="button"
-                          className="rounded-md border border-[#b4b7bf] px-2.5 py-1 text-[13px] font-medium text-[#27303f] hover:bg-[#e8eaf0]"
+                          className="rounded-md border border-[#b4b7bf] px-2.5 py-1 text-[12px] font-medium text-[#27303f] hover:bg-[#e8eaf0]"
                           onClick={() => openCheckInModal(contact)}
                           disabled={checkingIn}
                         >
@@ -355,8 +351,8 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                         </button>
                       </div>
                     </div>
-                    <p className="text-[16px] text-[#5e6169]">{contact.roleTitle || '—'}</p>
-                    <p className="text-[16px] text-[#5e6169]">{contact.email || '—'} · {contact.phone || '—'}</p>
+                    <p className="text-[13px] text-[#5e6169]">{contact.roleTitle || '—'}</p>
+                    <p className="text-[13px] text-[#5e6169]">{contact.email || '—'} · {contact.phone || '—'}</p>
                   </div>
                 ))}
               </div>
@@ -365,25 +361,25 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
 
           {tab === 'location' ? (
             <>
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
+              <div className="border-b border-[#c6c7cb] px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[20px] text-[#a2a3a8]">Address</p>
-                    <p className="mt-1 text-[21px] font-medium text-[#1d1f23]">{addressValue}</p>
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-[#a2a3a8]">Address</p>
+                    <p className="mt-0.5 text-[16px] font-medium text-[#1d1f23]">{addressValue}</p>
                   </div>
                   <button
                     type="button"
                     onClick={copyAddress}
-                    className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg border border-[#9ab9ea] px-3 text-[15px] font-medium text-[#2872d1]"
+                    className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-[#9ab9ea] px-3 text-[13px] font-medium text-[#2872d1]"
                   >
-                    <Copy className="h-4 w-4" />
+                    <Copy className="h-3.5 w-3.5" />
                     Copy
                   </button>
                 </div>
               </div>
 
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
-                <p className="text-[20px] text-[#a2a3a8]">Street View</p>
+              <div className="border-b border-[#c6c7cb] px-4 py-3">
+                <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-[#a2a3a8]">Street View</p>
                 <div className="mt-2 overflow-hidden rounded-xl border border-[#c4c6cc] bg-[#dfe2e8]">
                   {streetViewLoadError ? (
                     <button
@@ -423,13 +419,13 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           ) : null}
 
           {tab === 'notes' ? (
-            <div className="border-b border-[#c6c7cb] px-5 py-5 text-[#5f6269]">
-              <p className="text-[22px] font-medium text-[#1d1f23]">Account Notes</p>
-              <p className="mt-1 text-[17px]">Notes save directly to Notion.</p>
+            <div className="border-b border-[#c6c7cb] px-4 py-4 text-[#5f6269]">
+              <p className="text-[16px] font-semibold text-[#1d1f23]">Account Notes</p>
+              <p className="mt-0.5 text-[13px]">Notes save directly to Notion.</p>
               <Textarea
                 value={notesDraft}
                 onChange={(event) => setNotesDraft(event.target.value)}
-                className="mt-3 min-h-[160px] bg-white text-[18px]"
+                className="mt-3 min-h-[140px] bg-white text-[15px]"
                 placeholder="Add visit notes, next steps, or key blockers..."
               />
               <Button type="button" className="mt-3 h-11 px-5" onClick={handleSaveNotes} disabled={!canSaveNotes || savingNotes}>
@@ -453,8 +449,8 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
             <div className="absolute inset-x-0 bottom-0 mx-auto max-w-[480px] rounded-t-2xl bg-[#f8f8fb] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4" onClick={(event) => event.stopPropagation()}>
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-[20px] font-semibold text-[#1d1f23]">Create Check-in</h3>
-                  <p className="text-[14px] text-[#5f6269]">
+                  <h3 className="text-[17px] font-semibold text-[#1d1f23]">Create Check-in</h3>
+                  <p className="text-[13px] text-[#5f6269]">
                     {checkInContact ? `${checkInContact.name} · ${activeStore.name}` : activeStore.name}
                   </p>
                 </div>
@@ -543,9 +539,9 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
 
 function DetailRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className="border-b border-[#c6c7cb] px-5 py-4">
-      <p className="text-[20px] text-[#a2a3a8]">{label}</p>
-      <p className={cn('mt-1 text-[21px] text-[#1d1f23]', strong ? 'font-medium' : '')}>{value || ' '}</p>
+    <div className="border-b border-[#c6c7cb] px-4 py-3">
+      <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-[#a2a3a8]">{label}</p>
+      <p className={cn('mt-0.5 text-[16px] text-[#1d1f23]', strong ? 'font-medium' : '')}>{value || ' '}</p>
     </div>
   );
 }

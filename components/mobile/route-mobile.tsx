@@ -181,12 +181,12 @@ export function RouteMobile() {
         title="Route"
         right={
           tab === 'saved' ? (
-            <button type="button" className="text-[24px]" onClick={() => setSavedEditing((value) => !value)}>
+            <button type="button" className="text-[16px] font-medium" onClick={() => setSavedEditing((value) => !value)}>
               {savedEditing ? 'Done' : 'Edit'}
             </button>
           ) : (
-            <button type="button" className="grid h-10 w-10 place-items-center" onClick={() => setShowAddModal(true)} aria-label="Add location">
-              <Plus className="h-10 w-10" />
+            <button type="button" className="flex items-center justify-end" onClick={() => setShowAddModal(true)} aria-label="Add location">
+              <Plus className="h-6 w-6" />
             </button>
           )
         }
@@ -204,21 +204,21 @@ export function RouteMobile() {
       {tab === 'current' ? (
         <div className="pb-[172px]">
           {selectedStops.length === 0 ? (
-            <div className="px-10 py-12 text-center">
-              <h2 className="text-[56px] font-semibold text-[#5f5d5e]">Let&apos;s hit the road!</h2>
-              <p className="mt-4 text-[22px] leading-8 text-[#606066]">Build your route by adding accounts, then optimize for driving or transit.</p>
-              <button onClick={() => setShowAddModal(true)} className="mt-8 w-full rounded-[38px] bg-[#4f8edf] px-6 py-4 text-[23px] font-semibold text-white">
+            <div className="px-8 py-10 text-center">
+              <h2 className="text-[24px] font-semibold text-[#5f5d5e]">Let&apos;s hit the road!</h2>
+              <p className="mt-3 text-[16px] leading-6 text-[#606066]">Build your route by adding accounts, then optimize for driving or transit.</p>
+              <button onClick={() => setShowAddModal(true)} className="mt-6 w-full rounded-2xl bg-[#4f8edf] px-6 py-3.5 text-[16px] font-semibold text-white">
                 + Add Location
               </button>
             </div>
           ) : (
             <>
-              <div className="border-b border-[#c9cad0] px-6 py-5">
-                <button onClick={() => setShowAddModal(true)} className="w-full rounded-[38px] bg-[#4f8edf] px-6 py-4 text-[23px] font-semibold text-white">
+              <div className="border-b border-[#c9cad0] px-4 py-4">
+                <button onClick={() => setShowAddModal(true)} className="w-full rounded-2xl bg-[#4f8edf] px-6 py-3 text-[16px] font-semibold text-white">
                   + Add Location
                 </button>
-                <p className="mt-3 text-center text-[20px] font-semibold text-[#595c62]">
-                  <Check className="mr-2 inline h-6 w-6" /> Route Updated
+                <p className="mt-2.5 text-center text-[14px] font-semibold text-[#595c62]">
+                  <Check className="mr-1.5 inline h-4 w-4" /> Route Updated
                 </p>
                 <div className="mt-3">
                   <SegmentedControl
@@ -234,8 +234,8 @@ export function RouteMobile() {
               </div>
 
               <div className="border-b border-[#c7c8ce] px-4 py-2 text-[#6f7278]">
-                <p className="text-[16px]">{new Date().toLocaleDateString()}</p>
-                <p className="flex items-center justify-between text-[19px] font-semibold">
+                <p className="text-[13px]">{new Date().toLocaleDateString()}</p>
+                <p className="flex items-center justify-between text-[15px] font-semibold">
                   CURRENT ROUTE
                   <span className="text-[#4f8edf]">{formatDuration(totalDurationSeconds)} · {formatDistance(totalDistanceMeters)}</span>
                 </p>
@@ -255,21 +255,21 @@ export function RouteMobile() {
                         Travel {formatDuration(previousLeg?.durationSeconds ?? 0)} · {formatDistance(previousLeg?.distanceMeters ?? 0)}
                       </p>
                     ) : null}
-                    <div className="grid grid-cols-[34px_38px_86px_74px_1fr_28px] items-center gap-2 border-b border-[#cbccd2] px-4 py-3">
-                      <GripHorizontal className="h-6 w-6 text-[#b8b9be]" />
-                      <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-[#41b64b] text-[18px] font-semibold text-[#2c7f31]">{index + 1}</span>
+                    <div className="grid grid-cols-[28px_34px_80px_68px_1fr_28px] items-center gap-2 border-b border-[#cbccd2] px-4 py-2.5">
+                      <GripHorizontal className="h-5 w-5 text-[#b8b9be]" />
+                      <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#41b64b] text-[14px] font-semibold text-[#2c7f31]">{index + 1}</span>
                       <div>
-                        <p className="text-[17px] font-semibold text-[#4d4f55]">{timeLabel}</p>
-                        <p className="text-[14px] text-[#979aa2]">ETA</p>
+                        <p className="text-[15px] font-semibold text-[#4d4f55]">{timeLabel}</p>
+                        <p className="text-[12px] text-[#979aa2]">ETA</p>
                       </div>
                       <div>
-                        <p className="text-[17px] font-semibold text-[#4d4f55]">{index === 0 ? 'Start' : formatDuration(previousLeg?.durationSeconds ?? 0)}</p>
-                        <p className="text-[14px] text-[#979aa2]">Leg</p>
+                        <p className="text-[15px] font-semibold text-[#4d4f55]">{index === 0 ? 'Start' : formatDuration(previousLeg?.durationSeconds ?? 0)}</p>
+                        <p className="text-[12px] text-[#979aa2]">Leg</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => router.push(`/accounts?storeId=${encodeURIComponent(stop.id)}`)}
-                        className="truncate text-left text-[23px] font-semibold text-[#3c3e44]"
+                        className="truncate text-left text-[16px] font-semibold text-[#3c3e44]"
                       >
                         {stop.name}
                       </button>
@@ -301,7 +301,7 @@ export function RouteMobile() {
       {tab === 'current' ? (
         <div className="fixed bottom-[92px] left-0 right-0 z-[2600]">
           <div className="mx-auto grid max-w-[480px] grid-cols-5 border-t border-[#c4c5cc] bg-[#f3f3f6] py-2 text-[#5a95e7]">
-            <button onClick={launchGo} className="mx-2 rounded-3xl bg-[#3ac128] px-2 py-2 text-[20px] font-bold text-white">
+            <button onClick={launchGo} className="mx-2 rounded-2xl bg-[#3ac128] px-2 py-2 text-[16px] font-bold text-white">
               GO
             </button>
             <ActionIconButton label={optimizing ? '...' : 'optimize'} onClick={optimizeRoute} icon={<RotateCcw className="h-7 w-7" />} disabled={optimizing} />
@@ -358,7 +358,7 @@ function SavedRoutesList({ editing, onLoadRoute }: { editing: boolean; onLoadRou
   }, [routePlan.savedRoutes, search]);
 
   if (routePlan.savedRoutes.length === 0) {
-    return <p className="px-6 py-8 text-[22px] text-[#6f7178]">No saved routes yet.</p>;
+    return <p className="px-6 py-8 text-[16px] text-[#6f7178]">No saved routes yet.</p>;
   }
 
   return (
@@ -375,11 +375,11 @@ function SavedRoutesList({ editing, onLoadRoute }: { editing: boolean; onLoadRou
                 routePlan.loadSavedRoute(route.id);
                 onLoadRoute();
               }}
-              className="px-4 py-4 text-left"
+              className="px-4 py-3 text-left"
             >
-              <p className="text-[23px] text-[#3b3d44]">{route.name}</p>
-              <p className="text-[20px] text-[#8f9299]">{new Date(route.createdAt).toLocaleDateString()}</p>
-              <p className="text-[16px] text-[#6f7278]">{route.mode === 'transit' ? 'Transit' : route.mode === 'bike' ? 'Bike' : 'Drive'}</p>
+              <p className="text-[17px] font-medium text-[#3b3d44]">{route.name}</p>
+              <p className="text-[13px] text-[#8f9299]">{new Date(route.createdAt).toLocaleDateString()}</p>
+              <p className="text-[13px] text-[#6f7278]">{route.mode === 'transit' ? 'Transit' : route.mode === 'bike' ? 'Bike' : 'Drive'}</p>
             </button>
             {editing ? (
               <button
@@ -388,14 +388,14 @@ function SavedRoutesList({ editing, onLoadRoute }: { editing: boolean; onLoadRou
                 className="grid h-10 w-10 place-items-center rounded-xl text-[#c14a4a]"
                 onClick={() => routePlan.deleteSavedRoute(route.id)}
               >
-                <Trash2 className="h-6 w-6" />
+                <Trash2 className="h-5 w-5" />
               </button>
             ) : (
-              <ChevronRight className="h-8 w-8 justify-self-center text-[#c3c5cc]" />
+              <ChevronRight className="h-5 w-5 justify-self-center text-[#c3c5cc]" />
             )}
           </div>
         ))}
-        {routes.length === 0 ? <p className="px-6 py-6 text-[19px] text-[#7e8189]">No routes match your search.</p> : null}
+        {routes.length === 0 ? <p className="px-6 py-6 text-[15px] text-[#7e8189]">No routes match your search.</p> : null}
       </div>
     </div>
   );
@@ -442,17 +442,13 @@ function AddLocationModal({
   return (
     <div className="fixed inset-0 z-[5200] bg-black/35">
       <div className="mx-auto h-full max-w-[480px] bg-[#e6e6e9]">
-        <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
-          <div className="mb-2 flex items-center justify-between text-sm opacity-90">
-            <span className="font-semibold">12:18</span>
-            <span className="font-semibold">100%</span>
-          </div>
+        <div className="bg-[#c93412] px-4 pb-3 pt-[max(10px,env(safe-area-inset-top))] text-white">
           <div className="relative flex items-center justify-between py-2">
             <button onClick={onClose} className="min-w-14 text-left" aria-label="Close">
-              <X className="h-8 w-8" />
+              <X className="h-6 w-6" />
             </button>
-            <h1 className="absolute left-1/2 -translate-x-1/2 text-[28px] font-semibold">Add Locations</h1>
-            <span className="min-w-14 text-right text-[24px] text-white/45">Add to route</span>
+            <h1 className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold">Add Locations</h1>
+            <span className="min-w-14 text-right text-[14px] text-white/60">Add to route</span>
           </div>
           <SegmentedControl
             value={mode}
@@ -476,15 +472,15 @@ function AddLocationModal({
                 sectionRefs.current[letter] = element;
               }}
             >
-              <div className="border-b border-[#c6c7cb] px-4 py-2 text-[38px] text-[#8a8d95]">{letter}</div>
+              <div className="border-b border-[#c6c7cb] px-4 py-1.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#8a8d95]">{letter}</div>
               {list.map((store) => {
                 const selected = selectedStopIds.includes(store.id);
                 return (
-                  <button key={store.id} onClick={() => onToggleStop(store.id)} className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-4 py-3 text-left">
-                    <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 text-lg', selected ? 'border-[#49b84c] text-[#49b84c]' : 'border-[#b7b9bf] text-transparent')}>
+                  <button key={store.id} onClick={() => onToggleStop(store.id)} className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-4 py-2.5 text-left">
+                    <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 text-[15px]', selected ? 'border-[#49b84c] text-[#49b84c]' : 'border-[#b7b9bf] text-transparent')}>
                       ✓
                     </span>
-                    <span className="truncate text-[22px] text-[#15171c]">{store.name}</span>
+                    <span className="truncate text-[17px] text-[#15171c]">{store.name}</span>
                   </button>
                 );
               })}
