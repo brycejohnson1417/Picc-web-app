@@ -1,18 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, Suspense } from 'react';
 import { Sidebar } from './components/Sidebar';
-import { Dashboard } from './components/Dashboard';
-import { NotionDocList } from './components/NotionDocList';
 import { AICopilot } from './components/AICopilot';
-import { Settings } from './components/Settings';
-import { ServiceWorkspace } from './components/ServiceWorkspace';
-import { CustomerPortal } from './components/CustomerPortal';
-import { PPPOnboarding } from './components/PPPOnboarding';
-import { AdminDashboard } from './components/AdminDashboard';
-import { ProposalBuilder } from './components/ProposalBuilder';
-import { SalesCRM } from './components/SalesCRM';
-import { FinanceReports } from './components/FinanceReports';
-import { TeamDirectory } from './components/TeamDirectory';
-import { BAOpsView } from './components/BAOpsView';
+
+const Dashboard = React.lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
+const NotionDocList = React.lazy(() => import('./components/NotionDocList').then(m => ({ default: m.NotionDocList })));
+const Settings = React.lazy(() => import('./components/Settings').then(m => ({ default: m.Settings })));
+const ServiceWorkspace = React.lazy(() => import('./components/ServiceWorkspace').then(m => ({ default: m.ServiceWorkspace })));
+const CustomerPortal = React.lazy(() => import('./components/CustomerPortal').then(m => ({ default: m.CustomerPortal })));
+const PPPOnboarding = React.lazy(() => import('./components/PPPOnboarding').then(m => ({ default: m.PPPOnboarding })));
+const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const ProposalBuilder = React.lazy(() => import('./components/ProposalBuilder').then(m => ({ default: m.ProposalBuilder })));
+const SalesCRM = React.lazy(() => import('./components/SalesCRM').then(m => ({ default: m.SalesCRM })));
+const FinanceReports = React.lazy(() => import('./components/FinanceReports').then(m => ({ default: m.FinanceReports })));
+const TeamDirectory = React.lazy(() => import('./components/TeamDirectory').then(m => ({ default: m.TeamDirectory })));
+const BAOpsView = React.lazy(() => import('./components/BAOpsView').then(m => ({ default: m.BAOpsView })));
 import { UserRole } from './types';
 
 type GoogleCredentialResponse = {
@@ -290,7 +291,9 @@ const App: React.FC = () => {
             Return to Internal Workspace
           </button>
         </div>
-        <CustomerPortal />
+        <Suspense fallback={<div className="h-screen flex items-center justify-center text-slate-500">Loading portal...</div>}>
+          <CustomerPortal />
+        </Suspense>
       </>
     );
   }
@@ -342,7 +345,9 @@ const App: React.FC = () => {
             Sign out
           </button>
         </div>
-        {renderContent()}
+        <Suspense fallback={<div className="h-[80vh] flex items-center justify-center text-slate-500">Loading module...</div>}>
+          {renderContent()}
+        </Suspense>
       </main>
 
       <AICopilot />

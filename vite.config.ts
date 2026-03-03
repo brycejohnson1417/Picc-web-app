@@ -6,7 +6,17 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    minify: 'terser'
+    minify: 'terser',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          charts: ['recharts'],
+          export: ['jspdf', 'xlsx'],
+          icons: ['lucide-react']
+        }
+      }
+    }
   },
   server: {
     proxy: {
