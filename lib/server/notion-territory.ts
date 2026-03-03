@@ -417,20 +417,6 @@ async function queryAllStorePages(databaseId: string) {
   return allRows;
 }
 
-function buildRepLabelSet(pin: TerritoryStorePin) {
-  const labels = new Set<string>();
-  for (const name of pin.repNames) {
-    labels.add(name.toLowerCase());
-  }
-  for (const email of pin.repEmails) {
-    labels.add(email.toLowerCase());
-  }
-  if (labels.size === 0) {
-    labels.add('unassigned');
-  }
-  return labels;
-}
-
 function normalizeSnapshotPayload(payload: unknown): TerritoryStorePin[] {
   if (!Array.isArray(payload)) {
     return [];
