@@ -230,13 +230,14 @@ export function TerritoryClient() {
               setSelectedReps([]);
               setOptimizedRoute(null);
             }}
+            isFiltering={storesQuery.isFetching}
           />
         </div>
 
         <div className="absolute right-3 top-[12.6rem] z-[1000]">
-          <Button variant="secondary" size="sm" onClick={() => setRefreshNonce((value) => value + 1)}>
-            <RefreshCw className="mr-1 h-4 w-4" />
-            Refresh
+          <Button variant="secondary" size="sm" onClick={() => setRefreshNonce((value) => value + 1)} disabled={storesQuery.isFetching}>
+            {storesQuery.isFetching ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
+            {storesQuery.isFetching ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
 
@@ -251,7 +252,9 @@ export function TerritoryClient() {
 
         {stores.length === 0 ? (
           <div className="absolute left-2 right-2 top-1/2 z-[1000] -translate-y-1/2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-center text-sm text-amber-900 md:left-1/2 md:right-auto md:w-[520px] md:-translate-x-1/2">
-            No mapped stores available yet. Tap Refresh to force a live Notion sync and geocode missing addresses.
+            {search || selectedStatuses.length > 0 || selectedReps.length > 0
+              ? 'No stores match your current search/filters. Clear filters to see all locations.'
+              : 'No mapped stores available yet. Tap Refresh to force a live Notion sync and geocode missing addresses.'}
           </div>
         ) : null}
 
