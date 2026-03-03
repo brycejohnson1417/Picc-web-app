@@ -137,7 +137,7 @@ export function TerritoryMobile() {
           <div className="absolute left-3 top-4 z-[1500] flex flex-col gap-2">
             <button
               type="button"
-              className="grid h-10 w-10 place-items-center rounded-xl bg-white/95 shadow"
+              className="grid h-11 w-11 place-items-center rounded-xl bg-white/95 shadow"
               onClick={() => setFocusedId(null)}
               title="Recenter"
             >
@@ -145,7 +145,7 @@ export function TerritoryMobile() {
             </button>
             <button
               type="button"
-              className="grid h-10 w-10 place-items-center rounded-xl bg-white/95 shadow"
+              className="grid h-11 w-11 place-items-center rounded-xl bg-white/95 shadow"
               onClick={() => setRefreshNonce((v) => v + 1)}
               title="Refresh"
             >
@@ -154,10 +154,10 @@ export function TerritoryMobile() {
           </div>
 
           <div className="absolute right-3 top-4 z-[1500] flex flex-col gap-2">
-            <button type="button" className="grid h-10 w-10 place-items-center rounded-xl bg-white/95 shadow" onClick={() => setView('list')} title="List">
+            <button type="button" className="grid h-11 w-11 place-items-center rounded-xl bg-white/95 shadow" onClick={() => setView('list')} title="List">
               <Search className="h-5 w-5 text-[#7f828a]" />
             </button>
-            <button type="button" className="grid h-10 w-10 place-items-center rounded-xl bg-white/95 shadow" onClick={() => setShowFilters(true)} title="Filters">
+            <button type="button" className="grid h-11 w-11 place-items-center rounded-xl bg-white/95 shadow" onClick={() => setShowFilters(true)} title="Filters">
               <Filter className="h-5 w-5 text-[#7f828a]" />
             </button>
           </div>
@@ -166,7 +166,7 @@ export function TerritoryMobile() {
         <div className="px-4 pb-28 pt-3">
           <div className="flex items-center gap-2">
             <MobileSearch value={search} onChange={setSearch} placeholder="Search Locations" className="flex-1" />
-            <button type="button" onClick={() => setShowFilters(true)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#c8c9cf] bg-white">
+            <button type="button" onClick={() => setShowFilters(true)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-[#c8c9cf] bg-white">
               <Filter className="h-5 w-5 text-[#6c7078]" />
             </button>
           </div>
@@ -197,13 +197,13 @@ export function TerritoryMobile() {
       )}
 
       {view === 'map' && focusedStore ? (
-        <div className="fixed bottom-[84px] left-0 right-0 z-[2500]">
+        <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] left-0 right-0 z-[2500]">
           <div className="mx-auto max-w-[480px] bg-[#1d1f24] text-white shadow-[0_-2px_8px_rgba(0,0,0,0.35)]">
             <button type="button" onClick={() => setDetailStoreId(focusedStore.id)} className="w-full border-b border-[#30333b] px-4 py-2.5 text-left">
               <p className="truncate text-[16px] font-semibold">{focusedStore.name}</p>
               <p className="truncate text-[13px] text-[#b6bac3]">{focusedStore.locationAddress ?? focusedStore.locationLabel ?? 'No address'}</p>
             </button>
-            <div className="grid grid-cols-[1fr_56px_56px] border-b border-[#30333b]">
+            <div className="grid grid-cols-[1fr_64px_64px] border-b border-[#30333b]">
               <button type="button" className="flex items-center gap-2 px-4 py-2 text-[13px] text-[#d5d9e1]">
                 <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: focusedStore.statusColor }} />
                 {focusedStore.repNames[0] ?? 'Unassigned'}

@@ -50,7 +50,7 @@ export default async function ConversationsPage({
             <Link
               key={value}
               href={`/conversations?channel=${value}`}
-              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+              className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
                 active
                   ? 'border-primary bg-primary text-white'
                   : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'

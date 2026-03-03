@@ -99,7 +99,7 @@ export function AccountsMobile() {
       <div className="px-4 pb-28 pt-3">
         <div className="flex items-center gap-2">
           <MobileSearch value={search} onChange={setSearch} placeholder="Search Accounts" className="flex-1" />
-          <button type="button" onClick={() => setShowFilters(true)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#c8c9cf] bg-white">
+          <button type="button" onClick={() => setShowFilters(true)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-[#c8c9cf] bg-white">
             <Filter className="h-5 w-5 text-[#6c7078]" />
           </button>
         </div>
