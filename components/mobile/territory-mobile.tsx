@@ -77,14 +77,19 @@ export function TerritoryMobile() {
     }
   }, [showRouteOnly, routePlan.selectedStopIds.length]);
 
+  useEffect(() => {
+    if (!focusedId) return;
+    if (displayedStores.some((store) => store.id === focusedId)) return;
+    setFocusedId(null);
+  }, [focusedId, displayedStores]);
+
   const focusedStore = useMemo(() => {
-    if (!displayedStores.length) return null;
-    if (focusedId) {
-      const focused = storeById.get(focusedId);
-      if (focused && (!showRouteOnly || routePlan.selectedStopIds.includes(focused.id))) return focused;
-    }
-    return displayedStores[0];
-  }, [displayedStores, focusedId, routePlan.selectedStopIds, showRouteOnly, storeById]);
+    if (!focusedId) return null;
+    const focused = storeById.get(focusedId);
+    if (!focused) return null;
+    if (showRouteOnly && !routePlan.selectedStopIds.includes(focused.id)) return null;
+    return focused;
+  }, [focusedId, routePlan.selectedStopIds, showRouteOnly, storeById]);
 
   const orderedStops = useMemo(() => {
     const ids = routePlan.orderedStopIds.length > 0 ? routePlan.orderedStopIds : routePlan.selectedStopIds;
