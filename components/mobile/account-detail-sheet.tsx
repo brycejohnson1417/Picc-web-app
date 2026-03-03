@@ -1,10 +1,11 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { MapPinned, Navigation, PencilLine, X } from 'lucide-react';
 import type { TerritoryStorePin } from '@/lib/territory/types';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface AccountDetailSheetProps {
   store: TerritoryStorePin | null;
@@ -14,6 +15,8 @@ interface AccountDetailSheetProps {
 }
 
 export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected }: AccountDetailSheetProps) {
+  const [tab, setTab] = useState('detail');
+
   if (!store) {
     return null;
   }
@@ -33,11 +36,16 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
               <X className="h-8 w-8" />
             </button>
             <h1 className="absolute left-1/2 -translate-x-1/2 text-[28px] font-semibold">Account Details</h1>
-            <button className="min-w-14 text-right text-[24px]">Edit</button>
+            <button className="min-w-14 text-right text-[24px]" onClick={() => toast.info('Edit account coming soon')}>Edit</button>
           </div>
           <SegmentedControl
-            value="detail"
-            onChange={() => {}}
+            value={tab}
+            onChange={(val) => {
+              setTab(val);
+              if (val !== 'detail') {
+                toast.info(`${val.charAt(0).toUpperCase() + val.slice(1)} view coming soon`);
+              }
+            }}
             options={[
               { value: 'detail', label: 'Detail' },
               { value: 'location', label: 'Location' },
@@ -49,26 +57,34 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
         </div>
 
         <div className="pb-[170px]">
-          <div className="border-y border-[#c6c7cb] bg-[#e6e6e9] px-5 py-6">
-            <h2 className="text-[50px] font-medium text-[#111217]">{store.name}</h2>
-            <p className="text-[34px] text-[#8e9096]">{store.locationAddress ?? store.locationLabel ?? 'No address'}</p>
-          </div>
+          {tab === 'detail' ? (
+            <>
+              <div className="border-y border-[#c6c7cb] bg-[#e6e6e9] px-5 py-6">
+                <h2 className="text-[50px] font-medium text-[#111217]">{store.name}</h2>
+                <p className="text-[34px] text-[#8e9096]">{store.locationAddress ?? store.locationLabel ?? 'No address'}</p>
+              </div>
 
-          <DetailRow label="Phone" value="" />
-          <DetailRow label="Email" value="" />
-          <DetailRow label="Last check-in" value="No check-ins" strong />
-          <DetailRow label="Follow-up Date" value="" />
-          <DetailRow label="Account Owner" value={store.repNames[0] ?? 'Unassigned'} strong />
-          <DetailRow label="Account Status" value={store.status} strong />
-          <DetailRow label="PICC Rep" value={store.repNames.join(', ') || '—'} />
-          <DetailRow label="License" value={store.licenseNumber ?? '—'} />
+              <DetailRow label="Phone" value="" />
+              <DetailRow label="Email" value="" />
+              <DetailRow label="Last check-in" value="No check-ins" strong />
+              <DetailRow label="Follow-up Date" value="" />
+              <DetailRow label="Account Owner" value={store.repNames[0] ?? 'Unassigned'} strong />
+              <DetailRow label="Account Status" value={store.status} strong />
+              <DetailRow label="PICC Rep" value={store.repNames.join(', ') || '—'} />
+              <DetailRow label="License" value={store.licenseNumber ?? '—'} />
+            </>
+          ) : (
+            <div className="flex h-64 items-center justify-center text-slate-500">
+              {tab.charAt(0).toUpperCase() + tab.slice(1)} content placeholder
+            </div>
+          )}
         </div>
 
         <div className="fixed bottom-[92px] left-0 right-0 z-[5100]">
           <div className="mx-auto grid max-w-[480px] grid-cols-4 border-t border-[#c6c7cb] bg-[#f2f2f5] py-3 text-[#5a96e8]">
             <ActionButton label={routeSelected ? 'remove' : 'add to...'} onClick={() => onAddToRoute(store.id)} icon={<MapPinned className="h-6 w-6" />} />
-            <ActionButton label="check-in" onClick={() => {}} icon={<PencilLine className="h-6 w-6" />} />
-            <ActionButton label="center" onClick={() => {}} icon={<MapPinned className="h-6 w-6" />} />
+            <ActionButton label="check-in" onClick={() => toast.info('Check-in coming soon')} icon={<PencilLine className="h-6 w-6" />} />
+            <ActionButton label="center" onClick={() => toast.info('Center on map coming soon')} icon={<MapPinned className="h-6 w-6" />} />
             <a href={navigateUrl} target="_blank" rel="noreferrer" className={cn(actionBaseClass, 'text-center')}>
               <Navigation className="h-6 w-6" />
               <span>navigate</span>

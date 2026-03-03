@@ -1,12 +1,15 @@
 import { AccountsMobile } from '@/components/mobile/accounts-mobile';
 import { AccountsTable } from '@/components/crm/accounts-table';
 import { loadLiveNotionAccounts } from '@/lib/server/notion-live-crm';
+import { QueryToast } from '@/components/crm/query-toast';
 
-export default async function AccountsPage() {
+export default async function AccountsPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
   const rows = await loadLiveNotionAccounts();
+  const params = await searchParams;
 
   return (
     <>
+      {params.new === '1' && <QueryToast message="Create New Account form coming soon" type="info" />}
       <div className="md:hidden">
         <AccountsMobile />
       </div>

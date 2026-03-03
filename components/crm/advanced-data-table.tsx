@@ -16,6 +16,7 @@ import { Download, Filter, Settings2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Button, Input } from '@/components/ui';
+import { toast } from 'sonner';
 
 interface Props<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -63,6 +64,60 @@ export function AdvancedDataTable<TData, TValue>({
 
   const selectedCount = useMemo(() => Object.keys(rowSelection).length, [rowSelection]);
 
+  const handleDefaultExport = () => {
+    if (onExportCsv) {
+      onExportCsv();
+      return;
+    }
+
+    if (data.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    // Basic CSV export logic
+    const headers = columns
+      .map((col) => (typeof col.header === 'string' ? col.header : col.id))
+      .filter(Boolean)
+      .join(',');
+
+    const rows = data.map((row) => {
+      return columns
+        .map((col) => {
+          let val: unknown = '';
+          if ('accessorKey' in col && col.accessorKey) {
+            // Support simple nested access (e.g. "user.name")
+            const keys = (col.accessorKey as string).split('.');
+            let current: unknown = row;
+            for (const key of keys) {
+              if (current && typeof current === 'object') {
+                current = (current as Record<string, unknown>)[key];
+              } else {
+                current = undefined;
+                break;
+              }
+            }
+            val = current;
+          } else if ('accessorFn' in col && typeof col.accessorFn === 'function') {
+            val = col.accessorFn(row, 0);
+          }
+          return val !== undefined && val !== null ? `"${String(val).replace(/"/g, '""')}"` : '""';
+        })
+        .join(',');
+    });
+
+    const csvContent = [headers, ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${title.toLowerCase().replace(/\s+/g, '-')}-export.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Export started');
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between">
@@ -77,9 +132,9 @@ export function AdvancedDataTable<TData, TValue>({
             placeholder={searchPlaceholder}
             className="h-11 w-full sm:w-[260px]"
           />
-          <Button variant="secondary" className="h-11 min-w-[44px]"><Filter className="h-4 w-4" /> Filters</Button>
-          <Button variant="secondary" className="h-11 min-w-[44px]"><Settings2 className="h-4 w-4" /> Saved Views</Button>
-          <Button variant="outline" className="h-11 min-w-[44px]" onClick={onExportCsv}><Download className="h-4 w-4" /> Export</Button>
+          <Button variant="secondary" className="h-11 min-w-[44px]" onClick={() => toast.info('Filters coming soon')}><Filter className="h-4 w-4" /> Filters</Button>
+          <Button variant="secondary" className="h-11 min-w-[44px]" onClick={() => toast.info('Saved views coming soon')}><Settings2 className="h-4 w-4" /> Saved Views</Button>
+          <Button variant="outline" className="h-11 min-w-[44px]" onClick={handleDefaultExport}><Download className="h-4 w-4" /> Export</Button>
         </div>
       </div>
 
@@ -87,9 +142,9 @@ export function AdvancedDataTable<TData, TValue>({
         <div className="flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 sm:flex-row sm:items-center sm:justify-between">
           <span>{selectedCount} selected</span>
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" className="min-h-11">Tag</Button>
-            <Button size="sm" variant="secondary" className="min-h-11">Assign</Button>
-            <Button size="sm" variant="danger" className="min-h-11">Delete</Button>
+            <Button size="sm" variant="secondary" className="min-h-11" onClick={() => toast.info(`Tagging ${selectedCount} items`)}>Tag</Button>
+            <Button size="sm" variant="secondary" className="min-h-11" onClick={() => toast.info(`Assigning ${selectedCount} items`)}>Assign</Button>
+            <Button size="sm" variant="danger" className="min-h-11" onClick={() => toast.error(`Deleting ${selectedCount} items`)}>Delete</Button>
           </div>
         </div>
       )}

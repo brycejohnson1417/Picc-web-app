@@ -10,6 +10,7 @@ import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import type { TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
+import { toast } from 'sonner';
 
 function firstLetter(name: string) {
   const normalized = name.trim().toUpperCase();
@@ -76,7 +77,17 @@ export function AccountsMobile() {
 
   return (
     <div className="min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
-      <MobileHeader title="Accounts" right={<button className="text-[42px] leading-none"><Plus className="ml-auto h-9 w-9" /></button>}>
+      <MobileHeader
+        title="Accounts"
+        right={
+          <button
+            className="text-[42px] leading-none"
+            onClick={() => toast.info('Create new account coming soon')}
+          >
+            <Plus className="ml-auto h-9 w-9" />
+          </button>
+        }
+      >
         <SegmentedControl
           value={scope}
           onChange={(value) => setScope(value as 'all' | 'recent' | 'follow-ups')}

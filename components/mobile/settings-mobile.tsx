@@ -2,6 +2,8 @@
 
 import { ChevronRight } from 'lucide-react';
 import { MobileHeader } from '@/components/mobile/mobile-header';
+import { toast } from 'sonner';
+import { useClerk } from '@clerk/nextjs';
 
 const items = [
   'Profile',
@@ -15,12 +17,26 @@ const items = [
 ];
 
 export function SettingsMobile() {
+  const { signOut } = useClerk();
+
+  const handleClick = (item: string) => {
+    if (item === 'Sign Out') {
+      signOut();
+      return;
+    }
+    toast.info(`${item} settings coming soon`);
+  };
+
   return (
     <div className="min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
       <MobileHeader title="Settings" />
       <div className="border-t border-[#c7c8ce]">
         {items.map((item) => (
-          <button key={item} className="grid w-full grid-cols-[1fr_24px] items-center border-b border-[#c9cad0] px-5 py-4 text-left">
+          <button
+            key={item}
+            className="grid w-full grid-cols-[1fr_24px] items-center border-b border-[#c9cad0] px-5 py-4 text-left"
+            onClick={() => handleClick(item)}
+          >
             <span className="text-[23px] text-[#2a2c31]">{item}</span>
             <ChevronRight className="h-7 w-7 text-[#bcc0c7]" />
           </button>

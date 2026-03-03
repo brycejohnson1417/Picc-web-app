@@ -1,4 +1,8 @@
+'use client';
+
 import { Badge, Button, Card, CardContent } from '@/components/ui';
+import { toast } from 'sonner';
+import Link from 'next/link';
 
 type Props = {
   title: string;
@@ -8,6 +12,13 @@ type Props = {
 };
 
 export function AccountHero({ title, subtitle, status, onQuickLogHref = '#' }: Props) {
+  const handleQuickLog = (e: React.MouseEvent) => {
+    if (onQuickLogHref === '#') {
+      e.preventDefault();
+      toast.info('Quick Log coming soon');
+    }
+  };
+
   return (
     <Card className="mb-6">
       <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
@@ -19,12 +30,14 @@ export function AccountHero({ title, subtitle, status, onQuickLogHref = '#' }: P
           <p className="text-sm text-slate-500">{subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button asChild>
+          <Button asChild onClick={handleQuickLog}>
             <a href={onQuickLogHref}>Quick Log</a>
           </Button>
-          <Button variant="secondary">New Task</Button>
-          <Button variant="outline">Schedule Appointment</Button>
-          <Button variant="outline">More</Button>
+          <Button variant="secondary" asChild>
+            <Link href="/tasks?new=1">New Task</Link>
+          </Button>
+          <Button variant="outline" onClick={() => toast.info('Schedule Appointment coming soon')}>Schedule Appointment</Button>
+          <Button variant="outline" onClick={() => toast.info('More options coming soon')}>More</Button>
         </div>
       </CardContent>
     </Card>

@@ -1,9 +1,11 @@
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { prisma } from '@/lib/db/prisma';
+import { QueryToast } from '@/components/crm/query-toast';
 
-export default async function TasksPage() {
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
   const { orgId } = await requireWorkspaceContext();
+  const params = await searchParams;
 
   const tasks = await prisma.task.findMany({
     where: { orgId },
@@ -14,6 +16,7 @@ export default async function TasksPage() {
 
   return (
     <div className="space-y-6">
+      {params.new === '1' && <QueryToast message="Create New Task form coming soon" />}
       <header>
         <h1 className="text-3xl font-bold">Tasks</h1>
         <p className="text-sm text-slate-500">Unified list for sales, ops, finance, and ambassador workflows.</p>
