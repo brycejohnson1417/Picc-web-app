@@ -11,6 +11,7 @@ import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
 import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
 import { StoreFilterSheet } from '@/components/mobile/store-filter-sheet';
+import { MapRenderBoundary } from '@/components/mobile/map-render-boundary';
 import { pinColorForStore, repColorForLabel, type PinColorMode } from '@/lib/territory/pin-colors';
 import type { TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
@@ -255,15 +256,17 @@ export function TerritoryMobile() {
 
       {view === 'map' ? (
         <div className="relative h-[calc(100vh-260px)] min-h-[520px]">
-          <TerritoryMapMobile
-            stores={displayedStores}
-            selectedStopIds={routePlan.selectedStopIds}
-            orderedStopIds={routePlan.orderedStopIds}
-            focusedStoreId={focusedStore?.id ?? null}
-            routeCoordinates={routeCoordinates}
-            pinColorMode={pinColorMode}
-            onSelectStore={setFocusedId}
-          />
+          <MapRenderBoundary onReset={() => setRefreshNonce((value) => value + 1)}>
+            <TerritoryMapMobile
+              stores={displayedStores}
+              selectedStopIds={routePlan.selectedStopIds}
+              orderedStopIds={routePlan.orderedStopIds}
+              focusedStoreId={focusedStore?.id ?? null}
+              routeCoordinates={routeCoordinates}
+              pinColorMode={pinColorMode}
+              onSelectStore={setFocusedId}
+            />
+          </MapRenderBoundary>
 
           {routePlan.selectedStopIds.length >= 2 ? (
             <div className="absolute bottom-4 left-3 z-[1500] rounded-xl bg-black/70 px-3 py-2 text-[13px] text-white">

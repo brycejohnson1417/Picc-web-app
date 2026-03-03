@@ -142,6 +142,11 @@ function FitBounds({ stores, focusedStoreId }: { stores: TerritoryStorePin[]; fo
   const map = useMap();
 
   useEffect(() => {
+    const size = map.getSize();
+    if (!size || size.x <= 0 || size.y <= 0) {
+      return;
+    }
+
     const validStores = stores.filter((store) => isFiniteLatLng(store.lat, store.lng));
     if (validStores.length === 0) {
       map.setView(FALLBACK_CENTER, 4);
@@ -150,14 +155,27 @@ function FitBounds({ stores, focusedStoreId }: { stores: TerritoryStorePin[]; fo
 
     const focus = focusedStoreId ? validStores.find((store) => store.id === focusedStoreId) : null;
     if (focus && isFiniteLatLng(focus.lat, focus.lng)) {
-      map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 12), {
-        duration: 0.45,
-      });
+      try {
+        map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 12), {
+          duration: 0.45,
+        });
+      } catch {
+        map.setView([focus.lat, focus.lng], Math.max(map.getZoom(), 12));
+      }
       return;
     }
 
     const bounds = L.latLngBounds(validStores.map((store) => [store.lat, store.lng] as [number, number]));
-    map.flyToBounds(bounds, { padding: [32, 32], maxZoom: 11, duration: 0.45 });
+    if (!bounds.isValid()) {
+      map.setView(FALLBACK_CENTER, 4);
+      return;
+    }
+
+    try {
+      map.flyToBounds(bounds, { padding: [32, 32], maxZoom: 11, duration: 0.45 });
+    } catch {
+      map.fitBounds(bounds, { padding: [32, 32], maxZoom: 11 });
+    }
   }, [focusedStoreId, map, stores]);
 
   return null;
