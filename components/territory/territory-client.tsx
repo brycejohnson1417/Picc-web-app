@@ -157,9 +157,9 @@ export function TerritoryClient() {
     }
   }
 
-  function handleLaunchTransit() {
+  function handleLaunchDirections() {
     if (orderedStops.length < 2) {
-      toast.error('Select at least 2 stops to launch transit directions.');
+      toast.error('Select at least 2 stops to launch directions.');
       return;
     }
 
@@ -167,10 +167,11 @@ export function TerritoryClient() {
     const origin = coordinateStrings[0];
     const destination = coordinateStrings[coordinateStrings.length - 1];
     const waypoints = coordinateStrings.slice(1, -1).join('|');
+    const travelMode = routeMode === 'transit' ? 'transit' : routeMode === 'bike' ? 'bicycling' : 'driving';
 
     const params = new URLSearchParams({
       api: '1',
-      travelmode: 'transit',
+      travelmode: travelMode,
       origin,
       destination,
     });
@@ -303,7 +304,7 @@ export function TerritoryClient() {
               resetRouteOptimization();
             }}
             onOptimize={handleOptimizeRoute}
-            onLaunchTransit={handleLaunchTransit}
+            onLaunchDirections={handleLaunchDirections}
             onRemoveStop={(storeId) => {
               setRouteState((current) => removeRouteStop(current, storeId));
               resetRouteOptimization();

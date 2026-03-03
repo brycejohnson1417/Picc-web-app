@@ -14,7 +14,7 @@ interface MapCanvasProps {
   orderedStopIds: string[];
   routeCoordinates: [number, number][];
   focusedStoreId: string | null;
-  onSelectStore: (storeId: string) => void;
+  onSelectStore: (storeId: string | null) => void;
 }
 
 export function MapCanvas(props: MapCanvasProps) {

@@ -1,466 +1,310 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import { Loader2, MapPinned, Navigation, PencilLine, RotateCw, Users, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { type ReactNode, useEffect, useState } from 'react';
+import { MapPinned, Navigation, PencilLine, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { TerritoryStorePin } from '@/lib/territory/types';
+import type { TerritoryStoreDetailResponse, TerritoryStorePin } from '@/lib/territory/types';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
+import { Button, Textarea } from '@/components/ui';
 import { cn } from '@/lib/utils';
+
+type DetailTab = 'detail' | 'location' | 'notes' | 'history';
+
+function formatCheckInLabel(value: string | null | undefined) {
+  if (!value) return 'No check-ins';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'No check-ins';
+  return date.toLocaleString();
+}
+
+function formatDateLabel(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return date.toLocaleDateString();
+}
 
 interface AccountDetailSheetProps {
   store: TerritoryStorePin | null;
   onClose: () => void;
   onAddToRoute: (storeId: string) => void;
   routeSelected: boolean;
-  onCenterOnMap?: (storeId: string) => void;
+  onCenterStore?: (store: TerritoryStorePin) => void;
 }
 
-type DetailTab = 'detail' | 'contacts' | 'history' | 'location';
-type CheckInMode = 'written' | 'voice';
-
-interface AssociatedContact {
-  id: string;
-  name: string;
-  roleTitle: string;
-  email: string;
-  phone: string;
-  status: string;
-  linkedWork: string;
-}
-
-interface CheckInHistoryRow {
-  id: string;
-  url: string | null;
-  title: string;
-  createdTime: string;
-  mode: CheckInMode | 'unknown';
-  notePreview: string | null;
-}
-
-export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterOnMap }: AccountDetailSheetProps) {
-  const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<DetailTab>('detail');
-  const [checkInModalOpen, setCheckInModalOpen] = useState(false);
-  const [draftMode, setDraftMode] = useState<CheckInMode>('written');
-  const [writtenDraft, setWrittenDraft] = useState('');
-  const [savingMode, setSavingMode] = useState<CheckInMode | null>(null);
-  const [refreshingAccount, setRefreshingAccount] = useState(false);
+export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterStore }: AccountDetailSheetProps) {
+  const [tab, setTab] = useState<DetailTab>('detail');
+  const [detail, setDetail] = useState<TerritoryStoreDetailResponse | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
 
   useEffect(() => {
-    setActiveTab('detail');
-    setCheckInModalOpen(false);
-    setDraftMode('written');
-    setWrittenDraft('');
-    setSavingMode(null);
-  }, [store?.id]);
+    if (!store) {
+      setDetail(null);
+      setNotesDraft('');
+      return;
+    }
 
-  const contactsQuery = useQuery({
-    queryKey: ['account-associated-contacts', store?.notionPageId],
-    enabled: Boolean(store?.notionPageId),
-    queryFn: async () => {
-      if (!store) return [] as AssociatedContact[];
-      const response = await fetch(`/api/territory/account-contacts?storePageId=${encodeURIComponent(store.notionPageId)}`);
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'Failed to load associated contacts');
+    setTab('detail');
+
+    const controller = new AbortController();
+
+    const loadDetail = async () => {
+      setLoadingDetail(true);
+      try {
+        const response = await fetch(`/api/territory/stores/${store.id}`, {
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload?.error ?? 'Failed to load account detail');
+        }
+
+        const payload = (await response.json()) as TerritoryStoreDetailResponse;
+        setDetail(payload);
+        setNotesDraft(payload.store.notes ?? '');
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setDetail(null);
+        setNotesDraft(store.notes ?? '');
+        toast.error(error instanceof Error ? error.message : 'Failed to load account detail');
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingDetail(false);
+        }
       }
-      return (payload.contacts ?? []) as AssociatedContact[];
-    },
-    staleTime: 30_000,
-    placeholderData: (previousData) => previousData,
-  });
+    };
 
-  const historyQuery = useQuery({
-    queryKey: ['account-check-in-history', store?.notionPageId],
-    enabled: Boolean(store?.notionPageId),
-    queryFn: async () => {
-      if (!store) return [] as CheckInHistoryRow[];
-      const params = new URLSearchParams({
-        storePageId: store.notionPageId,
-        storeName: store.name,
-        limit: '20',
-      });
-      const response = await fetch(`/api/territory/check-in?${params.toString()}`);
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'Failed to load check-in history');
-      }
-      return (payload.history ?? []) as CheckInHistoryRow[];
-    },
-    staleTime: 15_000,
-    placeholderData: (previousData) => previousData,
-  });
+    void loadDetail();
 
-  const lastCheckInText = useMemo(() => {
-    const latest = historyQuery.data?.[0];
-    if (!latest) return 'Not yet recorded';
-    return new Date(latest.createdTime).toLocaleString([], {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  }, [historyQuery.data]);
+    return () => controller.abort();
+  }, [store]);
 
   if (!store) {
     return null;
   }
 
-  const currentStore = store;
-  const navigateUrl = `https://www.google.com/maps/dir/?api=1&destination=${currentStore.lat},${currentStore.lng}`;
-  const notionStoreUrl = `https://www.notion.so/${currentStore.notionPageId.replace(/-/g, '')}`;
+  const activeStore = detail?.store ?? store;
+  const contacts = detail?.contacts ?? [];
+  const navigateUrl = `https://www.google.com/maps/dir/?api=1&destination=${activeStore.lat},${activeStore.lng}`;
+  const notionUrl = `https://www.notion.so/${activeStore.notionPageId.replace(/-/g, '')}`;
+  const persistedNotes = (detail?.store.notes ?? store.notes ?? '').trim();
+  const canSaveNotes = notesDraft.trim() !== persistedNotes;
 
-  const fieldMap = new Map<string, { label: string; value: string }>();
-  for (const field of currentStore.detailFields ?? []) {
-    const key = field.label.trim().toLowerCase();
-    if (!fieldMap.has(key) && field.value.trim()) {
-      fieldMap.set(key, {
-        label: field.label.trim(),
-        value: field.value.trim(),
-      });
-    }
-  }
-  if (!fieldMap.has('account status')) {
-    fieldMap.set('account status', {
-      label: 'Account Status',
-      value: currentStore.status,
-    });
-  }
-  if (!fieldMap.has('picc rep') && !fieldMap.has('rep')) {
-    fieldMap.set('picc rep', {
-      label: 'PICC Rep',
-      value: currentStore.repNames.join(', ') || 'Unassigned',
-    });
-  }
-
-  const fields = [...fieldMap.values()];
-
-  async function submitCheckIn(mode: CheckInMode) {
-    if (mode === 'written' && !writtenDraft.trim()) {
-      toast.error('Add a written note before saving');
-      return;
-    }
-
-    setSavingMode(mode);
+  async function handleCheckIn() {
+    setCheckingIn(true);
     try {
       const response = await fetch('/api/territory/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode,
-          noteText: mode === 'written' ? writtenDraft.trim() : undefined,
-          store: {
-            id: currentStore.id,
-            name: currentStore.name,
-            notionPageId: currentStore.notionPageId,
-            lat: currentStore.lat,
-            lng: currentStore.lng,
-            address: currentStore.locationAddress ?? currentStore.locationLabel ?? '',
-            repName: currentStore.repNames[0] ?? null,
-          },
-        }),
+        body: JSON.stringify({ storeId: activeStore.id }),
       });
 
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload?.url) {
-        throw new Error(payload?.error ?? 'Failed to create meeting note check-in');
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'Failed to record check-in');
       }
 
-      if (mode === 'voice') {
-        window.open(payload.url as string, '_blank', 'noopener,noreferrer');
-        toast.success('Voice check-in opened in Notion');
-      } else {
-        toast.success('Written check-in saved');
-      }
+      const checkedInAt = typeof payload?.checkedInAt === 'string' ? payload.checkedInAt : new Date().toISOString();
 
-      setCheckInModalOpen(false);
-      setWrittenDraft('');
-      setActiveTab('history');
-      await historyQuery.refetch();
+      setDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          store: {
+            ...prev.store,
+            lastCheckIn: checkedInAt,
+            lastEditedTime: checkedInAt,
+          },
+        };
+      });
+
+      toast.success(`Check-in recorded for ${activeStore.name}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Check-in failed');
+      toast.error(error instanceof Error ? error.message : 'Failed to record check-in');
     } finally {
-      setSavingMode(null);
+      setCheckingIn(false);
     }
   }
 
-  async function refreshAccountFromNotion() {
-    setRefreshingAccount(true);
+  async function handleSaveNotes() {
+    if (!canSaveNotes) return;
+
+    setSavingNotes(true);
     try {
-      const response = await fetch('/api/territory/account-refresh', {
-        method: 'POST',
+      const response = await fetch(`/api/territory/stores/${activeStore.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storePageId: currentStore.notionPageId,
-        }),
+        body: JSON.stringify({ notes: notesDraft }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload?.error ?? 'Failed to refresh account');
+        throw new Error(payload?.error ?? 'Failed to save notes');
       }
 
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['territory-mobile'] }),
-        queryClient.invalidateQueries({ queryKey: ['accounts-mobile'] }),
-        queryClient.invalidateQueries({ queryKey: ['territory-stores'] }),
-        queryClient.invalidateQueries({ queryKey: ['route-mobile-stores'] }),
-      ]);
-      toast.success('Account refreshed from Notion');
+      const updatedAt = typeof payload?.updatedAt === 'string' ? payload.updatedAt : new Date().toISOString();
+      const nextNotes = typeof payload?.notes === 'string' ? payload.notes : notesDraft.trim();
+
+      setDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          store: {
+            ...prev.store,
+            notes: nextNotes,
+            lastEditedTime: updatedAt,
+          },
+        };
+      });
+
+      setNotesDraft(nextNotes);
+      toast.success('Notes synced to Notion');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Refresh failed');
+      toast.error(error instanceof Error ? error.message : 'Failed to save notes');
     } finally {
-      setRefreshingAccount(false);
+      setSavingNotes(false);
     }
+  }
+
+  function handleCenter() {
+    if (onCenterStore) {
+      onCenterStore(activeStore);
+      onClose();
+      return;
+    }
+    window.open(`https://www.google.com/maps/search/?api=1&query=${activeStore.lat},${activeStore.lng}`, '_blank', 'noopener,noreferrer');
   }
 
   return (
     <div className="fixed inset-0 z-[5000] bg-black/35">
-      <div className="mx-auto flex h-full max-w-[480px] flex-col bg-[#e6e6e9]">
-        <div className="bg-[#c93412] px-4 pb-2 pt-[max(10px,env(safe-area-inset-top))] text-white">
-          <div className="relative flex items-center justify-between py-1.5">
-            <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-lg" aria-label="Close">
-              <X className="h-6 w-6" />
+      <div className="mx-auto h-full max-w-[480px] bg-[#e6e6e9]">
+        <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
+          <div className="mb-2 flex items-center justify-between text-sm opacity-90">
+            <span className="font-semibold">12:20</span>
+            <span className="font-semibold">100%</span>
+          </div>
+          <div className="relative flex items-center justify-between py-2">
+            <button onClick={onClose} className="min-w-14 text-left" aria-label="Close">
+              <X className="h-8 w-8" />
             </button>
-            <h1 className="absolute left-1/2 -translate-x-1/2 text-[18px] font-semibold">Account Details</h1>
-            <a href={notionStoreUrl} target="_blank" rel="noreferrer" className="min-w-14 text-right text-[14px] font-medium">
-              Open
-            </a>
+            <h1 className="absolute left-1/2 -translate-x-1/2 text-[28px] font-semibold">Account Details</h1>
+            <button type="button" onClick={() => window.open(notionUrl, '_blank', 'noopener,noreferrer')} className="min-w-14 text-right text-[24px]" aria-label="Open account in Notion">
+              Edit
+            </button>
           </div>
           <SegmentedControl
-            value={activeTab}
-            onChange={(value) => setActiveTab(value as DetailTab)}
+            value={tab}
+            onChange={(value) => setTab(value as DetailTab)}
             options={[
               { value: 'detail', label: 'Detail' },
-              { value: 'contacts', label: 'Contacts' },
-              { value: 'history', label: 'Check-ins' },
               { value: 'location', label: 'Location' },
+              { value: 'notes', label: 'Notes' },
+              { value: 'history', label: 'History' },
             ]}
             className="bg-[#d4d4d8]"
           />
         </div>
 
-        <div className="border-y border-[#c6c7cb] bg-[#e6e6e9] px-4 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="truncate text-[24px] font-semibold text-[#111217]">{currentStore.name}</h2>
-              <p className="mt-1 truncate text-[14px] text-[#8e9096]">{currentStore.locationAddress ?? currentStore.locationLabel ?? 'No address'}</p>
-            </div>
-            <button
-              type="button"
-              onClick={refreshAccountFromNotion}
-              disabled={refreshingAccount}
-              className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-[#c6c7cc] bg-white px-2.5 text-[12px] font-semibold text-[#33363d] disabled:opacity-60"
-            >
-              {refreshingAccount ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}
-              Refresh
-            </button>
+        <div className="pb-[170px]">
+          <div className="border-y border-[#c6c7cb] bg-[#e6e6e9] px-5 py-6">
+            <h2 className="text-[50px] font-medium text-[#111217]">{activeStore.name}</h2>
+            <p className="text-[34px] text-[#8e9096]">{activeStore.locationAddress ?? activeStore.locationLabel ?? 'No address'}</p>
+            {loadingDetail ? <p className="mt-2 text-[15px] text-[#6e7078]">Syncing account details...</p> : null}
           </div>
-        </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto pb-8">
-          {activeTab === 'detail' ? (
+          {tab === 'detail' ? (
             <>
-              <DetailRow label="Last check-in" value={lastCheckInText} strong />
-              {fields.map((field) => (
-                <DetailRow key={`${field.label}-${field.value}`} label={field.label} value={field.value} strong={field.label === 'Account Status' || field.label === 'Account Owner'} />
-              ))}
+              <DetailRow label="Phone" value={activeStore.phoneNumber || 'No phone on file'} />
+              <DetailRow label="Email" value={activeStore.email || activeStore.repEmails[0] || 'No email on file'} />
+              <DetailRow label="Last check-in" value={formatCheckInLabel(activeStore.lastCheckIn)} strong />
+              <DetailRow label="Follow-up Date" value={formatDateLabel(activeStore.followUpDate, 'No follow-up set')} />
+              <DetailRow label="Account Owner" value={activeStore.repNames[0] ?? 'Unassigned'} strong />
+              <DetailRow label="Account Status" value={activeStore.status} strong />
+              <DetailRow label="PICC Rep" value={activeStore.repNames.join(', ') || '—'} />
+              <DetailRow label="License" value={activeStore.licenseNumber ?? '—'} />
+
+              <div className="border-b border-[#c6c7cb] px-5 py-4">
+                <p className="text-[20px] text-[#a2a3a8]">Associated Contacts</p>
+                {contacts.length === 0 ? <p className="mt-1 text-[21px] text-[#1d1f23]">No contacts linked.</p> : null}
+                {contacts.map((contact) => (
+                  <div key={contact.id} className="mt-2 rounded-lg border border-[#c7c8cd] bg-[#f3f3f6] px-3 py-2">
+                    <p className="text-[19px] font-medium text-[#202229]">{contact.name}</p>
+                    <p className="text-[16px] text-[#5e6169]">{contact.roleTitle || '—'}</p>
+                    <p className="text-[16px] text-[#5e6169]">{contact.email || '—'} · {contact.phone || '—'}</p>
+                  </div>
+                ))}
+              </div>
             </>
           ) : null}
 
-          {activeTab === 'contacts' ? (
-            <div className="p-4">
-              <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Associated Contacts</p>
-              {contactsQuery.isLoading ? <p className="text-[14px] text-[#686c74]">Loading contacts...</p> : null}
-              {!contactsQuery.isLoading && (contactsQuery.data?.length ?? 0) === 0 ? (
-                <p className="text-[14px] text-[#686c74]">No linked contacts found for this account.</p>
-              ) : null}
-              <div className="space-y-2 pb-20">
-                {(contactsQuery.data ?? []).map((contact) => (
-                  <div key={contact.id} className="rounded-lg border border-[#c9cbd1] bg-white px-3 py-2">
-                    <p className="text-[15px] font-semibold text-[#1d1f23]">{contact.name}</p>
-                    <p className="text-[12px] text-[#6c7077]">{contact.roleTitle || '—'} · {contact.status}</p>
-                    <p className="mt-1 text-[12px] text-[#6c7077]">{contact.email !== '—' ? contact.email : contact.phone}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {tab === 'location' ? (
+            <>
+              <DetailRow label="Address" value={activeStore.locationAddress ?? activeStore.locationLabel ?? 'No address'} strong />
+              <DetailRow label="Coordinates" value={`${activeStore.lat.toFixed(5)}, ${activeStore.lng.toFixed(5)}`} />
+              <DetailRow label="City / State" value={activeStore.city && activeStore.state ? `${activeStore.city}, ${activeStore.state}` : 'Not available'} />
+              <DetailRow label="Location Source" value={activeStore.locationSource} />
+            </>
           ) : null}
 
-          {activeTab === 'history' ? (
-            <div className="p-4">
-              <div className="mb-3 rounded-xl border border-[#c9cbd1] bg-white p-3">
-                <p className="text-[13px] font-semibold text-[#33363d]">New Check-in</p>
-                <p className="mt-1 text-[12px] text-[#6f727a]">Choose written note or voice note. Both create a live Meeting Note in Notion.</p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button type="button" className="rounded-lg border border-[#c6c7cc] bg-white px-3 py-2 text-[13px] font-semibold text-[#2f3238]" onClick={() => { setDraftMode('written'); setCheckInModalOpen(true); }}>
-                    Written note
-                  </button>
-                  <button type="button" className="rounded-lg bg-[#cd3814] px-3 py-2 text-[13px] font-semibold text-white" onClick={() => { setDraftMode('voice'); setCheckInModalOpen(true); }}>
-                    Voice note
-                  </button>
-                </div>
-              </div>
-
-              {historyQuery.isLoading ? <p className="text-[14px] text-[#686c74]">Loading check-in history...</p> : null}
-              {!historyQuery.isLoading && (historyQuery.data?.length ?? 0) === 0 ? <p className="text-[14px] text-[#686c74]">No check-ins recorded yet.</p> : null}
-
-              <div className="space-y-2 pb-20">
-                {(historyQuery.data ?? []).map((entry) => (
-                  <div key={entry.id} className="rounded-lg border border-[#c9cbd1] bg-white px-3 py-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-[14px] font-semibold text-[#1d1f23]">{entry.title}</p>
-                      <span className="rounded-full bg-[#edf0f6] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#4e5562]">{entry.mode}</span>
-                    </div>
-                    <p className="mt-1 text-[12px] text-[#6c7077]">{new Date(entry.createdTime).toLocaleString()}</p>
-                    {entry.notePreview ? <p className="mt-1 line-clamp-3 text-[13px] text-[#32353c]">{entry.notePreview}</p> : null}
-                    {entry.url ? (
-                      <a href={entry.url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[12px] font-semibold text-[#3a7dd5]">
-                        Open in Notion
-                      </a>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {activeTab === 'location' ? (
-            <div className="p-4 pb-24">
-              <DetailCard label="Address" value={currentStore.locationAddress ?? currentStore.locationLabel ?? 'No address available'} />
-              <DetailCard label="Coordinates" value={`${currentStore.lat.toFixed(6)}, ${currentStore.lng.toFixed(6)}`} />
-              <DetailCard label="Location Source" value={currentStore.locationSource} />
-              <a href={navigateUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-10 items-center justify-center rounded-lg bg-[#cd3814] px-4 text-[14px] font-semibold text-white">
-                Navigate in Google Maps
-              </a>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="grid grid-cols-4 border-t border-[#c6c7cb] bg-[#f2f2f5] py-2 text-[#5a96e8]">
-          <ActionButton
-            label={routeSelected ? 'remove' : 'add to...'}
-            onClick={() => onAddToRoute(currentStore.id)}
-            icon={<MapPinned className="h-5 w-5" />}
-          />
-          <ActionButton
-            label="check-in"
-            onClick={() => {
-              setDraftMode('written');
-              setCheckInModalOpen(true);
-            }}
-            icon={<PencilLine className="h-5 w-5" />}
-          />
-          <ActionButton
-            label="center"
-            onClick={() => {
-              if (onCenterOnMap) onCenterOnMap(currentStore.id);
-            }}
-            icon={<MapPinned className="h-5 w-5" />}
-            disabled={!onCenterOnMap}
-          />
-          <a href={navigateUrl} target="_blank" rel="noreferrer" className={cn(actionBaseClass, 'text-center')}>
-            <Navigation className="h-5 w-5" />
-            <span>navigate</span>
-          </a>
-        </div>
-      </div>
-
-      {checkInModalOpen ? (
-        <div className="absolute inset-0 grid place-items-end bg-black/35 p-4">
-          <div className="w-full max-w-[440px] rounded-2xl border border-[#d0d1d6] bg-white p-4 shadow-2xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-[16px] font-semibold text-[#1d1f23]">Create Check-in</h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setCheckInModalOpen(false);
-                  setWrittenDraft('');
-                }}
-                className="grid h-8 w-8 place-items-center rounded-full bg-[#f1f2f5] text-[#4f5562]"
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mb-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className={cn(
-                  'rounded-lg border px-3 py-2 text-[13px] font-semibold',
-                  draftMode === 'written' ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#d0d2d8] bg-white text-[#2f3238]',
-                )}
-                onClick={() => setDraftMode('written')}
-              >
-                Written note
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'rounded-lg border px-3 py-2 text-[13px] font-semibold',
-                  draftMode === 'voice' ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#d0d2d8] bg-white text-[#2f3238]',
-                )}
-                onClick={() => setDraftMode('voice')}
-              >
-                Voice note
-              </button>
-            </div>
-
-            {draftMode === 'written' ? (
-              <textarea
-                value={writtenDraft}
-                onChange={(event) => setWrittenDraft(event.target.value)}
-                placeholder="Type check-in notes..."
-                className="h-36 w-full resize-none rounded-lg border border-[#d0d2d8] px-3 py-2 text-[13px] text-[#1f2229] outline-none focus:border-[#cd3814]"
+          {tab === 'notes' ? (
+            <div className="border-b border-[#c6c7cb] px-5 py-5 text-[#5f6269]">
+              <p className="text-[22px] font-medium text-[#1d1f23]">Account Notes</p>
+              <p className="mt-1 text-[17px]">Notes save directly to Notion.</p>
+              <Textarea
+                value={notesDraft}
+                onChange={(event) => setNotesDraft(event.target.value)}
+                className="mt-3 min-h-[160px] bg-white text-[18px]"
+                placeholder="Add visit notes, next steps, or key blockers..."
               />
-            ) : (
-              <div className="rounded-lg border border-[#d0d2d8] bg-[#f8f8fb] p-3 text-[13px] text-[#50545d]">
-                This creates a meeting note and opens it in Notion so you can start instant voice transcription.
-              </div>
-            )}
+              <Button type="button" className="mt-3 h-11 px-5" onClick={handleSaveNotes} disabled={!canSaveNotes || savingNotes}>
+                {savingNotes ? 'Saving...' : 'Save Notes'}
+              </Button>
+            </div>
+          ) : null}
 
-            <button
-              type="button"
-              onClick={() => submitCheckIn(draftMode)}
-              disabled={savingMode !== null}
-              className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#cd3814] text-[14px] font-semibold text-white disabled:opacity-60"
-            >
-              {savingMode ? <Loader2 className="h-4 w-4 animate-spin" /> : draftMode === 'voice' ? <Users className="h-4 w-4" /> : null}
-              {savingMode ? 'Creating...' : draftMode === 'voice' ? 'Create + Open Voice Note' : 'Save Written Check-in'}
-            </button>
+          {tab === 'history' ? (
+            <>
+              <DetailRow label="Last edited" value={new Date(activeStore.lastEditedTime).toLocaleString()} />
+              <DetailRow label="Last check-in" value={formatCheckInLabel(activeStore.lastCheckIn)} strong />
+              <DetailRow label="Route status" value={routeSelected ? 'In current route' : 'Not in current route'} />
+              <DetailRow label="Sync source" value="Notion live cache" />
+            </>
+          ) : null}
+        </div>
+
+        <div className="fixed bottom-[92px] left-0 right-0 z-[5100]">
+          <div className="mx-auto grid max-w-[480px] grid-cols-4 border-t border-[#c6c7cb] bg-[#f2f2f5] py-3 text-[#5a96e8]">
+            <ActionButton label={routeSelected ? 'remove' : 'add to...'} onClick={() => onAddToRoute(activeStore.id)} icon={<MapPinned className="h-6 w-6" />} />
+            <ActionButton label={checkingIn ? 'saving...' : 'check-in'} onClick={handleCheckIn} icon={<PencilLine className="h-6 w-6" />} disabled={checkingIn} />
+            <ActionButton label="center" onClick={handleCenter} icon={<MapPinned className="h-6 w-6" />} />
+            <a href={navigateUrl} target="_blank" rel="noreferrer" className={cn(actionBaseClass, 'text-center')}>
+              <Navigation className="h-6 w-6" />
+              <span>navigate</span>
+            </a>
           </div>
         </div>
-      ) : null}
-    </div>
-  );
-}
-
-function DetailCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="mb-3 rounded-lg border border-[#c9cbd1] bg-white px-3 py-2">
-      <p className="text-[12px] text-[#8c9098]">{label}</p>
-      <p className="mt-1 text-[14px] text-[#1d1f23]">{value}</p>
+      </div>
     </div>
   );
 }
 
 function DetailRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className="border-b border-[#c6c7cb] px-4 py-3">
-      <p className="text-[12px] text-[#a2a3a8]">{label}</p>
-      <p className={cn('mt-1 text-[15px] text-[#1d1f23]', strong ? 'font-medium' : '')}>{value || '—'}</p>
+    <div className="border-b border-[#c6c7cb] px-5 py-4">
+      <p className="text-[20px] text-[#a2a3a8]">{label}</p>
+      <p className={cn('mt-1 text-[21px] text-[#1d1f23]', strong ? 'font-medium' : '')}>{value || ' '}</p>
     </div>
   );
 }
 
-const actionBaseClass = 'flex min-h-[52px] flex-col items-center justify-center gap-1 text-[12px] font-medium';
+const actionBaseClass = 'flex flex-col items-center justify-center gap-1 text-[14px] font-medium';
 
 function ActionButton({ label, icon, onClick, disabled = false }: { label: string; icon: ReactNode; onClick: () => void; disabled?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className={cn(actionBaseClass, disabled && 'opacity-50')} disabled={disabled}>
+    <button type="button" onClick={onClick} className={cn(actionBaseClass, disabled ? 'opacity-60' : '')} disabled={disabled}>
       {icon}
       <span>{label}</span>
     </button>

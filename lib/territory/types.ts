@@ -1,4 +1,4 @@
-export type RouteMode = 'car' | 'bike';
+export type RouteMode = 'car' | 'bike' | 'transit';
 
 export interface TerritoryStorePin {
   id: string;
@@ -20,10 +20,26 @@ export interface TerritoryStorePin {
   city?: string | null;
   state?: string | null;
   daysOverdue?: number | null;
-  detailFields?: Array<{
-    label: string;
-    value: string;
-  }>;
+  phoneNumber?: string | null;
+  email?: string | null;
+  followUpDate?: string | null;
+  notes?: string | null;
+  lastCheckIn?: string | null;
+}
+
+export interface TerritoryStoreContact {
+  id: string;
+  name: string;
+  roleTitle: string;
+  email: string;
+  phone: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  linkedWork: string;
+}
+
+export interface TerritoryStoreDetailResponse {
+  store: TerritoryStorePin;
+  contacts: TerritoryStoreContact[];
 }
 
 export interface TerritoryFilterCount {
@@ -57,13 +73,6 @@ export interface TerritoryRouteStop {
   lng: number;
 }
 
-export interface TerritoryRouteAnchor {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-}
-
 export interface TerritoryOptimizedLeg {
   fromStopId: string;
   toStopId: string;
@@ -77,8 +86,8 @@ export interface TerritoryOptimizedRouteResponse {
   totalDistanceMeters: number;
   totalDurationSeconds: number;
   legs: TerritoryOptimizedLeg[];
-  start?: TerritoryRouteAnchor | null;
-  end?: TerritoryRouteAnchor | null;
+  estimationModel?: 'osrm' | 'transit-heuristic';
+  modeLabel?: string;
   geometry: {
     type: 'LineString';
     coordinates: [number, number][];

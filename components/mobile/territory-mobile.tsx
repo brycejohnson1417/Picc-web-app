@@ -1,16 +1,15 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useSearchParams } from 'next/navigation';
-import { ChevronRight, Filter, LocateFixed, Navigation, Plus, Search } from 'lucide-react';
+import { ListFilter, MapPinned, MessageCircleMore, Navigation, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
 import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
-import { StoreFilterSheet } from '@/components/mobile/store-filter-sheet';
 import type { TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import { cn } from '@/lib/utils';
@@ -31,24 +30,14 @@ function firstLetter(name: string) {
 
 export function TerritoryMobile() {
   const routePlan = useRoutePlan();
-  const searchParams = useSearchParams();
   const [view, setView] = useState<'map' | 'list'>('map');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedReps, setSelectedReps] = useState<string[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [showRouteOnly, setShowRouteOnly] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-  const focusParam = searchParams.get('focus');
-
-  useEffect(() => {
-    if (!focusParam) return;
-    setFocusedId(focusParam);
-    setView('map');
-  }, [focusParam]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -59,12 +48,10 @@ export function TerritoryMobile() {
   }, [search]);
 
   const storesQuery = useQuery({
-    queryKey: ['territory-mobile', debouncedSearch, selectedStatuses.join('|'), selectedReps.join('|'), refreshNonce],
+    queryKey: ['territory-mobile', debouncedSearch, refreshNonce],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set('q', debouncedSearch);
-      for (const status of selectedStatuses) params.append('status', status);
-      for (const rep of selectedReps) params.append('rep', rep);
       if (refreshNonce > 0) params.set('refresh', '1');
       const response = await fetch(`/api/territory/stores?${params.toString()}`);
       if (!response.ok) {
@@ -79,35 +66,81 @@ export function TerritoryMobile() {
 
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
+  const displayedStores = useMemo(() => {
+    if (!showRouteOnly) return stores;
+    return stores.filter((store) => routePlan.selectedStopIds.includes(store.id));
+  }, [showRouteOnly, stores, routePlan.selectedStopIds]);
+
+  useEffect(() => {
+    if (showRouteOnly && routePlan.selectedStopIds.length === 0) {
+      setShowRouteOnly(false);
+    }
+  }, [showRouteOnly, routePlan.selectedStopIds.length]);
+
+  useEffect(() => {
+    if (!focusedId) return;
+    if (displayedStores.some((store) => store.id === focusedId)) return;
+    setFocusedId(null);
+  }, [focusedId, displayedStores]);
 
   const focusedStore = useMemo(() => {
     if (!focusedId) return null;
-    return storeById.get(focusedId) ?? null;
-  }, [focusedId, storeById]);
+    const focused = storeById.get(focusedId);
+    if (!focused) return null;
+    if (showRouteOnly && !routePlan.selectedStopIds.includes(focused.id)) return null;
+    return focused;
+  }, [focusedId, routePlan.selectedStopIds, showRouteOnly, storeById]);
 
   const orderedStops = useMemo(() => {
     const ids = routePlan.orderedStopIds.length > 0 ? routePlan.orderedStopIds : routePlan.selectedStopIds;
     return ids.map((id) => storeById.get(id)).filter((store): store is TerritoryStorePin => Boolean(store));
   }, [routePlan.orderedStopIds, routePlan.selectedStopIds, storeById]);
 
-  const routeCoordinates = orderedStops.map((stop) => [stop.lng, stop.lat] as [number, number]);
+  const routeCoordinates = routePlan.optimizedRoute?.geometry?.coordinates ?? orderedStops.map((stop) => [stop.lng, stop.lat] as [number, number]);
+  const hasRoadRouteGeometry = Boolean(routePlan.optimizedRoute?.geometry?.coordinates?.length);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, TerritoryStorePin[]>();
-    for (const store of stores) {
+    for (const store of displayedStores) {
       const letter = firstLetter(store.name);
       const list = groups.get(letter) ?? [];
       list.push(store);
       groups.set(letter, list);
     }
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [stores]);
+  }, [displayedStores]);
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
 
+  function toggleRouteOnly() {
+    if (!showRouteOnly && routePlan.selectedStopIds.length === 0) {
+      toast.message('Add locations to your route first.');
+      return;
+    }
+    setShowRouteOnly((value) => !value);
+  }
+
+  function messageRep(store: TerritoryStorePin | null) {
+    if (!store) {
+      toast.error('Select a location first.');
+      return;
+    }
+    const email = store.repEmails[0];
+    if (!email) {
+      toast.message('No rep email is available for this account.');
+      return;
+    }
+    const subject = encodeURIComponent(`PICC follow-up: ${store.name}`);
+    window.open(`mailto:${email}?subject=${subject}`, '_blank', 'noopener,noreferrer');
+  }
+
   return (
-    <div className="relative min-h-[calc(100dvh-84px)] bg-[#e6e6e9]">
-      <MobileHeader className="z-[2600]" left={<span className="text-[16px]">Visualize</span>} right={<span className="text-[16px]">Places</span>}>
+    <div className="relative min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
+      <MobileHeader
+        className="z-[2600]"
+        left={<span className="text-[20px]">Visualize</span>}
+        right={<span className="text-[20px]">Places</span>}
+      >
         <SegmentedControl
           value={view}
           onChange={(value) => setView(value as 'map' | 'list')}
@@ -115,14 +148,14 @@ export function TerritoryMobile() {
             { value: 'map', label: 'Map' },
             { value: 'list', label: 'List' },
           ]}
-          className="mx-auto max-w-[280px]"
+          className="mx-auto max-w-[360px]"
         />
       </MobileHeader>
 
       {view === 'map' ? (
-        <div className={cn('relative min-h-[460px]', focusedStore ? 'h-[calc(100dvh-146px)]' : 'h-[calc(100dvh-98px)]')}>
+        <div className="relative h-[calc(100vh-260px)] min-h-[520px]">
           <TerritoryMapMobile
-            stores={stores}
+            stores={displayedStores}
             selectedStopIds={routePlan.selectedStopIds}
             orderedStopIds={routePlan.orderedStopIds}
             focusedStoreId={focusedStore?.id ?? null}
@@ -130,43 +163,50 @@ export function TerritoryMobile() {
             onSelectStore={setFocusedId}
           />
 
-          <div className="absolute left-3 top-4 z-[1500] flex flex-col gap-2">
+          {routePlan.selectedStopIds.length >= 2 ? (
+            <div className="absolute bottom-4 left-3 z-[1500] rounded-xl bg-black/70 px-3 py-2 text-[13px] text-white">
+              {hasRoadRouteGeometry
+                ? `${routePlan.optimizedRoute?.mode === 'transit' ? 'Transit' : routePlan.optimizedRoute?.mode === 'bike' ? 'Bike' : 'Driving'} route on roads`
+                : 'Add 2+ stops and tap Optimize in Route view'}
+            </div>
+          ) : null}
+
+          <div className="absolute left-3 top-6 z-[1500] flex flex-col gap-3">
             <button
               type="button"
-              className="grid h-10 w-10 place-items-center rounded-xl bg-white/95 shadow"
-              onClick={() => setFocusedId(null)}
-              title="Recenter"
+              aria-label="Open focused account details"
+              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              onClick={() => {
+                if (!focusedStore) {
+                  toast.message('Select a location first.');
+                  return;
+                }
+                setDetailStoreId(focusedStore.id);
+              }}
             >
-              <LocateFixed className="h-5 w-5 text-[#7f828a]" />
+              <MapPinned className="h-6 w-6 text-[#7f828a]" />
             </button>
-            <button
-              type="button"
-              className="grid h-10 w-10 place-items-center rounded-xl bg-white/95 shadow"
-              onClick={() => setRefreshNonce((v) => v + 1)}
-              title="Refresh"
-            >
-              <Navigation className="h-5 w-5 text-[#7f828a]" />
+            <button type="button" aria-label="Refresh territory data" className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setRefreshNonce((v) => v + 1)}>
+              <SlidersHorizontal className="h-6 w-6 text-[#7f828a]" />
             </button>
           </div>
 
-          <div className="absolute right-3 top-4 z-[1500] flex flex-col gap-2">
-            <button type="button" className="grid h-10 w-10 place-items-center rounded-xl bg-white/95 shadow" onClick={() => setView('list')} title="List">
-              <Search className="h-5 w-5 text-[#7f828a]" />
+          <div className="absolute right-3 top-6 z-[1500] flex flex-col gap-3">
+            <button type="button" aria-label="Switch to list view" className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setView('list')}>
+              <Search className="h-6 w-6 text-[#7f828a]" />
             </button>
-            <button type="button" className="grid h-10 w-10 place-items-center rounded-xl bg-white/95 shadow" onClick={() => setShowFilters(true)} title="Filters">
-              <Filter className="h-5 w-5 text-[#7f828a]" />
+            <button type="button" aria-label="Toggle route filter" className={cn('grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow', showRouteOnly ? 'ring-2 ring-[#4f8edf]' : '')} onClick={toggleRouteOnly}>
+              <ListFilter className={cn('h-6 w-6', showRouteOnly ? 'text-[#4f8edf]' : 'text-[#7f828a]')} />
+            </button>
+            <button type="button" aria-label="Message account rep" className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => messageRep(focusedStore)}>
+              <MessageCircleMore className="h-6 w-6 text-[#d25a3f]" />
             </button>
           </div>
         </div>
       ) : (
         <div className="px-4 pb-28 pt-3">
-          <div className="flex items-center gap-2">
-            <MobileSearch value={search} onChange={setSearch} placeholder="Search Locations" className="flex-1" />
-            <button type="button" onClick={() => setShowFilters(true)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#c8c9cf] bg-white">
-              <Filter className="h-5 w-5 text-[#6c7078]" />
-            </button>
-          </div>
-          <div className="mt-2 border-t border-[#c6c7cb]" />
+          <MobileSearch value={search} onChange={setSearch} placeholder="Search Locations" />
+          <div className="mt-3 border-t border-[#c6c7cb]" />
           {grouped.map(([letter, list]) => (
             <section
               key={letter}
@@ -174,7 +214,7 @@ export function TerritoryMobile() {
                 sectionRefs.current[letter] = element;
               }}
             >
-              <div className="border-b border-[#c6c7cb] px-1 py-1.5 text-[14px] font-semibold text-[#8a8d95]">{letter}</div>
+              <div className="border-b border-[#c6c7cb] px-1 py-2 text-[38px] text-[#8a8d95]">{letter}</div>
               {list.map((store) => {
                 const selected = routePlan.selectedStopIds.includes(store.id);
                 return (
@@ -182,14 +222,17 @@ export function TerritoryMobile() {
                     key={store.id}
                     type="button"
                     onClick={() => setDetailStoreId(store.id)}
-                    className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-2 py-3 text-left active:bg-black/5"
-                    aria-label={`Open ${store.name}`}
+                    className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-1 py-3 text-left"
                   >
-                    <span className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 text-xs', selected ? 'border-[#4fb649] text-[#4fb649]' : 'border-[#b8bac0] text-transparent')}>
+                    <span
+                      className={cn(
+                        'grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 text-lg',
+                        selected ? 'border-[#4fb649] text-[#4fb649]' : 'border-[#b8bac0] text-transparent',
+                      )}
+                    >
                       ✓
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-[15px] text-[#15171c]">{store.name}</span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-[#9b9ea6]" />
+                    <span className="truncate text-[22px] text-[#15171c]">{store.name}</span>
                   </button>
                 );
               })}
@@ -200,19 +243,19 @@ export function TerritoryMobile() {
       )}
 
       {view === 'map' && focusedStore ? (
-        <div className="fixed bottom-[84px] left-0 right-0 z-[2500]">
+        <div className="fixed bottom-[92px] left-0 right-0 z-[2500]">
           <div className="mx-auto max-w-[480px] bg-[#1d1f24] text-white shadow-[0_-2px_8px_rgba(0,0,0,0.35)]">
-            <button type="button" onClick={() => setDetailStoreId(focusedStore.id)} className="w-full border-b border-[#30333b] px-4 py-2.5 text-left">
-              <p className="truncate text-[16px] font-semibold">{focusedStore.name}</p>
-              <p className="truncate text-[13px] text-[#b6bac3]">{focusedStore.locationAddress ?? focusedStore.locationLabel ?? 'No address'}</p>
+            <button type="button" onClick={() => setDetailStoreId(focusedStore.id)} className="w-full border-b border-[#30333b] px-4 py-3 text-left">
+              <p className="truncate text-[22px] font-semibold">{focusedStore.name}</p>
+              <p className="truncate text-[17px] text-[#b6bac3]">{focusedStore.locationAddress ?? focusedStore.locationLabel ?? 'No address'}</p>
             </button>
-            <div className="grid grid-cols-[1fr_56px_56px] border-b border-[#30333b]">
-              <button type="button" className="flex items-center gap-2 px-4 py-2 text-[13px] text-[#d5d9e1]">
-                <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: focusedStore.statusColor }} />
+            <div className="grid grid-cols-[1fr_72px_72px] border-b border-[#30333b]">
+              <button type="button" className="flex items-center gap-2 px-4 py-2 text-[17px] text-[#d5d9e1]" onClick={() => messageRep(focusedStore)}>
+                <span className="inline-block h-4 w-4 rounded-full bg-[#f45a34]" />
                 {focusedStore.repNames[0] ?? 'Unassigned'}
               </button>
-              <button type="button" onClick={() => routePlan.toggleStop(focusedStore.id)} className="grid place-items-center border-l border-[#30333b]" title="Add to route">
-                <Plus className={cn('h-6 w-6', selectedOnCard ? 'text-[#4fb649]' : 'text-[#d8dde6]')} />
+              <button type="button" onClick={() => routePlan.toggleStop(focusedStore.id)} className="grid place-items-center border-l border-[#30333b]">
+                <Plus className={cn('h-8 w-8', selectedOnCard ? 'text-[#4fb649]' : 'text-[#d8dde6]')} />
               </button>
               <a
                 href={`https://www.google.com/maps/dir/?api=1&destination=${focusedStore.lat},${focusedStore.lng}`}
@@ -220,40 +263,20 @@ export function TerritoryMobile() {
                 rel="noreferrer"
                 className="grid place-items-center border-l border-[#30333b]"
               >
-                <Navigation className="h-5 w-5 text-[#d8dde6]" />
+                <Navigation className="h-7 w-7 text-[#d8dde6]" />
               </a>
             </div>
           </div>
         </div>
       ) : null}
 
-      <StoreFilterSheet
-        open={showFilters}
-        onClose={() => setShowFilters(false)}
-        statuses={storesQuery.data?.filters.statuses ?? []}
-        reps={storesQuery.data?.filters.reps ?? []}
-        selectedStatuses={selectedStatuses}
-        selectedReps={selectedReps}
-        onToggleStatus={(value) => {
-          setSelectedStatuses((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
-        }}
-        onToggleRep={(value) => {
-          setSelectedReps((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
-        }}
-        onReset={() => {
-          setSelectedStatuses([]);
-          setSelectedReps([]);
-        }}
-      />
-
       <AccountDetailSheet
         store={detailStoreId ? storeById.get(detailStoreId) ?? null : null}
         onClose={() => setDetailStoreId(null)}
         onAddToRoute={(id) => routePlan.toggleStop(id)}
         routeSelected={detailStoreId ? routePlan.selectedStopIds.includes(detailStoreId) : false}
-        onCenterOnMap={(id) => {
-          setDetailStoreId(null);
-          setFocusedId(id);
+        onCenterStore={(store) => {
+          setFocusedId(store.id);
           setView('map');
         }}
       />

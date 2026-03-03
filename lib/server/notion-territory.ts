@@ -8,13 +8,13 @@ import {
   type NotionCacheSnapshot,
   writeNotionCacheSnapshot,
 } from '@/lib/server/notion-cache-store';
-import { colorForStatus, normalizeStatus, pinKindForStatus, type TerritoryStoresResponse, type TerritoryStorePin } from '@/lib/territory/types';
+import { colorForStatus, normalizeStatus, pinKindForStatus, type TerritoryStoreContact, type TerritoryStoresResponse, type TerritoryStorePin } from '@/lib/territory/types';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
 const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
 const GEOCODE_THROTTLE_MS = 250;
-const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v2';
+const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v1';
 const DEFAULT_SYNC_TTL_MINUTES = 20;
 const DEFAULT_STALE_SYNC_GEOCODE_LOOKUPS = 12;
 const DEFAULT_FORCE_SYNC_GEOCODE_LOOKUPS = 80;
@@ -36,22 +36,14 @@ type NotionDatabaseResponse = {
   properties?: Record<string, NotionPropertySchema>;
 };
 
-type NotionStoreRow = {
-  id: string;
-  last_edited_time: string;
-  properties: Record<string, NotionPropertyValue>;
-};
-
 type NotionQueryResponse = {
-  results?: NotionStoreRow[];
+  results?: Array<{
+    id: string;
+    last_edited_time: string;
+    properties: Record<string, NotionPropertyValue>;
+  }>;
   has_more?: boolean;
   next_cursor?: string | null;
-};
-
-type NotionPageResponse = {
-  id: string;
-  last_edited_time: string;
-  properties: Record<string, NotionPropertyValue>;
 };
 
 type NotionTextSegment = {
@@ -75,56 +67,15 @@ type NotionPlace = {
 type NotionPropertyValue = {
   title?: NotionTextSegment[];
   rich_text?: NotionTextSegment[];
+  phone_number?: string | null;
+  email?: string | null;
   status?: {
     name?: string;
   } | null;
-  select?: {
-    name?: string;
-  } | null;
-  multi_select?: Array<{
-    name?: string;
-  }>;
-  people?: NotionPerson[];
-  email?: string | null;
-  phone_number?: string | null;
-  url?: string | null;
-  number?: number | null;
-  checkbox?: boolean;
   date?: {
     start?: string | null;
-    end?: string | null;
   } | null;
-  formula?: {
-    type?: 'string' | 'number' | 'boolean' | 'date';
-    string?: string | null;
-    number?: number | null;
-    boolean?: boolean | null;
-    date?: {
-      start?: string | null;
-    } | null;
-  } | null;
-  relation?: Array<{
-    id?: string;
-  }>;
-  rollup?: {
-    type?: 'number' | 'date' | 'array' | 'incomplete' | 'unsupported';
-    number?: number | null;
-    date?: {
-      start?: string | null;
-      end?: string | null;
-    } | null;
-    array?: Array<{
-      type?: string;
-      rich_text?: NotionTextSegment[];
-      title?: NotionTextSegment[];
-      status?: {
-        name?: string;
-      } | null;
-      select?: {
-        name?: string;
-      } | null;
-    }>;
-  };
+  people?: NotionPerson[];
   place?: NotionPlace | null;
 };
 
@@ -150,10 +101,16 @@ interface TerritorySnapshotResult {
   meta: TerritorySnapshotMeta;
 }
 
+interface CachedContactRow extends TerritoryStoreContact {
+  accountPageIds: string[];
+  lastEditedTime: string;
+}
+
 let lastGeocodeLookupAt = 0;
 const memoryGeocodeCache = new Map<string, { lat: number; lng: number; formattedAddress: string }>();
 let territorySyncInFlight: Promise<void> | null = null;
 let territoryLastSyncError: string | null = null;
+const CONTACTS_SNAPSHOT_KEY = 'crm-contacts-v1';
 
 function requiredEnv(name: 'NOTION_API_KEY' | 'NOTION_MASTER_LIST_DATABASE_ID') {
   const value = process.env[name]?.trim();
@@ -231,100 +188,16 @@ function textFromRichTextProperty(property: NotionPropertyValue | undefined) {
   return textArray.map((item) => item?.plain_text ?? '').join('').trim();
 }
 
-function normalizePropertyName(name: string) {
-  return name
-    .toLowerCase()
-    .replace(/[\u2013\u2014]/g, '-')
-    .replace(/\s+/g, ' ')
-    .trim();
+function readPhoneNumberProperty(property: NotionPropertyValue | undefined) {
+  return typeof property?.phone_number === 'string' ? property.phone_number.trim() : '';
 }
 
-function propertyByCandidates(properties: Record<string, NotionPropertyValue>, candidates: string[]) {
-  const normalizedMap = new Map<string, NotionPropertyValue>();
-  for (const [name, value] of Object.entries(properties)) {
-    normalizedMap.set(normalizePropertyName(name), value);
-  }
-
-  for (const candidate of candidates) {
-    const match = normalizedMap.get(normalizePropertyName(candidate));
-    if (match) {
-      return match;
-    }
-  }
-
-  return undefined;
+function readEmailProperty(property: NotionPropertyValue | undefined) {
+  return typeof property?.email === 'string' ? property.email.trim() : '';
 }
 
-function notionPropertyToString(property: NotionPropertyValue | undefined): string | null {
-  if (!property) return null;
-
-  const title = textFromTitleProperty(property);
-  if (title) return title;
-
-  const richText = textFromRichTextProperty(property);
-  if (richText) return richText;
-
-  if (property.status?.name) return property.status.name.trim();
-  if (property.select?.name) return property.select.name.trim();
-
-  if (Array.isArray(property.multi_select) && property.multi_select.length > 0) {
-    const value = property.multi_select.map((item) => item?.name ?? '').filter(Boolean).join(', ').trim();
-    if (value) return value;
-  }
-
-  if (Array.isArray(property.people) && property.people.length > 0) {
-    const value = property.people.map((person) => person?.name ?? person?.person?.email ?? '').filter(Boolean).join(', ').trim();
-    if (value) return value;
-  }
-
-  if (property.phone_number && property.phone_number.trim()) return property.phone_number.trim();
-  if (property.email && property.email.trim()) return property.email.trim();
-  if (property.url && property.url.trim()) return property.url.trim();
-  if (typeof property.number === 'number' && Number.isFinite(property.number)) return String(property.number);
-  if (typeof property.checkbox === 'boolean') return property.checkbox ? 'Yes' : 'No';
-  if (property.date?.start) return property.date.start;
-  if (Array.isArray(property.relation) && property.relation.length > 0) {
-    return `${property.relation.length} linked`;
-  }
-
-  if (property.rollup) {
-    if (typeof property.rollup.number === 'number' && Number.isFinite(property.rollup.number)) {
-      return String(property.rollup.number);
-    }
-    if (property.rollup.date?.start) {
-      return property.rollup.date.start;
-    }
-    if (Array.isArray(property.rollup.array) && property.rollup.array.length > 0) {
-      const values = property.rollup.array
-        .map((entry) => {
-          const rich = (entry.rich_text ?? []).map((item) => item?.plain_text ?? '').join('').trim();
-          if (rich) return rich;
-          const title = (entry.title ?? []).map((item) => item?.plain_text ?? '').join('').trim();
-          if (title) return title;
-          if (entry.status?.name) return entry.status.name.trim();
-          if (entry.select?.name) return entry.select.name.trim();
-          return '';
-        })
-        .filter(Boolean);
-      if (values.length > 0) {
-        return values.join(', ');
-      }
-    }
-  }
-
-  if (property.formula) {
-    if (property.formula.type === 'string' && property.formula.string) return property.formula.string.trim();
-    if (property.formula.type === 'number' && typeof property.formula.number === 'number' && Number.isFinite(property.formula.number)) return String(property.formula.number);
-    if (property.formula.type === 'boolean' && typeof property.formula.boolean === 'boolean') return property.formula.boolean ? 'Yes' : 'No';
-    if (property.formula.type === 'date' && property.formula.date?.start) return property.formula.date.start;
-  }
-
-  if (property.place) {
-    const place = firstNonEmpty([property.place.name, property.place.address]);
-    if (place) return place;
-  }
-
-  return null;
+function readDateStartProperty(property: NotionPropertyValue | undefined) {
+  return typeof property?.date?.start === 'string' ? property.date.start : '';
 }
 
 function readFormulaNumber(property: NotionPropertyValue | undefined) {
@@ -333,6 +206,27 @@ function readFormulaNumber(property: NotionPropertyValue | undefined) {
     return formula.number;
   }
   return 0;
+}
+
+function normalizePropertyName(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function pickPropertyNameByType(
+  properties: Record<string, NotionPropertySchema>,
+  candidates: string[],
+  expectedType: string,
+) {
+  const candidateSet = new Set(candidates.map(normalizePropertyName));
+  for (const [name, schema] of Object.entries(properties)) {
+    if (schema.type !== expectedType) {
+      continue;
+    }
+    if (candidateSet.has(normalizePropertyName(name))) {
+      return name;
+    }
+  }
+  return null;
 }
 
 function parseStateFromAddress(address: string | null | undefined) {
@@ -543,124 +437,7 @@ function normalizeSnapshotPayload(payload: unknown): TerritoryStorePin[] {
     return Boolean(candidate.id && candidate.notionPageId && candidate.name && Number.isFinite(candidate.lat) && Number.isFinite(candidate.lng));
   });
 
-  return rows.map((row) => ({
-    ...row,
-    pinKind: row.pinKind ?? pinKindForStatus(row.status),
-  }));
-}
-
-function normalizeNotionPageId(id: string) {
-  const value = id.replace(/-/g, '').trim();
-  if (value.length !== 32) {
-    return id;
-  }
-  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
-}
-
-async function mapNotionRowToStorePin(row: NotionStoreRow, geocodeBudget: GeoBudget): Promise<TerritoryStorePin | null> {
-  const properties = row.properties ?? {};
-
-  const nameProperty = propertyByCandidates(properties, ['Dispensary Name', 'Name']);
-  const statusProperty = propertyByCandidates(properties, ['Account Status', 'Dispensary Account Status']);
-  const repProperty = propertyByCandidates(properties, ['Rep', 'Sales Rep', 'Account Owner']);
-  const mapLocationProperty = propertyByCandidates(properties, ['Map Location', 'Location']);
-
-  const name = textFromTitleProperty(nameProperty) || notionPropertyToString(nameProperty) || 'Untitled Store';
-  const statusName = statusProperty?.status?.name ?? notionPropertyToString(statusProperty) ?? 'Unspecified';
-  const statusKey = normalizeStatus(statusName);
-
-  const repPeople = Array.isArray(repProperty?.people) ? repProperty.people : [];
-  const repNames = repPeople.map((person) => person?.name).filter((value: unknown): value is string => Boolean(value));
-  const repEmails = repPeople
-    .map((person) => person?.person?.email)
-    .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
-
-  const place = mapLocationProperty?.place;
-  const notionLat = typeof place?.lat === 'number' ? place.lat : null;
-  const notionLng = typeof place?.lon === 'number' ? place.lon : null;
-  const hasPlaceCoords = notionLat !== null && notionLng !== null;
-
-  const placeName = typeof place?.name === 'string' ? place.name.trim() : '';
-  const placeAddress = typeof place?.address === 'string' ? place.address.trim() : '';
-
-  const fullAddress = notionPropertyToString(propertyByCandidates(properties, ['Full Address', 'Address'])) ?? '';
-  const address1 = notionPropertyToString(propertyByCandidates(properties, ['Address 1', 'Street Address'])) ?? '';
-  const city = notionPropertyToString(propertyByCandidates(properties, ['City'])) ?? '';
-  const zipcode = notionPropertyToString(propertyByCandidates(properties, ['Zipcode', 'Zip Code', 'ZIP'])) ?? '';
-  const licenseNumber = notionPropertyToString(propertyByCandidates(properties, ['License Number', 'License #'])) ?? '';
-  const daysOverdue = readFormulaNumber(propertyByCandidates(properties, ['Days Overdue']));
-
-  const fallbackAddress = firstNonEmpty([placeAddress, placeName, fullAddress, [address1, city, zipcode].filter(Boolean).join(', ')]);
-
-  let lat: number | null = hasPlaceCoords ? notionLat : null;
-  let lng: number | null = hasPlaceCoords ? notionLng : null;
-  let locationSource: TerritoryStorePin['locationSource'] = hasPlaceCoords ? 'notion-place' : 'nominatim-cache';
-  let resolvedAddress = firstNonEmpty([placeAddress, fullAddress, placeName]);
-
-  if (!hasPlaceCoords && fallbackAddress) {
-    const geocodeResult = await geocodeAddressWithCache(fallbackAddress, geocodeBudget, geocodeBudget.remaining > 0);
-    if (geocodeResult) {
-      lat = geocodeResult.lat;
-      lng = geocodeResult.lng;
-      resolvedAddress = geocodeResult.formattedAddress;
-      locationSource = geocodeResult.source;
-    }
-  }
-
-  if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return null;
-  }
-
-  const detailFields = Object.entries(properties)
-    .map(([label, value]) => {
-      const normalizedLabel = normalizePropertyName(label);
-      if (normalizedLabel === 'dispensary name') {
-        return null;
-      }
-      const propertyText = notionPropertyToString(value);
-      if (!propertyText) {
-        return null;
-      }
-      return { label, value: propertyText };
-    })
-    .filter((entry): entry is { label: string; value: string } => Boolean(entry));
-
-  if (!detailFields.some((entry) => normalizePropertyName(entry.label) === 'account status')) {
-    detailFields.unshift({
-      label: 'Account Status',
-      value: statusName,
-    });
-  }
-
-  if (!detailFields.some((entry) => normalizePropertyName(entry.label) === 'picc rep' || normalizePropertyName(entry.label) === 'rep')) {
-    detailFields.push({
-      label: 'PICC Rep',
-      value: repNames.join(', ') || 'Unassigned',
-    });
-  }
-
-  return {
-    id: row.id,
-    notionPageId: row.id,
-    name,
-    status: statusName,
-    statusKey,
-    statusColor: colorForStatus(statusName),
-    pinKind: pinKindForStatus(statusName),
-    repNames,
-    repEmails,
-    lat,
-    lng,
-    locationLabel: firstNonEmpty([placeName, fallbackAddress]),
-    locationAddress: resolvedAddress,
-    locationSource,
-    lastEditedTime: row.last_edited_time,
-    licenseNumber: licenseNumber || null,
-    city: city || null,
-    state: parseStateFromAddress(firstNonEmpty([resolvedAddress, fullAddress, fallbackAddress])),
-    daysOverdue,
-    detailFields,
-  };
+  return rows;
 }
 
 async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?: number }) {
@@ -680,14 +457,101 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
   let unresolvedLocationCount = 0;
 
   for (const row of rows) {
-    const pin = await mapNotionRowToStorePin(row, geocodeBudget);
-    if (!pin) {
+    const properties = row.properties ?? {};
+    const propertyByCandidates = (...candidates: string[]) => {
+      const normalizedCandidates = new Set(candidates.map(normalizePropertyName));
+      for (const [name, value] of Object.entries(properties)) {
+        if (normalizedCandidates.has(normalizePropertyName(name))) {
+          return value;
+        }
+      }
+      return undefined;
+    };
+
+    const name = textFromTitleProperty(properties['Dispensary Name']) || 'Untitled Store';
+    const statusName = properties['Account Status']?.status?.name ?? 'Unspecified';
+    const statusKey = normalizeStatus(statusName);
+
+    const repPeople = Array.isArray(properties['Rep']?.people) ? properties['Rep'].people : [];
+    const repNames = repPeople.map((person) => person?.name).filter((value: unknown): value is string => Boolean(value));
+    const repEmails = repPeople
+      .map((person) => person?.person?.email)
+      .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
+
+    const place = properties['Map Location']?.place;
+    const notionLat = typeof place?.lat === 'number' ? place.lat : null;
+    const notionLng = typeof place?.lon === 'number' ? place.lon : null;
+    const hasPlaceCoords = notionLat !== null && notionLng !== null;
+
+    const placeName = typeof place?.name === 'string' ? place.name.trim() : '';
+    const placeAddress = typeof place?.address === 'string' ? place.address.trim() : '';
+
+    const fullAddress = textFromRichTextProperty((propertyByCandidates('full address', 'address') as NotionPropertyValue | undefined) ?? properties['Full Address']);
+    const address1 = textFromRichTextProperty((propertyByCandidates('address 1', 'street address') as NotionPropertyValue | undefined) ?? properties['Address 1']);
+    const city = textFromRichTextProperty((propertyByCandidates('city') as NotionPropertyValue | undefined) ?? properties['City']);
+    const zipcode = textFromRichTextProperty((propertyByCandidates('zipcode', 'zip code') as NotionPropertyValue | undefined) ?? properties['Zipcode']);
+    const licenseNumber = textFromRichTextProperty((propertyByCandidates('license number', 'license') as NotionPropertyValue | undefined) ?? properties['License Number']);
+    const daysOverdue = readFormulaNumber((propertyByCandidates('days overdue') as NotionPropertyValue | undefined) ?? properties['Days Overdue']);
+    const phoneNumber = readPhoneNumberProperty((propertyByCandidates('phone number', 'phone') as NotionPropertyValue | undefined) ?? properties['Phone Number']) || null;
+    const email = readEmailProperty((propertyByCandidates('email', 'email address') as NotionPropertyValue | undefined) ?? properties.Email) || null;
+    const followUpDate = readDateStartProperty((propertyByCandidates('follow-up date', 'follow up date') as NotionPropertyValue | undefined) ?? properties['Follow-up Date']) || null;
+    const notes = textFromRichTextProperty((propertyByCandidates('notes', 'account notes', 'store notes') as NotionPropertyValue | undefined) ?? properties.Notes) || null;
+    const lastCheckIn = readDateStartProperty((propertyByCandidates('last check-in', 'last check in', 'last visit') as NotionPropertyValue | undefined) ?? properties['Last Check-in']) || null;
+
+    const fallbackAddress = firstNonEmpty([placeAddress, placeName, fullAddress, [address1, city, zipcode].filter(Boolean).join(', ')]);
+
+    let lat: number | null = hasPlaceCoords ? notionLat : null;
+    let lng: number | null = hasPlaceCoords ? notionLng : null;
+    let locationSource: TerritoryStorePin['locationSource'] = hasPlaceCoords ? 'notion-place' : 'nominatim-cache';
+    let resolvedAddress = firstNonEmpty([placeAddress, fullAddress, placeName]);
+
+    if (!hasPlaceCoords && fallbackAddress) {
+      const geocodeResult = await geocodeAddressWithCache(fallbackAddress, geocodeBudget, geocodeBudget.remaining > 0);
+      if (geocodeResult) {
+        lat = geocodeResult.lat;
+        lng = geocodeResult.lng;
+        resolvedAddress = geocodeResult.formattedAddress;
+        locationSource = geocodeResult.source;
+      }
+    }
+
+    if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       unresolvedLocationCount += 1;
       if (!lastEditedMax || row.last_edited_time > lastEditedMax) {
         lastEditedMax = row.last_edited_time;
       }
       continue;
     }
+
+    const resolvedLat: number = lat;
+    const resolvedLng: number = lng;
+
+    const pin: TerritoryStorePin = {
+      id: row.id,
+      notionPageId: row.id,
+      name,
+      status: statusName,
+      statusKey,
+      statusColor: colorForStatus(statusName),
+      pinKind: pinKindForStatus(statusName),
+      repNames,
+      repEmails,
+      lat: resolvedLat,
+      lng: resolvedLng,
+      locationLabel: firstNonEmpty([placeName, fallbackAddress]),
+      locationAddress: resolvedAddress,
+      locationSource,
+      lastEditedTime: row.last_edited_time,
+      licenseNumber: licenseNumber || null,
+      city: city || null,
+      state: parseStateFromAddress(firstNonEmpty([resolvedAddress, fullAddress, fallbackAddress])),
+      daysOverdue,
+      phoneNumber,
+      email,
+      followUpDate,
+      notes,
+      lastCheckIn,
+    };
 
     if (!lastEditedMax || row.last_edited_time > lastEditedMax) {
       lastEditedMax = row.last_edited_time;
@@ -813,6 +677,191 @@ async function getTerritorySnapshot(input?: {
   };
 }
 
+function normalizePageId(value: string) {
+  return value.replace(/-/g, '').toLowerCase();
+}
+
+function normalizeCachedContacts(payload: unknown): CachedContactRow[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload.filter((row): row is CachedContactRow => {
+    if (typeof row !== 'object' || row === null) {
+      return false;
+    }
+
+    const candidate = row as CachedContactRow;
+    return Boolean(candidate.id && candidate.name && Array.isArray(candidate.accountPageIds));
+  });
+}
+
+function findStoreById(stores: TerritoryStorePin[], storeId: string) {
+  const normalizedStoreId = normalizePageId(storeId);
+  return (
+    stores.find((store) => normalizePageId(store.id) === normalizedStoreId || normalizePageId(store.notionPageId) === normalizedStoreId) ??
+    null
+  );
+}
+
+async function patchStoreInSnapshot(storeId: string, updater: (store: TerritoryStorePin) => TerritoryStorePin) {
+  const snapshot = await readNotionCacheSnapshot<TerritoryStorePin[]>(TERRITORY_SNAPSHOT_KEY);
+  if (!snapshot) {
+    return;
+  }
+
+  const normalizedPayload = normalizeSnapshotPayload(snapshot.payload);
+  const normalizedStoreId = normalizePageId(storeId);
+  let changed = false;
+
+  const payload = normalizedPayload.map((store) => {
+    const matches = normalizePageId(store.id) === normalizedStoreId || normalizePageId(store.notionPageId) === normalizedStoreId;
+    if (!matches) {
+      return store;
+    }
+    changed = true;
+    return updater(store);
+  });
+
+  if (!changed) {
+    return;
+  }
+
+  await writeNotionCacheSnapshot({
+    key: TERRITORY_SNAPSHOT_KEY,
+    payload,
+    recordsRead: snapshot.recordsRead,
+    unresolvedLocationCount: snapshot.unresolvedLocationCount,
+    lastEditedMax: snapshot.lastEditedMax,
+  });
+}
+
+export async function loadTerritoryStoreDetail(storeId: string) {
+  const snapshot = await getTerritorySnapshot();
+  const store = findStoreById(snapshot.stores, storeId);
+  if (!store) {
+    throw new Error('Store not found');
+  }
+
+  const contactsSnapshot = await readNotionCacheSnapshot<CachedContactRow[]>(CONTACTS_SNAPSHOT_KEY);
+  const contacts = normalizeCachedContacts(contactsSnapshot?.payload).filter((contact) =>
+    contact.accountPageIds.some((pageId) => normalizePageId(pageId) === normalizePageId(store.notionPageId)),
+  );
+
+  contacts.sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    store,
+    contacts: contacts.map((contact) => ({
+      id: contact.id,
+      name: contact.name,
+      roleTitle: contact.roleTitle,
+      email: contact.email,
+      phone: contact.phone,
+      status: contact.status,
+      linkedWork: contact.linkedWork,
+    })),
+  };
+}
+
+export async function updateTerritoryStoreNotes(storeId: string, notes: string) {
+  const snapshot = await getTerritorySnapshot();
+  const store = findStoreById(snapshot.stores, storeId);
+  if (!store) {
+    throw new Error('Store not found');
+  }
+
+  const schema = await fetchAndValidateDatabaseSchema();
+  const notesProperty = pickPropertyNameByType(
+    schema.database.properties ?? {},
+    ['Notes', 'Account Notes', 'Store Notes', 'Visit Notes'],
+    'rich_text',
+  );
+
+  if (!notesProperty) {
+    throw new Error('No writable Notes property found in Notion database');
+  }
+
+  const trimmed = notes.trim().slice(0, 2000);
+
+  await notionRequest<unknown>(`/pages/${store.notionPageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      properties: {
+        [notesProperty]: {
+          rich_text: trimmed
+            ? [
+                {
+                  type: 'text',
+                  text: { content: trimmed },
+                },
+              ]
+            : [],
+        },
+      },
+    }),
+  });
+
+  const now = new Date().toISOString();
+  await patchStoreInSnapshot(store.id, (entry) => ({
+    ...entry,
+    notes: trimmed || null,
+    lastEditedTime: now,
+  }));
+
+  return {
+    storeId: store.id,
+    notes: trimmed || null,
+    updatedAt: now,
+  };
+}
+
+export async function recordTerritoryStoreCheckIn(storeId: string) {
+  const snapshot = await getTerritorySnapshot();
+  const store = findStoreById(snapshot.stores, storeId);
+  if (!store) {
+    throw new Error('Store not found');
+  }
+
+  const schema = await fetchAndValidateDatabaseSchema();
+  const properties = schema.database.properties ?? {};
+  const checkInProperty = pickPropertyNameByType(
+    properties,
+    ['Last Check-in', 'Last Check In', 'Last Visit', 'Recent Check-in'],
+    'date',
+  );
+
+  if (!checkInProperty) {
+    throw new Error('No check-in date property found in Notion database');
+  }
+
+  const checkedInAt = new Date().toISOString();
+
+  await notionRequest<unknown>(`/pages/${store.notionPageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      properties: {
+        [checkInProperty]: {
+          date: {
+            start: checkedInAt,
+          },
+        },
+      },
+    }),
+  });
+
+  await patchStoreInSnapshot(store.id, (entry) => ({
+    ...entry,
+    lastCheckIn: checkedInAt,
+    lastEditedTime: checkedInAt,
+  }));
+
+  return {
+    storeId: store.id,
+    checkedInAt,
+  };
+}
+
 export async function territoryConnectionCheck() {
   const schema = await fetchAndValidateDatabaseSchema();
 
@@ -821,67 +870,6 @@ export async function territoryConnectionCheck() {
     databaseTitle: getDatabaseTitle(schema.database),
     missingFields: schema.missingFields,
     checkedAt: new Date().toISOString(),
-  };
-}
-
-export async function refreshTerritoryStoreByPageId(input: { storePageId: string }) {
-  const schema = await fetchAndValidateDatabaseSchema();
-  if (schema.missingFields.length > 0) {
-    throw new Error(`Notion schema missing required fields: ${schema.missingFields.join(', ')}`);
-  }
-
-  const pageId = normalizeNotionPageId(input.storePageId);
-  const page = await notionRequest<NotionPageResponse>(`/pages/${pageId}`);
-  const geocodeBudget: GeoBudget = {
-    remaining: Math.max(1, parsePositiveInt(process.env.TERRITORY_FORCE_SYNC_GEOCODE_LOOKUPS, DEFAULT_FORCE_SYNC_GEOCODE_LOOKUPS)),
-    lookedUp: 0,
-  };
-
-  const mapped = await mapNotionRowToStorePin(
-    {
-      id: page.id,
-      last_edited_time: page.last_edited_time,
-      properties: page.properties ?? {},
-    },
-    geocodeBudget,
-  );
-
-  if (!mapped) {
-    throw new Error('Unable to resolve coordinates for this account. Add Map Location or Full Address in Notion.');
-  }
-
-  let snapshot = await readNotionCacheSnapshot<TerritoryStorePin[]>(TERRITORY_SNAPSHOT_KEY);
-  if (!snapshot) {
-    const fullSync = await syncTerritorySnapshotFromNotion({
-      maxLiveGeocodeLookups: parsePositiveInt(process.env.TERRITORY_FORCE_SYNC_GEOCODE_LOOKUPS, DEFAULT_FORCE_SYNC_GEOCODE_LOOKUPS),
-    });
-    snapshot = fullSync.snapshot;
-  }
-
-  const existingRows = normalizeSnapshotPayload(snapshot.payload);
-  const upsertedRows = existingRows.filter((store) => store.notionPageId !== mapped.notionPageId && store.id !== mapped.id);
-  upsertedRows.push(mapped);
-  upsertedRows.sort((a, b) => a.name.localeCompare(b.name));
-
-  const lastEditedMax = upsertedRows.reduce<string | null>((max, row) => {
-    if (!max || row.lastEditedTime > max) {
-      return row.lastEditedTime;
-    }
-    return max;
-  }, null);
-
-  await writeNotionCacheSnapshot<TerritoryStorePin[]>({
-    key: TERRITORY_SNAPSHOT_KEY,
-    payload: upsertedRows,
-    recordsRead: Math.max(snapshot.recordsRead, upsertedRows.length),
-    unresolvedLocationCount: snapshot.unresolvedLocationCount,
-    lastEditedMax,
-  });
-
-  return {
-    store: mapped,
-    geocodedThisRequest: geocodeBudget.lookedUp,
-    syncedAt: new Date().toISOString(),
   };
 }
 
@@ -938,8 +926,21 @@ export async function loadTerritoryStores(input?: {
       }
     }
 
-    if (filters.q && !pin.name.toLowerCase().includes(filters.q)) {
-      return false;
+    if (filters.q) {
+      const searchable = [
+        pin.name,
+        pin.locationAddress ?? '',
+        pin.city ?? '',
+        pin.state ?? '',
+        pin.status,
+        pin.repNames.join(' '),
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      if (!searchable.includes(filters.q)) {
+        return false;
+      }
     }
 
     return true;

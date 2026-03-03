@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
-import { refreshTerritoryStoreByPageId } from '@/lib/server/notion-territory';
+import { loadTerritoryStores } from '@/lib/server/notion-territory';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,15 +17,19 @@ export async function POST(request: Request) {
 
   try {
     const payload = requestSchema.parse(await request.json());
-    const refreshed = await refreshTerritoryStoreByPageId({
-      storePageId: payload.storePageId,
-    });
+    const normalizedPageId = payload.storePageId.replace(/-/g, '').toLowerCase();
+    const refreshed = await loadTerritoryStores({ refresh: true });
+    const store = refreshed.stores.find((entry) => entry.notionPageId.replace(/-/g, '').toLowerCase() === normalizedPageId);
+
+    if (!store) {
+      return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+    }
 
     return NextResponse.json({
       ok: true,
-      store: refreshed.store,
-      geocodedThisRequest: refreshed.geocodedThisRequest,
-      syncedAt: refreshed.syncedAt,
+      store,
+      geocodedThisRequest: refreshed.meta.geocodedThisRequest,
+      syncedAt: refreshed.meta.syncedAt,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

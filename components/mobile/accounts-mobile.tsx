@@ -1,15 +1,15 @@
 'use client';
 
-import { ChevronRight, Filter } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
-import { StoreFilterSheet } from '@/components/mobile/store-filter-sheet';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import type { TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 
@@ -21,14 +21,13 @@ function firstLetter(name: string) {
 
 export function AccountsMobile() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [scope, setScope] = useState<'all' | 'recent' | 'follow-ups'>('all');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedReps, setSelectedReps] = useState<string[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
   const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const unresolvedRouteStoreIdRef = useRef<string | null>(null);
   const routePlan = useRoutePlan();
 
   useEffect(() => {
@@ -40,12 +39,10 @@ export function AccountsMobile() {
   }, [search]);
 
   const storesQuery = useQuery({
-    queryKey: ['accounts-mobile', debouncedSearch, selectedStatuses.join('|'), selectedReps.join('|')],
+    queryKey: ['accounts-mobile', debouncedSearch],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set('q', debouncedSearch);
-      for (const status of selectedStatuses) params.append('status', status);
-      for (const rep of selectedReps) params.append('rep', rep);
       const response = await fetch(`/api/territory/stores?${params.toString()}`);
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -57,19 +54,37 @@ export function AccountsMobile() {
     placeholderData: (previousData) => previousData,
   });
 
+  const allStores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
   const stores = useMemo(() => {
-    const source = storesQuery.data?.stores ?? [];
+    const source = allStores;
     if (scope === 'all') return source;
     if (scope === 'recent') {
       return source.filter((store) => {
         const editedAt = Date.parse(store.lastEditedTime);
-        return Number.isFinite(editedAt) && Date.now() - editedAt < 1000 * 60 * 60 * 24 * 14;
+        return Number.isFinite(editedAt) && Date.now() - editedAt < 1000 * 60 * 60 * 24 * 7;
       });
     }
     return source.filter((store) => (store.daysOverdue ?? 0) > 0 || /lead|proposal|in progress/i.test(store.status));
-  }, [storesQuery.data?.stores, scope]);
+  }, [allStores, scope]);
 
-  const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
+  const allStoreById = useMemo(() => new Map(allStores.map((store) => [store.id, store])), [allStores]);
+
+  useEffect(() => {
+    const routeStoreId = searchParams.get('storeId');
+    if (!routeStoreId) return;
+
+    setScope('all');
+    if (allStoreById.has(routeStoreId)) {
+      setDetailStoreId(routeStoreId);
+      unresolvedRouteStoreIdRef.current = null;
+      return;
+    }
+
+    if (allStores.length > 0 && unresolvedRouteStoreIdRef.current !== routeStoreId) {
+      toast.error('Selected route account was not found in accounts list.');
+      unresolvedRouteStoreIdRef.current = routeStoreId;
+    }
+  }, [allStoreById, allStores.length, searchParams]);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, TerritoryStorePin[]>();
@@ -83,8 +98,20 @@ export function AccountsMobile() {
   }, [stores]);
 
   return (
-    <div className="min-h-[calc(100dvh-84px)] bg-[#e6e6e9]">
-      <MobileHeader title="Accounts" right={<span className="text-[22px] leading-none">+</span>}>
+    <div className="min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
+      <MobileHeader
+        title="Accounts"
+        right={(
+          <button
+            type="button"
+            className="text-[42px] leading-none"
+            onClick={() => toast.message('Create account is available in desktop mode.')}
+            aria-label="Create account"
+          >
+            <Plus className="ml-auto h-9 w-9" />
+          </button>
+        )}
+      >
         <SegmentedControl
           value={scope}
           onChange={(value) => setScope(value as 'all' | 'recent' | 'follow-ups')}
@@ -97,12 +124,7 @@ export function AccountsMobile() {
       </MobileHeader>
 
       <div className="px-4 pb-28 pt-3">
-        <div className="flex items-center gap-2">
-          <MobileSearch value={search} onChange={setSearch} placeholder="Search Accounts" className="flex-1" />
-          <button type="button" onClick={() => setShowFilters(true)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#c8c9cf] bg-white">
-            <Filter className="h-5 w-5 text-[#6c7078]" />
-          </button>
-        </div>
+        <MobileSearch value={search} onChange={setSearch} placeholder="Search Accounts" />
         <div className="mt-2 border-t border-[#c6c7cb]" />
 
         {grouped.map(([letter, list]) => (
@@ -112,20 +134,11 @@ export function AccountsMobile() {
               sectionRefs.current[letter] = element;
             }}
           >
-            <div className="border-b border-[#c6c7cb] px-1 py-1.5 text-[14px] font-semibold text-[#8a8d95]">{letter}</div>
+            <div className="border-b border-[#c6c7cb] px-1 py-2 text-[38px] text-[#8a8d95]">{letter}</div>
             {list.map((store) => (
-              <button
-                key={store.id}
-                type="button"
-                onClick={() => setDetailStoreId(store.id)}
-                className="flex w-full items-center justify-between gap-3 border-b border-[#d0d1d4] px-2 py-3 text-left active:bg-black/5"
-                aria-label={`Open ${store.name}`}
-              >
-                <span className="min-w-0">
-                  <p className="truncate text-[15px] text-[#15171c]">{store.name}</p>
-                  <p className="truncate text-[12px] text-[#8c8f97]">{store.status} · {store.repNames[0] ?? 'Unassigned'}</p>
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-[#9b9ea6]" />
+              <button key={store.id} type="button" onClick={() => setDetailStoreId(store.id)} className="w-full border-b border-[#d0d1d4] px-1 py-3 text-left">
+                <p className="truncate text-[22px] text-[#15171c]">{store.name}</p>
+                <p className="truncate text-[17px] text-[#8c8f97]">{store.locationAddress ?? store.locationLabel ?? 'No address'}</p>
               </button>
             ))}
           </section>
@@ -134,29 +147,16 @@ export function AccountsMobile() {
 
       <AlphabetRail onSelect={(letter) => sectionRefs.current[letter]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
 
-      <StoreFilterSheet
-        open={showFilters}
-        onClose={() => setShowFilters(false)}
-        statuses={storesQuery.data?.filters.statuses ?? []}
-        reps={storesQuery.data?.filters.reps ?? []}
-        selectedStatuses={selectedStatuses}
-        selectedReps={selectedReps}
-        onToggleStatus={(value) => setSelectedStatuses((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]))}
-        onToggleRep={(value) => setSelectedReps((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]))}
-        onReset={() => {
-          setSelectedStatuses([]);
-          setSelectedReps([]);
-        }}
-      />
-
       <AccountDetailSheet
-        store={detailStoreId ? storeById.get(detailStoreId) ?? null : null}
-        onClose={() => setDetailStoreId(null)}
+        store={detailStoreId ? allStoreById.get(detailStoreId) ?? null : null}
+        onClose={() => {
+          setDetailStoreId(null);
+          if (searchParams.get('storeId')) {
+            router.replace('/accounts');
+          }
+        }}
         onAddToRoute={(id) => routePlan.toggleStop(id)}
         routeSelected={detailStoreId ? routePlan.selectedStopIds.includes(detailStoreId) : false}
-        onCenterOnMap={(id) => {
-          router.push(`/territory?focus=${encodeURIComponent(id)}`);
-        }}
       />
     </div>
   );

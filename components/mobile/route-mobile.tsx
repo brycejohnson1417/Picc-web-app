@@ -1,25 +1,18 @@
 'use client';
 
-import { CalendarDays, Check, ChevronRight, GripHorizontal, Loader2, LocateFixed, Plus, RotateCcw, Save, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useMemo, useRef, useState } from 'react';
+import { CalendarDays, Check, ChevronRight, GripHorizontal, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
-import type { RouteMode, TerritoryOptimizedRouteResponse, TerritoryRouteAnchor, TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
+import type { RouteMode, TerritoryOptimizedRouteResponse, TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import { cn } from '@/lib/utils';
-
-interface GeoPoint {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-}
 
 function firstLetter(name: string) {
   const normalized = name.trim().toUpperCase();
@@ -27,20 +20,47 @@ function firstLetter(name: string) {
   return /[A-Z]/.test(char) ? char : '#';
 }
 
+function formatDistance(meters: number) {
+  if (!meters || meters < 0) return '0.0 mi';
+  const miles = meters / 1609.34;
+  return `${miles.toFixed(miles >= 100 ? 0 : 1)} mi`;
+}
+
+function formatDuration(seconds: number) {
+  if (!seconds || seconds < 0) return '0m';
+  const minutes = Math.round(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  return hours > 0 ? `${hours}h ${rem}m` : `${minutes}m`;
+}
+
+const MODE_OPTIONS: Array<{ value: RouteMode; label: string }> = [
+  { value: 'car', label: 'Drive' },
+  { value: 'transit', label: 'Transit' },
+];
+
 export function RouteMobile() {
   const router = useRouter();
   const routePlan = useRoutePlan();
   const [tab, setTab] = useState<'current' | 'saved'>('current');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [savedEditing, setSavedEditing] = useState(false);
   const [search, setSearch] = useState('');
-  const [travelMode, setTravelMode] = useState<'car' | 'bike' | 'transit'>('car');
-  const [startChoice, setStartChoice] = useState('none');
-  const [endChoice, setEndChoice] = useState('none');
-  const [locating, setLocating] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState<GeoPoint | null>(null);
+  const [optMode, setOptMode] = useState<RouteMode>('car');
   const [optimizing, setOptimizing] = useState(false);
-  const [optimized, setOptimized] = useState<TerritoryOptimizedRouteResponse | null>(null);
-  const [savedConfirmation, setSavedConfirmation] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tab === 'current') {
+      setSavedEditing(false);
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    if (!routePlan.optimizedRoute) {
+      return;
+    }
+    setOptMode(routePlan.optimizedRoute.mode);
+  }, [routePlan.optimizedRoute]);
 
   const storesQuery = useQuery({
     queryKey: ['route-mobile-stores'],
@@ -59,105 +79,39 @@ export function RouteMobile() {
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
 
-  const selectedStops = useMemo(
-    () => routePlan.selectedStopIds.map((id) => storeById.get(id)).filter((store): store is TerritoryStorePin => Boolean(store)),
-    [routePlan.selectedStopIds, storeById],
-  );
+  const selectedStops = useMemo(() => routePlan.selectedStopIds.map((id) => storeById.get(id)).filter((store): store is TerritoryStorePin => Boolean(store)), [routePlan.selectedStopIds, storeById]);
+
+  const activeOptimized = useMemo(() => {
+    if (!routePlan.optimizedRoute) return null;
+    const allStopsAvailable = routePlan.optimizedRoute.orderedStopIds.every((id) => storeById.has(id));
+    if (!allStopsAvailable) return null;
+    return routePlan.optimizedRoute;
+  }, [routePlan.optimizedRoute, storeById]);
 
   const orderedStops = useMemo(() => {
-    const ids = optimized?.orderedStopIds.length ? optimized.orderedStopIds : routePlan.orderedStopIds;
+    const ids = activeOptimized?.orderedStopIds ?? routePlan.orderedStopIds;
     if (ids.length === 0) return selectedStops;
     return ids.map((id) => storeById.get(id)).filter((store): store is TerritoryStorePin => Boolean(store));
-  }, [optimized?.orderedStopIds, routePlan.orderedStopIds, selectedStops, storeById]);
+  }, [activeOptimized?.orderedStopIds, routePlan.orderedStopIds, selectedStops, storeById]);
 
-  const endpointOptions = useMemo(() => {
-    return [
-      { value: 'none', label: 'None' },
-      { value: 'current', label: currentLocation ? 'Current Location' : 'Use Current Location' },
-      ...selectedStops.map((store) => ({ value: `store:${store.id}`, label: store.name })),
-    ];
-  }, [selectedStops, currentLocation]);
-
-  const legs = optimized?.legs ?? [];
-  const needsCurrentLocation = startChoice === 'current' || endChoice === 'current';
-  const missingCurrentLocation = needsCurrentLocation && !currentLocation;
-  const hasEnoughStopsToOptimize = selectedStops.length >= (startChoice !== 'none' || endChoice !== 'none' ? 1 : 2);
-
-  function resolveChoice(choice: string): TerritoryRouteAnchor | null {
-    if (choice === 'none') return null;
-    if (choice === 'current') {
-      if (!currentLocation) return null;
-      return currentLocation;
-    }
-    if (choice.startsWith('store:')) {
-      const id = choice.slice('store:'.length);
-      const store = storeById.get(id);
-      if (!store) return null;
-      return {
-        id: store.id,
-        name: store.name,
-        lat: store.lat,
-        lng: store.lng,
-      };
-    }
-    return null;
-  }
-
-  async function requestCurrentLocation() {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not available on this device');
-      return;
-    }
-    setLocating(true);
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 30000,
-        });
-      });
-
-      const point: GeoPoint = {
-        id: '__current_location__',
-        name: 'Current Location',
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-      };
-      setCurrentLocation(point);
-      toast.success('Current location captured');
-    } catch {
-      toast.error('Unable to capture current location');
-    } finally {
-      setLocating(false);
-    }
-  }
+  const legs = activeOptimized?.legs ?? [];
+  const totalDistanceMeters = activeOptimized?.totalDistanceMeters ?? legs.reduce((sum, leg) => sum + leg.distanceMeters, 0);
+  const totalDurationSeconds = activeOptimized?.totalDurationSeconds ?? legs.reduce((sum, leg) => sum + leg.durationSeconds, 0);
 
   async function optimizeRoute() {
-    const start = resolveChoice(startChoice);
-    const end = resolveChoice(endChoice);
-
-    if ((startChoice === 'current' || endChoice === 'current') && !currentLocation) {
-      toast.error('Tap Use Current first to optimize from your location');
-      return;
-    }
-
-    if (selectedStops.length < (start || end ? 1 : 2)) {
-      toast.error(start || end ? 'Add at least 1 location to optimize with your start/end.' : 'Add at least 2 locations to optimize.');
+    if (selectedStops.length < 2) {
+      toast.error('Add at least 2 locations to optimize.');
       return;
     }
 
     setOptimizing(true);
     try {
-      const optimizeMode: RouteMode = travelMode === 'transit' ? 'car' : travelMode;
       const response = await fetch('/api/territory/optimize-route', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode: optimizeMode,
+          mode: optMode,
           stops: selectedStops.map((stop) => ({ id: stop.id, name: stop.name, lat: stop.lat, lng: stop.lng })),
-          ...(start ? { start } : {}),
-          ...(end ? { end } : {}),
         }),
       });
       const payload = await response.json();
@@ -166,9 +120,13 @@ export function RouteMobile() {
       }
 
       const data = payload as TerritoryOptimizedRouteResponse;
-      setOptimized(data);
-      routePlan.setOrderedStopIds(data.orderedStopIds);
-      toast.success('Route optimized');
+      routePlan.setOptimizedRoute(data);
+
+      if (data.estimationModel === 'transit-heuristic') {
+        toast.success('Transit route optimized (ETA uses transit heuristic).');
+      } else {
+        toast.success('Route optimized using road directions.');
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Optimization failed');
     } finally {
@@ -176,60 +134,59 @@ export function RouteMobile() {
     }
   }
 
-  function routeSequence() {
-    const start = resolveChoice(startChoice);
-    const end = resolveChoice(endChoice);
-    const points: GeoPoint[] = [];
-
-    if (start) points.push(start);
-    for (const store of orderedStops) {
-      points.push({ id: store.id, name: store.name, lat: store.lat, lng: store.lng });
-    }
-    if (end) points.push(end);
-
-    if (!start && points.length > 0) {
-      // No explicit origin means first route stop is origin.
-      return points;
-    }
-
-    return points;
-  }
-
   function launchGo() {
-    const points = routeSequence();
-    if (points.length < 2) {
-      toast.error('Add at least 2 route points before launching directions');
+    if (orderedStops.length < 2) {
+      toast.error('Add at least 2 locations to launch directions.');
       return;
     }
 
-    const travelmode = travelMode === 'car' ? 'driving' : travelMode === 'bike' ? 'bicycling' : 'transit';
+    const coords = orderedStops.map((stop) => `${stop.lat},${stop.lng}`);
+    const googleMode = optMode === 'transit' ? 'transit' : optMode === 'bike' ? 'bicycling' : 'driving';
+
     const params = new URLSearchParams({
       api: '1',
-      travelmode,
-      origin: `${points[0].lat},${points[0].lng}`,
-      destination: `${points[points.length - 1].lat},${points[points.length - 1].lng}`,
+      travelmode: googleMode,
+      origin: coords[0],
+      destination: coords[coords.length - 1],
     });
 
-    const waypoints = points.slice(1, -1).map((point) => `${point.lat},${point.lng}`).join('|');
-    if (waypoints) {
-      params.set('waypoints', waypoints);
-    }
+    const waypoints = coords.slice(1, -1).join('|');
+    if (waypoints) params.set('waypoints', waypoints);
 
     window.open(`https://www.google.com/maps/dir/?${params.toString()}`, '_blank', 'noopener,noreferrer');
   }
 
-  const hasEnoughPointsToLaunch = routeSequence().length >= 2;
+  function launchCalendarDraft() {
+    if (orderedStops.length === 0) {
+      toast.error('Add at least 1 location to draft a calendar event.');
+      return;
+    }
+
+    const details = orderedStops
+      .map((stop, index) => `${index + 1}. ${stop.name}${stop.locationAddress ? ` - ${stop.locationAddress}` : ''}`)
+      .join('\n');
+
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: `PICC ${optMode === 'transit' ? 'Transit' : 'Driving'} Route - ${new Date().toLocaleDateString()}`,
+      details,
+    });
+
+    window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  }
 
   return (
-    <div className="min-h-[calc(100dvh-84px)] bg-[#e6e6e9]">
+    <div className="min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
       <MobileHeader
         title="Route"
         right={
           tab === 'saved' ? (
-            <button type="button" className="text-[14px]">Edit</button>
+            <button type="button" className="text-[24px]" onClick={() => setSavedEditing((value) => !value)}>
+              {savedEditing ? 'Done' : 'Edit'}
+            </button>
           ) : (
-            <button type="button" onClick={() => setShowAddModal(true)} aria-label="Add locations">
-              <Plus className="ml-auto h-7 w-7" />
+            <button type="button" className="grid h-10 w-10 place-items-center" onClick={() => setShowAddModal(true)} aria-label="Add location">
+              <Plus className="h-10 w-10" />
             </button>
           )
         }
@@ -245,108 +202,85 @@ export function RouteMobile() {
       </MobileHeader>
 
       {tab === 'current' ? (
-        <div className="pb-[152px]">
-          <div className="border-b border-[#c9cad0] px-4 py-3">
-            <SegmentedControl
-              value={travelMode}
-              onChange={(value) => setTravelMode(value as 'car' | 'bike' | 'transit')}
-              options={[
-                { value: 'car', label: 'Car' },
-                { value: 'bike', label: 'Bike' },
-                { value: 'transit', label: 'Transit' },
-              ]}
-            />
-
-            <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-              <select
-                value={startChoice}
-                onChange={(event) => setStartChoice(event.target.value)}
-                className="rounded-lg border border-[#c9cad0] bg-white px-3 py-2 text-[14px] text-[#3b3d44]"
-              >
-                {endpointOptions.map((option) => (
-                  <option key={`start-${option.value}`} value={option.value}>
-                    Start: {option.label}
-                  </option>
-                ))}
-              </select>
-              <button type="button" onClick={requestCurrentLocation} disabled={locating} className="inline-flex items-center gap-1 rounded-lg border border-[#c9cad0] bg-white px-3 py-2 text-[13px]">
-                {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <LocateFixed className="h-4 w-4" />}
-                {locating ? 'Capturing...' : 'Use Current'}
-              </button>
-            </div>
-
-            {missingCurrentLocation ? <p className="mt-2 text-[12px] text-[#b3261e]">Select &quot;Use Current&quot; to continue with current location.</p> : null}
-
-            <div className="mt-2">
-              <select
-                value={endChoice}
-                onChange={(event) => setEndChoice(event.target.value)}
-                className="w-full rounded-lg border border-[#c9cad0] bg-white px-3 py-2 text-[14px] text-[#3b3d44]"
-              >
-                {endpointOptions.map((option) => (
-                  <option key={`end-${option.value}`} value={option.value}>
-                    End: {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
+        <div className="pb-[172px]">
           {selectedStops.length === 0 ? (
-            <div className="px-8 py-10 text-center">
-              <h2 className="text-[34px] font-semibold text-[#5f5d5e]">Let&apos;s hit the road!</h2>
-              <p className="mt-3 text-[15px] leading-6 text-[#606066]">
-                Add accounts to build a route, then optimize for car, bike, or transit handoff.
-              </p>
-              <button onClick={() => setShowAddModal(true)} className="mt-6 w-full rounded-2xl bg-[#4f8edf] px-6 py-3 text-[16px] font-semibold text-white">
+            <div className="px-10 py-12 text-center">
+              <h2 className="text-[56px] font-semibold text-[#5f5d5e]">Let&apos;s hit the road!</h2>
+              <p className="mt-4 text-[22px] leading-8 text-[#606066]">Build your route by adding accounts, then optimize for driving or transit.</p>
+              <button onClick={() => setShowAddModal(true)} className="mt-8 w-full rounded-[38px] bg-[#4f8edf] px-6 py-4 text-[23px] font-semibold text-white">
                 + Add Location
               </button>
             </div>
           ) : (
             <>
-              <div className="border-b border-[#c9cad0] px-4 py-3">
-                <button onClick={() => setShowAddModal(true)} className="w-full rounded-2xl bg-[#4f8edf] px-6 py-3 text-[16px] font-semibold text-white">
+              <div className="border-b border-[#c9cad0] px-6 py-5">
+                <button onClick={() => setShowAddModal(true)} className="w-full rounded-[38px] bg-[#4f8edf] px-6 py-4 text-[23px] font-semibold text-white">
                   + Add Location
                 </button>
-                <p className="mt-2 text-center text-[13px] font-semibold text-[#595c62]">
-                  <Check className="mr-1 inline h-4 w-4" /> {selectedStops.length} stop{selectedStops.length === 1 ? '' : 's'} selected
+                <p className="mt-3 text-center text-[20px] font-semibold text-[#595c62]">
+                  <Check className="mr-2 inline h-6 w-6" /> Route Updated
                 </p>
+                <div className="mt-3">
+                  <SegmentedControl
+                    value={optMode}
+                    onChange={(value) => {
+                      setOptMode(value as RouteMode);
+                      routePlan.clearOptimizedRoute();
+                    }}
+                    options={MODE_OPTIONS}
+                  />
+                </div>
+                {optMode === 'transit' ? <p className="mt-2 text-center text-[14px] text-[#64666d]">Transit optimization uses route + transfer heuristics, then opens Google Transit directions.</p> : null}
               </div>
 
               <div className="border-b border-[#c7c8ce] px-4 py-2 text-[#6f7278]">
-                <p className="text-[12px]">{new Date().toLocaleDateString()}</p>
-                <p className="flex items-center justify-between text-[13px] font-semibold">
+                <p className="text-[16px]">{new Date().toLocaleDateString()}</p>
+                <p className="flex items-center justify-between text-[19px] font-semibold">
                   CURRENT ROUTE
-                  <span className="text-[#4f8edf]">{Math.max(0, Math.round((optimized?.totalDurationSeconds ?? 0) / 60))} min</span>
+                  <span className="text-[#4f8edf]">{formatDuration(totalDurationSeconds)} · {formatDistance(totalDistanceMeters)}</span>
                 </p>
               </div>
 
               {orderedStops.map((stop, index) => {
-                const leg = legs[index - 1];
-                const travelMinutes = leg ? Math.max(1, Math.round(leg.durationSeconds / 60)) : index === 0 ? 0 : 8;
+                const previousLeg = legs[index - 1];
+                const cumulativeTravelSeconds = legs.slice(0, Math.max(0, index)).reduce((sum, leg) => sum + leg.durationSeconds, 0);
                 const etaDate = new Date();
-                etaDate.setHours(9, 0, 0, 0);
-                etaDate.setMinutes(etaDate.getMinutes() + index * 35 + (index === 0 ? 0 : travelMinutes));
+                etaDate.setMinutes(etaDate.getMinutes() + Math.round(cumulativeTravelSeconds / 60));
                 const timeLabel = etaDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(' ', '');
 
                 return (
                   <div key={stop.id}>
-                    {index > 0 ? <p className="bg-[#d9d9dd] px-4 py-1 text-[12px] text-[#7a7d83]">Travel Time {travelMinutes} minutes</p> : null}
-                    <div className="grid grid-cols-[22px_28px_64px_56px_1fr_20px] items-center gap-2 border-b border-[#cbccd2] px-3 py-2.5">
-                      <GripHorizontal className="h-4 w-4 text-[#b8b9be]" />
-                      <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#41b64b] text-[12px] font-semibold text-[#2c7f31]">{index + 1}</span>
+                    {index > 0 ? (
+                      <p className="bg-[#d9d9dd] px-6 py-1 text-[16px] text-[#7a7d83]">
+                        Travel {formatDuration(previousLeg?.durationSeconds ?? 0)} · {formatDistance(previousLeg?.distanceMeters ?? 0)}
+                      </p>
+                    ) : null}
+                    <div className="grid grid-cols-[34px_38px_86px_74px_1fr_28px] items-center gap-2 border-b border-[#cbccd2] px-4 py-3">
+                      <GripHorizontal className="h-6 w-6 text-[#b8b9be]" />
+                      <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-[#41b64b] text-[18px] font-semibold text-[#2c7f31]">{index + 1}</span>
                       <div>
-                        <p className="text-[12px] font-semibold text-[#4d4f55]">{timeLabel}</p>
-                        <p className="text-[11px] text-[#979aa2]">Time</p>
+                        <p className="text-[17px] font-semibold text-[#4d4f55]">{timeLabel}</p>
+                        <p className="text-[14px] text-[#979aa2]">ETA</p>
                       </div>
                       <div>
-                        <p className="text-[12px] font-semibold text-[#4d4f55]">00:30</p>
-                        <p className="text-[11px] text-[#979aa2]">Length</p>
+                        <p className="text-[17px] font-semibold text-[#4d4f55]">{index === 0 ? 'Start' : formatDuration(previousLeg?.durationSeconds ?? 0)}</p>
+                        <p className="text-[14px] text-[#979aa2]">Leg</p>
                       </div>
-                      <button type="button" onClick={() => routePlan.removeStop(stop.id)} className="truncate text-left text-[15px] font-semibold text-[#3c3e44]">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/accounts?storeId=${encodeURIComponent(stop.id)}`)}
+                        className="truncate text-left text-[23px] font-semibold text-[#3c3e44]"
+                      >
                         {stop.name}
                       </button>
-                      <ChevronRight className="h-4 w-4 text-[#c1c2c8]" />
+                      <button
+                        type="button"
+                        aria-label={`Remove ${stop.name}`}
+                        className="grid h-8 w-8 place-items-center rounded-lg text-[#9da0a8]"
+                        onClick={() => routePlan.removeStop(stop.id)}
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -355,50 +289,47 @@ export function RouteMobile() {
           )}
         </div>
       ) : (
-        <SavedRoutesList />
+        <SavedRoutesList
+          editing={savedEditing}
+          onLoadRoute={() => {
+            setTab('current');
+            setSavedEditing(false);
+          }}
+        />
       )}
 
       {tab === 'current' ? (
-        <div className="fixed bottom-[84px] left-0 right-0 z-[2600]">
+        <div className="fixed bottom-[92px] left-0 right-0 z-[2600]">
           <div className="mx-auto grid max-w-[480px] grid-cols-5 border-t border-[#c4c5cc] bg-[#f3f3f6] py-2 text-[#5a95e7]">
-            <button onClick={launchGo} disabled={!hasEnoughPointsToLaunch} className="mx-2 rounded-2xl bg-[#3ac128] px-2 py-2 text-[15px] font-bold text-white disabled:opacity-50">
+            <button onClick={launchGo} className="mx-2 rounded-3xl bg-[#3ac128] px-2 py-2 text-[20px] font-bold text-white">
               GO
             </button>
+            <ActionIconButton label={optimizing ? '...' : 'optimize'} onClick={optimizeRoute} icon={<RotateCcw className="h-7 w-7" />} disabled={optimizing} />
             <ActionIconButton
-              label={optimizing ? 'optimizing...' : hasEnoughStopsToOptimize ? 'optimize' : 'add stops'}
-              onClick={optimizeRoute}
-              icon={optimizing ? <Loader2 className="h-5 w-5 animate-spin" /> : <RotateCcw className="h-5 w-5" />}
-              disabled={optimizing || !hasEnoughStopsToOptimize || missingCurrentLocation}
-            />
-            <ActionIconButton
-              label={selectedStops.length === 0 ? 'no route' : 'save'}
+              label="save"
               onClick={() => {
+                if (selectedStops.length === 0) {
+                  toast.error('Add at least 1 location before saving.');
+                  return;
+                }
                 const name = `Route ${new Date().toLocaleDateString()}`;
-                routePlan.saveCurrentRoute(name);
-                setSavedConfirmation(`Saved as ${name}`);
+                routePlan.saveCurrentRoute(name, {
+                  mode: optMode,
+                  optimizedRoute: activeOptimized,
+                });
                 toast.success('Route saved');
               }}
-              icon={<Save className="h-5 w-5" />}
-              disabled={selectedStops.length === 0}
+              icon={<Save className="h-7 w-7" />}
             />
             <ActionIconButton
-              label={selectedStops.length === 0 ? 'empty' : 'clear'}
+              label="clear"
               onClick={() => {
-                const shouldClear = window.confirm('Clear all stops from the current route?');
-                if (!shouldClear) return;
                 routePlan.clearStops();
-                routePlan.setOrderedStopIds([]);
-                setOptimized(null);
-                setSavedConfirmation(null);
-                toast.success('Route cleared');
               }}
-              icon={<X className="h-5 w-5" />}
-              disabled={selectedStops.length === 0}
+              icon={<X className="h-7 w-7" />}
             />
-            <ActionIconButton label="calendar" onClick={() => router.push('/calendar')} icon={<CalendarDays className="h-5 w-5" />} />
+            <ActionIconButton label="calendar" onClick={launchCalendarDraft} icon={<CalendarDays className="h-7 w-7" />} />
           </div>
-          {savedConfirmation ? <p className="bg-[#f3f3f6] px-4 pb-2 text-center text-[12px] text-[#2f7d34]">{savedConfirmation}</p> : null}
-          {!hasEnoughPointsToLaunch ? <p className="bg-[#f3f3f6] px-4 pb-2 text-center text-[12px] text-[#6a6d74]">Add at least 2 route points to enable GO.</p> : null}
         </div>
       ) : null}
 
@@ -416,29 +347,55 @@ export function RouteMobile() {
   );
 }
 
-function SavedRoutesList() {
+function SavedRoutesList({ editing, onLoadRoute }: { editing: boolean; onLoadRoute: () => void }) {
   const routePlan = useRoutePlan();
+  const [search, setSearch] = useState('');
+
+  const routes = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return routePlan.savedRoutes;
+    return routePlan.savedRoutes.filter((route) => route.name.toLowerCase().includes(q));
+  }, [routePlan.savedRoutes, search]);
 
   if (routePlan.savedRoutes.length === 0) {
-    return <p className="px-6 py-8 text-[14px] text-[#6f7178]">No saved routes yet.</p>;
+    return <p className="px-6 py-8 text-[22px] text-[#6f7178]">No saved routes yet.</p>;
   }
 
   return (
     <div className="pb-28 pt-3">
       <div className="px-4">
-        <MobileSearch value="" onChange={() => {}} placeholder="Search Routes" />
+        <MobileSearch value={search} onChange={setSearch} placeholder="Search Routes" />
       </div>
       <div className="mt-2 border-t border-[#c9cad0]">
-        {routePlan.savedRoutes.map((route) => (
-          <button key={route.id} onClick={() => routePlan.loadSavedRoute(route.id)} className="grid w-full grid-cols-[1fr_24px] items-center border-b border-[#c9cad0] px-4 py-3 text-left">
-            <div>
-              <p className="text-[15px] text-[#3b3d44]">{route.name}</p>
-              <p className="text-[13px] text-[#8f9299]">{new Date(route.createdAt).toLocaleDateString()}</p>
-              <p className="text-[13px] text-[#6f7278]">Bryce Johnson</p>
-            </div>
-            <ChevronRight className="h-6 w-6 text-[#c3c5cc]" />
-          </button>
+        {routes.map((route) => (
+          <div key={route.id} className="grid grid-cols-[1fr_40px] items-center border-b border-[#c9cad0] px-2">
+            <button
+              type="button"
+              onClick={() => {
+                routePlan.loadSavedRoute(route.id);
+                onLoadRoute();
+              }}
+              className="px-4 py-4 text-left"
+            >
+              <p className="text-[23px] text-[#3b3d44]">{route.name}</p>
+              <p className="text-[20px] text-[#8f9299]">{new Date(route.createdAt).toLocaleDateString()}</p>
+              <p className="text-[16px] text-[#6f7278]">{route.mode === 'transit' ? 'Transit' : route.mode === 'bike' ? 'Bike' : 'Drive'}</p>
+            </button>
+            {editing ? (
+              <button
+                type="button"
+                aria-label={`Delete ${route.name}`}
+                className="grid h-10 w-10 place-items-center rounded-xl text-[#c14a4a]"
+                onClick={() => routePlan.deleteSavedRoute(route.id)}
+              >
+                <Trash2 className="h-6 w-6" />
+              </button>
+            ) : (
+              <ChevronRight className="h-8 w-8 justify-self-center text-[#c3c5cc]" />
+            )}
+          </div>
         ))}
+        {routes.length === 0 ? <p className="px-6 py-6 text-[19px] text-[#7e8189]">No routes match your search.</p> : null}
       </div>
     </div>
   );
@@ -459,12 +416,16 @@ function AddLocationModal({
   selectedStopIds: string[];
   onToggleStop: (id: string) => void;
 }) {
+  const [mode, setMode] = useState<'accounts' | 'quick-stop'>('accounts');
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return stores;
-    return stores.filter((store) => store.name.toLowerCase().includes(q));
+    return stores.filter((store) => {
+      const haystack = [store.name, store.locationAddress ?? '', store.city ?? '', store.state ?? '', store.status].join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
   }, [stores, search]);
 
   const groups = useMemo(() => {
@@ -481,21 +442,33 @@ function AddLocationModal({
   return (
     <div className="fixed inset-0 z-[5200] bg-black/35">
       <div className="mx-auto h-full max-w-[480px] bg-[#e6e6e9]">
-        <div className="bg-[#c93412] px-4 py-3 text-white">
-          <div className="relative flex items-center justify-between">
-            <button onClick={onClose} className="min-w-14 text-left" aria-label="Close">
-              <X className="h-6 w-6" />
-            </button>
-            <h1 className="absolute left-1/2 -translate-x-1/2 text-[18px] font-semibold">Add Locations</h1>
-            <span className="min-w-14 text-right text-[13px] text-white/75">Route</span>
+        <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
+          <div className="mb-2 flex items-center justify-between text-sm opacity-90">
+            <span className="font-semibold">12:18</span>
+            <span className="font-semibold">100%</span>
           </div>
+          <div className="relative flex items-center justify-between py-2">
+            <button onClick={onClose} className="min-w-14 text-left" aria-label="Close">
+              <X className="h-8 w-8" />
+            </button>
+            <h1 className="absolute left-1/2 -translate-x-1/2 text-[28px] font-semibold">Add Locations</h1>
+            <span className="min-w-14 text-right text-[24px] text-white/45">Add to route</span>
+          </div>
+          <SegmentedControl
+            value={mode}
+            onChange={(value) => setMode(value as 'accounts' | 'quick-stop')}
+            options={[
+              { value: 'accounts', label: 'Accounts' },
+              { value: 'quick-stop', label: 'Quick Stop' },
+            ]}
+          />
         </div>
 
         <div className="px-4 py-3">
           <MobileSearch value={search} onChange={onSearchChange} placeholder="Search Locations" />
         </div>
 
-        <div className="relative h-[calc(100dvh-220px)] overflow-auto border-t border-[#c8c9ce] pb-8">
+        <div className="relative h-[calc(100vh-320px)] overflow-auto border-t border-[#c8c9ce] pb-8">
           {groups.map(([letter, list]) => (
             <section
               key={letter}
@@ -503,15 +476,15 @@ function AddLocationModal({
                 sectionRefs.current[letter] = element;
               }}
             >
-              <div className="border-b border-[#c6c7cb] px-4 py-1.5 text-[14px] font-semibold text-[#8a8d95]">{letter}</div>
+              <div className="border-b border-[#c6c7cb] px-4 py-2 text-[38px] text-[#8a8d95]">{letter}</div>
               {list.map((store) => {
                 const selected = selectedStopIds.includes(store.id);
                 return (
-                  <button key={store.id} onClick={() => onToggleStop(store.id)} className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-4 py-2.5 text-left">
-                    <span className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 text-xs', selected ? 'border-[#49b84c] text-[#49b84c]' : 'border-[#b7b9bf] text-transparent')}>
+                  <button key={store.id} onClick={() => onToggleStop(store.id)} className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-4 py-3 text-left">
+                    <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 text-lg', selected ? 'border-[#49b84c] text-[#49b84c]' : 'border-[#b7b9bf] text-transparent')}>
                       ✓
                     </span>
-                    <span className="truncate text-[15px] text-[#15171c]">{store.name}</span>
+                    <span className="truncate text-[22px] text-[#15171c]">{store.name}</span>
                   </button>
                 );
               })}
@@ -527,11 +500,7 @@ function AddLocationModal({
 
 function ActionIconButton({ label, icon, onClick, disabled = false }: { label: string; icon: ReactNode; onClick: () => void; disabled?: boolean }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex min-h-[52px] flex-col items-center justify-center gap-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
-      disabled={disabled}
-    >
+    <button onClick={onClick} className={cn('flex flex-col items-center justify-center gap-1 text-[14px]', disabled ? 'opacity-50' : '')} disabled={disabled}>
       {icon}
       <span>{label}</span>
     </button>
