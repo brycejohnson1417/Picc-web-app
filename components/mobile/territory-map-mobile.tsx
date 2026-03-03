@@ -18,7 +18,16 @@ interface TerritoryMapMobileProps {
 const FALLBACK_CENTER: LatLngExpression = [39.8283, -98.5795];
 
 function isFiniteLatLng(lat: unknown, lng: unknown) {
-  return typeof lat === 'number' && Number.isFinite(lat) && typeof lng === 'number' && Number.isFinite(lng);
+  return (
+    typeof lat === 'number' &&
+    Number.isFinite(lat) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    typeof lng === 'number' &&
+    Number.isFinite(lng) &&
+    lng >= -180 &&
+    lng <= 180
+  );
 }
 
 export function TerritoryMapMobile({ stores, selectedStopIds, orderedStopIds, focusedStoreId, routeCoordinates, onSelectStore }: TerritoryMapMobileProps) {
