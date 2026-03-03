@@ -12,6 +12,7 @@
     "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "eslint app components lib prisma --ext .ts,.tsx",
+    "pretypecheck": "node -e \"require('node:fs').rmSync('.next/types',{ recursive: true, force: true })\"",
     "typecheck": "tsc --noEmit",
     "perf:collect": "lhci collect --config=.lighthouserc.json",
     "perf:assert": "lhci assert --config=.lighthouserc.json",
