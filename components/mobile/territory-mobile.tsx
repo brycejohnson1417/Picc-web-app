@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { ListFilter, MapPinned, MessageCircleMore, Navigation, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
@@ -93,6 +94,7 @@ export function TerritoryMobile() {
   }, [stores]);
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
+  const primaryFocusTargetId = routePlan.selectedStopIds[0] ?? stores[0]?.id ?? null;
 
   return (
     <div className="relative min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
@@ -124,7 +126,17 @@ export function TerritoryMobile() {
           />
 
           <div className="absolute left-3 top-6 z-[1500] flex flex-col gap-3">
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow">
+            <button
+              type="button"
+              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              onClick={() => {
+                if (primaryFocusTargetId) {
+                  setFocusedId(primaryFocusTargetId);
+                  return;
+                }
+                toast.info('No mapped account yet to center.');
+              }}
+            >
               <MapPinned className="h-6 w-6 text-[#7f828a]" />
             </button>
             <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setRefreshNonce((v) => v + 1)}>
@@ -133,13 +145,21 @@ export function TerritoryMobile() {
           </div>
 
           <div className="absolute right-3 top-6 z-[1500] flex flex-col gap-3">
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setView('list')}>
+            <button type="button" className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setView('list')}>
               <Search className="h-6 w-6 text-[#7f828a]" />
             </button>
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow">
+            <button
+              type="button"
+              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              onClick={() => toast.info('Filters are coming soon in the mobile experience.')}
+            >
               <ListFilter className="h-6 w-6 text-[#7f828a]" />
             </button>
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow">
+            <button
+              type="button"
+              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              onClick={() => toast.info('Messaging shortcut is available in conversations.')}
+            >
               <MessageCircleMore className="h-6 w-6 text-[#d25a3f]" />
             </button>
           </div>

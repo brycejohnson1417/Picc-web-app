@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, Check, ChevronRight, GripHorizontal, Plus, RotateCcw, Save, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, GripHorizontal, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -24,6 +24,8 @@ export function RouteMobile() {
   const [tab, setTab] = useState<'current' | 'saved'>('current');
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState('');
+  const [savedRouteSearch, setSavedRouteSearch] = useState('');
+  const [isEditingSavedRoutes, setIsEditingSavedRoutes] = useState(false);
   const [optMode] = useState<RouteMode>('car');
   const [optimizing, setOptimizing] = useState(false);
   const [optimized, setOptimized] = useState<TerritoryOptimizedRouteResponse | null>(null);
@@ -109,12 +111,25 @@ export function RouteMobile() {
       <MobileHeader
         title="Route"
         right={
-          tab === 'saved' ? <button className="text-[24px]">Edit</button> : <Plus className="ml-auto h-10 w-10" />
+          tab === 'saved' ? (
+            <button type="button" onClick={() => setIsEditingSavedRoutes((value) => !value)} className="text-[24px]">
+              {isEditingSavedRoutes ? 'Done' : 'Edit'}
+            </button>
+          ) : (
+            <button type="button" onClick={() => setShowAddModal(true)}>
+              <Plus className="ml-auto h-10 w-10" />
+            </button>
+          )
         }
       >
         <SegmentedControl
           value={tab}
-          onChange={(value) => setTab(value as 'current' | 'saved')}
+          onChange={(value) => {
+            setTab(value as 'current' | 'saved');
+            if (value !== 'saved') {
+              setIsEditingSavedRoutes(false);
+            }
+          }}
           options={[
             { value: 'current', label: 'Current Route' },
             { value: 'saved', label: 'Saved Routes' },
@@ -187,7 +202,12 @@ export function RouteMobile() {
           )}
         </div>
       ) : (
-        <SavedRoutesList />
+        <SavedRoutesList
+          search={savedRouteSearch}
+          onSearchChange={setSavedRouteSearch}
+          isEditing={isEditingSavedRoutes}
+          onExitEditMode={() => setIsEditingSavedRoutes(false)}
+        />
       )}
 
       {tab === 'current' ? (
@@ -234,8 +254,27 @@ export function RouteMobile() {
   );
 }
 
-function SavedRoutesList() {
+function SavedRoutesList({
+  search,
+  onSearchChange,
+  isEditing,
+  onExitEditMode,
+}: {
+  search: string;
+  onSearchChange: (value: string) => void;
+  isEditing: boolean;
+  onExitEditMode: () => void;
+}) {
   const routePlan = useRoutePlan();
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredRoutes = useMemo(
+    () =>
+      routePlan.savedRoutes.filter((route) => {
+        if (!normalizedSearch) return true;
+        return route.name.toLowerCase().includes(normalizedSearch);
+      }),
+    [normalizedSearch, routePlan.savedRoutes],
+  );
 
   if (routePlan.savedRoutes.length === 0) {
     return <p className="px-6 py-8 text-[22px] text-[#6f7178]">No saved routes yet.</p>;
@@ -244,18 +283,41 @@ function SavedRoutesList() {
   return (
     <div className="pb-28 pt-3">
       <div className="px-4">
-        <MobileSearch value="" onChange={() => {}} placeholder="Search Routes" />
+        <MobileSearch value={search} onChange={onSearchChange} placeholder="Search Routes" />
       </div>
       <div className="mt-2 border-t border-[#c9cad0]">
-        {routePlan.savedRoutes.map((route) => (
-          <button key={route.id} onClick={() => routePlan.loadSavedRoute(route.id)} className="grid w-full grid-cols-[1fr_24px] items-center border-b border-[#c9cad0] px-6 py-4 text-left">
-            <div>
+        {filteredRoutes.length === 0 ? <p className="px-6 py-8 text-[22px] text-[#6f7178]">No saved routes match this search.</p> : null}
+        {filteredRoutes.map((route) => (
+          <div key={route.id} className="grid w-full grid-cols-[1fr_24px] items-center border-b border-[#c9cad0] px-6 py-4">
+            <button
+              type="button"
+              onClick={() => {
+                routePlan.loadSavedRoute(route.id);
+                onExitEditMode();
+              }}
+              className="w-full text-left"
+              disabled={isEditing}
+            >
               <p className="text-[23px] text-[#3b3d44]">{route.name}</p>
               <p className="text-[20px] text-[#8f9299]">{new Date(route.createdAt).toLocaleDateString()}</p>
-              <p className="text-[20px] text-[#6f7278]">Bryce Johnson</p>
-            </div>
-            <ChevronRight className="h-8 w-8 text-[#c3c5cc]" />
-          </button>
+              <p className="text-[20px] text-[#6f7278]">Saved route</p>
+            </button>
+            <button
+              type="button"
+              className="grid place-items-center text-[#c93412]"
+              onClick={() => {
+                if (isEditing) {
+                  routePlan.deleteSavedRoute(route.id);
+                  toast.success(`Removed ${route.name}`);
+                  return;
+                }
+                routePlan.loadSavedRoute(route.id);
+                onExitEditMode();
+              }}
+            >
+              {isEditing ? <Trash2 className="h-6 w-6" /> : <ChevronRight className="h-8 w-8 text-[#c3c5cc]" />}
+            </button>
+          </div>
         ))}
       </div>
     </div>
