@@ -91,7 +91,8 @@ export function TerritoryMobile() {
     return ids.map((id) => storeById.get(id)).filter((store): store is TerritoryStorePin => Boolean(store));
   }, [routePlan.orderedStopIds, routePlan.selectedStopIds, storeById]);
 
-  const routeCoordinates = orderedStops.map((stop) => [stop.lng, stop.lat] as [number, number]);
+  const routeCoordinates = routePlan.optimizedRoute?.geometry?.coordinates ?? orderedStops.map((stop) => [stop.lng, stop.lat] as [number, number]);
+  const hasRoadRouteGeometry = Boolean(routePlan.optimizedRoute?.geometry?.coordinates?.length);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, TerritoryStorePin[]>();
@@ -156,6 +157,14 @@ export function TerritoryMobile() {
             routeCoordinates={routeCoordinates}
             onSelectStore={setFocusedId}
           />
+
+          {routePlan.selectedStopIds.length >= 2 ? (
+            <div className="absolute bottom-4 left-3 z-[1500] rounded-xl bg-black/70 px-3 py-2 text-[13px] text-white">
+              {hasRoadRouteGeometry
+                ? `${routePlan.optimizedRoute?.mode === 'transit' ? 'Transit' : routePlan.optimizedRoute?.mode === 'bike' ? 'Bike' : 'Driving'} route on roads`
+                : 'Add 2+ stops and tap Optimize in Route view'}
+            </div>
+          ) : null}
 
           <div className="absolute left-3 top-6 z-[1500] flex flex-col gap-3">
             <button

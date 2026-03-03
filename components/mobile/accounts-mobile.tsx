@@ -3,6 +3,7 @@
 import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
@@ -19,11 +20,14 @@ function firstLetter(name: string) {
 }
 
 export function AccountsMobile() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [scope, setScope] = useState<'all' | 'recent' | 'follow-ups'>('all');
   const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const unresolvedRouteStoreIdRef = useRef<string | null>(null);
   const routePlan = useRoutePlan();
 
   useEffect(() => {
@@ -50,8 +54,9 @@ export function AccountsMobile() {
     placeholderData: (previousData) => previousData,
   });
 
+  const allStores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
   const stores = useMemo(() => {
-    const source = storesQuery.data?.stores ?? [];
+    const source = allStores;
     if (scope === 'all') return source;
     if (scope === 'recent') {
       return source.filter((store) => {
@@ -60,9 +65,26 @@ export function AccountsMobile() {
       });
     }
     return source.filter((store) => (store.daysOverdue ?? 0) > 0 || /lead|proposal|in progress/i.test(store.status));
-  }, [storesQuery.data?.stores, scope]);
+  }, [allStores, scope]);
 
-  const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
+  const allStoreById = useMemo(() => new Map(allStores.map((store) => [store.id, store])), [allStores]);
+
+  useEffect(() => {
+    const routeStoreId = searchParams.get('storeId');
+    if (!routeStoreId) return;
+
+    setScope('all');
+    if (allStoreById.has(routeStoreId)) {
+      setDetailStoreId(routeStoreId);
+      unresolvedRouteStoreIdRef.current = null;
+      return;
+    }
+
+    if (allStores.length > 0 && unresolvedRouteStoreIdRef.current !== routeStoreId) {
+      toast.error('Selected route account was not found in accounts list.');
+      unresolvedRouteStoreIdRef.current = routeStoreId;
+    }
+  }, [allStoreById, allStores.length, searchParams]);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, TerritoryStorePin[]>();
@@ -126,8 +148,13 @@ export function AccountsMobile() {
       <AlphabetRail onSelect={(letter) => sectionRefs.current[letter]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
 
       <AccountDetailSheet
-        store={detailStoreId ? storeById.get(detailStoreId) ?? null : null}
-        onClose={() => setDetailStoreId(null)}
+        store={detailStoreId ? allStoreById.get(detailStoreId) ?? null : null}
+        onClose={() => {
+          setDetailStoreId(null);
+          if (searchParams.get('storeId')) {
+            router.replace('/accounts');
+          }
+        }}
         onAddToRoute={(id) => routePlan.toggleStop(id)}
         routeSelected={detailStoreId ? routePlan.selectedStopIds.includes(detailStoreId) : false}
       />

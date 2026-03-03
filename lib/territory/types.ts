@@ -1,4 +1,4 @@
-export type RouteMode = 'car' | 'bike';
+export type RouteMode = 'car' | 'bike' | 'transit';
 
 export interface TerritoryStorePin {
   id: string;
@@ -85,6 +85,8 @@ export interface TerritoryOptimizedRouteResponse {
   totalDistanceMeters: number;
   totalDurationSeconds: number;
   legs: TerritoryOptimizedLeg[];
+  estimationModel?: 'osrm' | 'transit-heuristic';
+  modeLabel?: string;
   geometry: {
     type: 'LineString';
     coordinates: [number, number][];

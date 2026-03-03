@@ -1,18 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { RouteMode, TerritoryOptimizedRouteResponse } from '@/lib/territory/types';
 
 export interface SavedRoute {
   id: string;
   name: string;
   stopIds: string[];
   createdAt: string;
+  mode?: RouteMode;
+  optimizedRoute?: TerritoryOptimizedRouteResponse | null;
 }
 
 interface RoutePlanStorage {
   selectedStopIds: string[];
   orderedStopIds: string[];
   savedRoutes: SavedRoute[];
+  optimizedRoute: TerritoryOptimizedRouteResponse | null;
   updatedAt: string;
 }
 
@@ -23,11 +27,39 @@ const INITIAL_STATE: RoutePlanStorage = {
   selectedStopIds: [],
   orderedStopIds: [],
   savedRoutes: [],
+  optimizedRoute: null,
   updatedAt: new Date(0).toISOString(),
 };
 
 function isValidStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function isValidRouteMode(value: unknown): value is RouteMode {
+  return value === 'car' || value === 'bike' || value === 'transit';
+}
+
+function isValidGeometry(value: unknown): value is NonNullable<TerritoryOptimizedRouteResponse['geometry']> {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as { type?: unknown; coordinates?: unknown };
+  return (
+    candidate.type === 'LineString' &&
+    Array.isArray(candidate.coordinates) &&
+    candidate.coordinates.every(
+      (point) => Array.isArray(point) && point.length === 2 && Number.isFinite(point[0]) && Number.isFinite(point[1]),
+    )
+  );
+}
+
+function isValidOptimizedRoute(value: unknown): value is TerritoryOptimizedRouteResponse {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as TerritoryOptimizedRouteResponse;
+  if (!isValidRouteMode(candidate.mode)) return false;
+  if (!isValidStringArray(candidate.orderedStopIds)) return false;
+  if (!Array.isArray(candidate.legs)) return false;
+  if (!Number.isFinite(candidate.totalDistanceMeters) || !Number.isFinite(candidate.totalDurationSeconds)) return false;
+  if (candidate.geometry !== null && !isValidGeometry(candidate.geometry)) return false;
+  return true;
 }
 
 function readStorage(): RoutePlanStorage {
@@ -44,11 +76,14 @@ function readStorage(): RoutePlanStorage {
     const parsed = JSON.parse(raw) as Partial<RoutePlanStorage>;
     const selectedStopIds = isValidStringArray(parsed.selectedStopIds) ? parsed.selectedStopIds : [];
     const orderedStopIds = isValidStringArray(parsed.orderedStopIds) ? parsed.orderedStopIds : [];
+    const optimizedRoute = isValidOptimizedRoute(parsed.optimizedRoute) ? parsed.optimizedRoute : null;
     const savedRoutes = Array.isArray(parsed.savedRoutes)
       ? parsed.savedRoutes.filter((route): route is SavedRoute => {
           if (!route || typeof route !== 'object') return false;
           const candidate = route as SavedRoute;
-          return typeof candidate.id === 'string' && typeof candidate.name === 'string' && isValidStringArray(candidate.stopIds) && typeof candidate.createdAt === 'string';
+          const modeIsValid = candidate.mode === undefined || isValidRouteMode(candidate.mode);
+          const optimizedRouteIsValid = candidate.optimizedRoute === undefined || candidate.optimizedRoute === null || isValidOptimizedRoute(candidate.optimizedRoute);
+          return typeof candidate.id === 'string' && typeof candidate.name === 'string' && isValidStringArray(candidate.stopIds) && typeof candidate.createdAt === 'string' && modeIsValid && optimizedRouteIsValid;
         })
       : [];
 
@@ -56,6 +91,7 @@ function readStorage(): RoutePlanStorage {
       selectedStopIds,
       orderedStopIds,
       savedRoutes,
+      optimizedRoute,
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
     };
   } catch {
@@ -97,6 +133,10 @@ export function useRoutePlan() {
       selectedStopIds: uniqueIds(next.selectedStopIds),
       orderedStopIds: uniqueIds(next.orderedStopIds.filter((id) => next.selectedStopIds.includes(id))),
       savedRoutes: next.savedRoutes,
+      optimizedRoute:
+        next.optimizedRoute && next.optimizedRoute.orderedStopIds.every((id) => next.selectedStopIds.includes(id))
+          ? next.optimizedRoute
+          : null,
       updatedAt: new Date().toISOString(),
     };
     writeStorage(normalized);
@@ -114,6 +154,7 @@ export function useRoutePlan() {
     selectedStopIds: state.selectedStopIds,
     orderedStopIds,
     savedRoutes: state.savedRoutes,
+    optimizedRoute: state.optimizedRoute,
     selectedCount: state.selectedStopIds.length,
     toggleStop: (stopId: string) =>
       updateState((prev) => {
@@ -122,6 +163,7 @@ export function useRoutePlan() {
           ...prev,
           selectedStopIds: exists ? prev.selectedStopIds.filter((id) => id !== stopId) : [...prev.selectedStopIds, stopId],
           orderedStopIds: exists ? prev.orderedStopIds.filter((id) => id !== stopId) : prev.orderedStopIds,
+          optimizedRoute: null,
         };
       }),
     removeStop: (stopId: string) =>
@@ -129,19 +171,42 @@ export function useRoutePlan() {
         ...prev,
         selectedStopIds: prev.selectedStopIds.filter((id) => id !== stopId),
         orderedStopIds: prev.orderedStopIds.filter((id) => id !== stopId),
+        optimizedRoute: null,
       })),
     clearStops: () =>
       updateState((prev) => ({
         ...prev,
         selectedStopIds: [],
         orderedStopIds: [],
+        optimizedRoute: null,
       })),
     setOrderedStopIds: (orderedIds: string[]) =>
       updateState((prev) => ({
         ...prev,
         orderedStopIds: orderedIds.filter((id) => prev.selectedStopIds.includes(id)),
+        optimizedRoute: null,
       })),
-    saveCurrentRoute: (name: string) =>
+    setOptimizedRoute: (optimizedRoute: TerritoryOptimizedRouteResponse | null) =>
+      updateState((prev) => ({
+        ...prev,
+        orderedStopIds: optimizedRoute ? optimizedRoute.orderedStopIds.filter((id) => prev.selectedStopIds.includes(id)) : prev.orderedStopIds,
+        optimizedRoute:
+          optimizedRoute && optimizedRoute.orderedStopIds.every((id) => prev.selectedStopIds.includes(id))
+            ? optimizedRoute
+            : null,
+      })),
+    clearOptimizedRoute: () =>
+      updateState((prev) => ({
+        ...prev,
+        optimizedRoute: null,
+      })),
+    saveCurrentRoute: (
+      name: string,
+      options?: {
+        mode?: RouteMode;
+        optimizedRoute?: TerritoryOptimizedRouteResponse | null;
+      },
+    ) =>
       updateState((prev) => ({
         ...prev,
         savedRoutes: [
@@ -150,6 +215,8 @@ export function useRoutePlan() {
             name: name.trim() || `Route ${new Date().toLocaleDateString()}`,
             stopIds: prev.orderedStopIds.length > 0 ? prev.orderedStopIds : prev.selectedStopIds,
             createdAt: new Date().toISOString(),
+            mode: options?.mode,
+            optimizedRoute: options?.optimizedRoute ?? prev.optimizedRoute,
           },
           ...prev.savedRoutes,
         ].slice(0, 100),
@@ -162,6 +229,7 @@ export function useRoutePlan() {
           ...prev,
           selectedStopIds: route.stopIds,
           orderedStopIds: route.stopIds,
+          optimizedRoute: route.optimizedRoute ?? null,
         };
       }),
     deleteSavedRoute: (routeId: string) =>

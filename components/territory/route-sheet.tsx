@@ -1,6 +1,6 @@
 'use client';
 
-import { Bike, Car, ExternalLink, Navigation2, Trash2, Train } from 'lucide-react';
+import { Car, ExternalLink, Navigation2, Trash2, Train } from 'lucide-react';
 import { Button } from '@/components/ui';
 import type { RouteMode, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
@@ -15,7 +15,7 @@ interface RouteSheetProps {
   totalDistanceMeters: number;
   onSetMode: (mode: RouteMode) => void;
   onOptimize: () => void;
-  onLaunchTransit: () => void;
+  onLaunchDirections: () => void;
   onRemoveStop: (storeId: string) => void;
   onClearStops: () => void;
 }
@@ -29,7 +29,7 @@ export function RouteSheet({
   totalDistanceMeters,
   onSetMode,
   onOptimize,
-  onLaunchTransit,
+  onLaunchDirections,
   onRemoveStop,
   onClearStops,
 }: RouteSheetProps) {
@@ -50,11 +50,10 @@ export function RouteSheet({
 
       <div className="flex gap-2">
         <ModeButton icon={Car} label="Car" active={mode === 'car'} onClick={() => onSetMode('car')} />
-        <ModeButton icon={Bike} label="Bike" active={mode === 'bike'} onClick={() => onSetMode('bike')} />
-        <Button variant="outline" size="sm" className="h-9" onClick={onLaunchTransit} disabled={selectedStops.length < 2}>
-          <Train className="mr-1 h-4 w-4" />
-          Transit
-          <ExternalLink className="ml-1 h-3.5 w-3.5" />
+        <ModeButton icon={Train} label="Transit" active={mode === 'transit'} onClick={() => onSetMode('transit')} />
+        <Button variant="outline" size="sm" className="h-9" onClick={onLaunchDirections} disabled={selectedStops.length < 2}>
+          <ExternalLink className="mr-1 h-3.5 w-3.5" />
+          Open Maps
         </Button>
       </div>
 
@@ -71,7 +70,7 @@ export function RouteSheet({
 
       <Button className="h-10 w-full" onClick={onOptimize} disabled={selectedStops.length < 2 || optimizing}>
         <Navigation2 className="mr-2 h-4 w-4" />
-        {optimizing ? 'Optimizing...' : `Optimize ${mode === 'car' ? 'Car' : 'Bike'} Route`}
+        {optimizing ? 'Optimizing...' : `Optimize ${mode === 'transit' ? 'Transit' : mode === 'bike' ? 'Bike' : 'Car'} Route`}
       </Button>
 
       <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
