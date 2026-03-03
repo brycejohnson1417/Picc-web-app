@@ -235,7 +235,20 @@ export function TerritoryClient() {
         </div>
 
         <div className="absolute right-3 top-[12.6rem] z-[1000]">
-          <Button variant="secondary" size="sm" onClick={() => setRefreshNonce((value) => value + 1)} disabled={storesQuery.isFetching}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={async () => {
+              setRefreshNonce((value) => value + 1);
+              const result = await storesQuery.refetch();
+              if (result.error) {
+                toast.error(result.error instanceof Error ? result.error.message : 'Refresh failed');
+                return;
+              }
+              toast.success('Territory data refreshed');
+            }}
+            disabled={storesQuery.isFetching}
+          >
             {storesQuery.isFetching ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
             {storesQuery.isFetching ? 'Refreshing...' : 'Refresh'}
           </Button>
