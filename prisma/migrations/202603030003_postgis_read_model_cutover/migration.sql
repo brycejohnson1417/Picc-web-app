@@ -1,15 +1,42 @@
 -- PostGIS full-cutover foundation
 CREATE EXTENSION IF NOT EXISTS postgis;
 
-ALTER TABLE "Account"
-  ADD COLUMN "geoLat" DOUBLE PRECISION,
-  ADD COLUMN "geoLng" DOUBLE PRECISION,
-  ADD COLUMN "geoPoint" geometry(Point,4326);
+-- Fresh CI databases do not include the legacy base schema migrations.
+-- Create the minimal FK target table only when absent so this migration can apply.
+CREATE TABLE IF NOT EXISTS "OrganizationWorkspace" (
+  "id" TEXT NOT NULL,
+  CONSTRAINT "OrganizationWorkspace_pkey" PRIMARY KEY ("id")
+);
 
-ALTER TABLE "Contact"
-  ADD COLUMN "geoLat" DOUBLE PRECISION,
-  ADD COLUMN "geoLng" DOUBLE PRECISION,
-  ADD COLUMN "geoPoint" geometry(Point,4326);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'Account'
+  ) THEN
+    ALTER TABLE "Account"
+      ADD COLUMN IF NOT EXISTS "geoLat" DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS "geoLng" DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS "geoPoint" geometry(Point,4326);
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'Contact'
+  ) THEN
+    ALTER TABLE "Contact"
+      ADD COLUMN IF NOT EXISTS "geoLat" DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS "geoLng" DOUBLE PRECISION,
+      ADD COLUMN IF NOT EXISTS "geoPoint" geometry(Point,4326);
+  END IF;
+END
+$$;
 
 CREATE TABLE "Territory" (
   "id" TEXT NOT NULL,
@@ -121,12 +148,33 @@ CREATE INDEX "TerritoryStoreReadModel_orgId_statusKey_idx" ON "TerritoryStoreRea
 CREATE INDEX "TerritoryStoreReadModel_orgId_followUpDate_idx" ON "TerritoryStoreReadModel"("orgId", "followUpDate");
 CREATE INDEX "TerritoryFilterPreset_orgId_ownerEmail_updatedAt_idx" ON "TerritoryFilterPreset"("orgId", "ownerEmail", "updatedAt");
 
-CREATE INDEX "Account_geoLat_geoLng_idx" ON "Account"("geoLat", "geoLng");
-CREATE INDEX "Contact_geoLat_geoLng_idx" ON "Contact"("geoLat", "geoLng");
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'Account'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS "Account_geoLat_geoLng_idx" ON "Account"("geoLat", "geoLng");
+    CREATE INDEX IF NOT EXISTS "Account_gix" ON "Account" USING GIST ("geoPoint");
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'Contact'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS "Contact_geoLat_geoLng_idx" ON "Contact"("geoLat", "geoLng");
+    CREATE INDEX IF NOT EXISTS "Contact_gix" ON "Contact" USING GIST ("geoPoint");
+  END IF;
+END
+$$;
 
 CREATE INDEX "Territory_gix" ON "Territory" USING GIST ("geometry");
 CREATE INDEX "SalesRoute_gix" ON "SalesRoute" USING GIST ("geometry");
 CREATE INDEX "CheckIn_gix" ON "CheckIn" USING GIST ("geoPoint");
 CREATE INDEX "TerritoryStoreReadModel_gix" ON "TerritoryStoreReadModel" USING GIST ("geoPoint");
-CREATE INDEX "Account_gix" ON "Account" USING GIST ("geoPoint");
-CREATE INDEX "Contact_gix" ON "Contact" USING GIST ("geoPoint");
