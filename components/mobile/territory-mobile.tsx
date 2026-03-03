@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { ListFilter, MapPinned, MessageCircleMore, Navigation, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
@@ -35,6 +36,7 @@ export function TerritoryMobile() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [showRouteOnly, setShowRouteOnly] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
@@ -64,15 +66,25 @@ export function TerritoryMobile() {
 
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
+  const displayedStores = useMemo(() => {
+    if (!showRouteOnly) return stores;
+    return stores.filter((store) => routePlan.selectedStopIds.includes(store.id));
+  }, [showRouteOnly, stores, routePlan.selectedStopIds]);
+
+  useEffect(() => {
+    if (showRouteOnly && routePlan.selectedStopIds.length === 0) {
+      setShowRouteOnly(false);
+    }
+  }, [showRouteOnly, routePlan.selectedStopIds.length]);
 
   const focusedStore = useMemo(() => {
-    if (!stores.length) return null;
+    if (!displayedStores.length) return null;
     if (focusedId) {
       const focused = storeById.get(focusedId);
-      if (focused) return focused;
+      if (focused && (!showRouteOnly || routePlan.selectedStopIds.includes(focused.id))) return focused;
     }
-    return stores[0];
-  }, [stores, focusedId, storeById]);
+    return displayedStores[0];
+  }, [displayedStores, focusedId, routePlan.selectedStopIds, showRouteOnly, storeById]);
 
   const orderedStops = useMemo(() => {
     const ids = routePlan.orderedStopIds.length > 0 ? routePlan.orderedStopIds : routePlan.selectedStopIds;
@@ -83,16 +95,38 @@ export function TerritoryMobile() {
 
   const grouped = useMemo(() => {
     const groups = new Map<string, TerritoryStorePin[]>();
-    for (const store of stores) {
+    for (const store of displayedStores) {
       const letter = firstLetter(store.name);
       const list = groups.get(letter) ?? [];
       list.push(store);
       groups.set(letter, list);
     }
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [stores]);
+  }, [displayedStores]);
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
+
+  function toggleRouteOnly() {
+    if (!showRouteOnly && routePlan.selectedStopIds.length === 0) {
+      toast.message('Add locations to your route first.');
+      return;
+    }
+    setShowRouteOnly((value) => !value);
+  }
+
+  function messageRep(store: TerritoryStorePin | null) {
+    if (!store) {
+      toast.error('Select a location first.');
+      return;
+    }
+    const email = store.repEmails[0];
+    if (!email) {
+      toast.message('No rep email is available for this account.');
+      return;
+    }
+    const subject = encodeURIComponent(`PICC follow-up: ${store.name}`);
+    window.open(`mailto:${email}?subject=${subject}`, '_blank', 'noopener,noreferrer');
+  }
 
   return (
     <div className="relative min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
@@ -115,7 +149,7 @@ export function TerritoryMobile() {
       {view === 'map' ? (
         <div className="relative h-[calc(100vh-260px)] min-h-[520px]">
           <TerritoryMapMobile
-            stores={stores}
+            stores={displayedStores}
             selectedStopIds={routePlan.selectedStopIds}
             orderedStopIds={routePlan.orderedStopIds}
             focusedStoreId={focusedStore?.id ?? null}
@@ -124,22 +158,33 @@ export function TerritoryMobile() {
           />
 
           <div className="absolute left-3 top-6 z-[1500] flex flex-col gap-3">
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow">
+            <button
+              type="button"
+              aria-label="Open focused account details"
+              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              onClick={() => {
+                if (!focusedStore) {
+                  toast.message('Select a location first.');
+                  return;
+                }
+                setDetailStoreId(focusedStore.id);
+              }}
+            >
               <MapPinned className="h-6 w-6 text-[#7f828a]" />
             </button>
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setRefreshNonce((v) => v + 1)}>
+            <button type="button" aria-label="Refresh territory data" className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setRefreshNonce((v) => v + 1)}>
               <SlidersHorizontal className="h-6 w-6 text-[#7f828a]" />
             </button>
           </div>
 
           <div className="absolute right-3 top-6 z-[1500] flex flex-col gap-3">
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setView('list')}>
+            <button type="button" aria-label="Switch to list view" className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setView('list')}>
               <Search className="h-6 w-6 text-[#7f828a]" />
             </button>
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow">
-              <ListFilter className="h-6 w-6 text-[#7f828a]" />
+            <button type="button" aria-label="Toggle route filter" className={cn('grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow', showRouteOnly ? 'ring-2 ring-[#4f8edf]' : '')} onClick={toggleRouteOnly}>
+              <ListFilter className={cn('h-6 w-6', showRouteOnly ? 'text-[#4f8edf]' : 'text-[#7f828a]')} />
             </button>
-            <button className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow">
+            <button type="button" aria-label="Message account rep" className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => messageRep(focusedStore)}>
               <MessageCircleMore className="h-6 w-6 text-[#d25a3f]" />
             </button>
           </div>
@@ -191,7 +236,7 @@ export function TerritoryMobile() {
               <p className="truncate text-[17px] text-[#b6bac3]">{focusedStore.locationAddress ?? focusedStore.locationLabel ?? 'No address'}</p>
             </button>
             <div className="grid grid-cols-[1fr_72px_72px] border-b border-[#30333b]">
-              <button type="button" className="flex items-center gap-2 px-4 py-2 text-[17px] text-[#d5d9e1]">
+              <button type="button" className="flex items-center gap-2 px-4 py-2 text-[17px] text-[#d5d9e1]" onClick={() => messageRep(focusedStore)}>
                 <span className="inline-block h-4 w-4 rounded-full bg-[#f45a34]" />
                 {focusedStore.repNames[0] ?? 'Unassigned'}
               </button>
@@ -216,6 +261,10 @@ export function TerritoryMobile() {
         onClose={() => setDetailStoreId(null)}
         onAddToRoute={(id) => routePlan.toggleStop(id)}
         routeSelected={detailStoreId ? routePlan.selectedStopIds.includes(detailStoreId) : false}
+        onCenterStore={(store) => {
+          setFocusedId(store.id);
+          setView('map');
+        }}
       />
     </div>
   );

@@ -23,7 +23,7 @@ export default async function SettingsPage() {
           <p className="text-sm text-slate-500">Role sync, integration health, custom fields, and account-wide controls.</p>
         </header>
 
-        <Card>
+        <Card id="team-roles">
           <CardHeader>
             <CardTitle>Team Roles (Synced from Notion Team Directory)</CardTitle>
           </CardHeader>
@@ -40,7 +40,7 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="integrations">
           <CardHeader>
             <CardTitle>Integrations</CardTitle>
           </CardHeader>

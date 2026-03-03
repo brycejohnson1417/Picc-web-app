@@ -1,7 +1,7 @@
 'use client';
 
-import { CalendarDays, Check, ChevronRight, GripHorizontal, Plus, RotateCcw, Save, X } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { CalendarDays, Check, ChevronRight, GripHorizontal, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -23,10 +23,17 @@ export function RouteMobile() {
   const routePlan = useRoutePlan();
   const [tab, setTab] = useState<'current' | 'saved'>('current');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [savedEditing, setSavedEditing] = useState(false);
   const [search, setSearch] = useState('');
   const [optMode] = useState<RouteMode>('car');
   const [optimizing, setOptimizing] = useState(false);
   const [optimized, setOptimized] = useState<TerritoryOptimizedRouteResponse | null>(null);
+
+  useEffect(() => {
+    if (tab === 'current') {
+      setSavedEditing(false);
+    }
+  }, [tab]);
 
   const storesQuery = useQuery({
     queryKey: ['route-mobile-stores'],
@@ -104,12 +111,39 @@ export function RouteMobile() {
     window.open(`https://www.google.com/maps/dir/?${params.toString()}`, '_blank', 'noopener,noreferrer');
   }
 
+  function launchCalendarDraft() {
+    if (orderedStops.length === 0) {
+      toast.error('Add at least 1 location to draft a calendar event.');
+      return;
+    }
+
+    const details = orderedStops
+      .map((stop, index) => `${index + 1}. ${stop.name}${stop.locationAddress ? ` - ${stop.locationAddress}` : ''}`)
+      .join('\n');
+
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: `PICC Route - ${new Date().toLocaleDateString()}`,
+      details,
+    });
+
+    window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  }
+
   return (
     <div className="min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
       <MobileHeader
         title="Route"
         right={
-          tab === 'saved' ? <button className="text-[24px]">Edit</button> : <Plus className="ml-auto h-10 w-10" />
+          tab === 'saved' ? (
+            <button type="button" className="text-[24px]" onClick={() => setSavedEditing((value) => !value)}>
+              {savedEditing ? 'Done' : 'Edit'}
+            </button>
+          ) : (
+            <button type="button" className="grid h-10 w-10 place-items-center" onClick={() => setShowAddModal(true)} aria-label="Add location">
+              <Plus className="h-10 w-10" />
+            </button>
+          )
         }
       >
         <SegmentedControl
@@ -187,7 +221,13 @@ export function RouteMobile() {
           )}
         </div>
       ) : (
-        <SavedRoutesList />
+        <SavedRoutesList
+          editing={savedEditing}
+          onLoadRoute={() => {
+            setTab('current');
+            setSavedEditing(false);
+          }}
+        />
       )}
 
       {tab === 'current' ? (
@@ -200,6 +240,10 @@ export function RouteMobile() {
             <ActionIconButton
               label="save"
               onClick={() => {
+                if (selectedStops.length === 0) {
+                  toast.error('Add at least 1 location before saving.');
+                  return;
+                }
                 const name = `Route ${new Date().toLocaleDateString()}`;
                 routePlan.saveCurrentRoute(name);
                 toast.success('Route saved');
@@ -215,7 +259,7 @@ export function RouteMobile() {
               }}
               icon={<X className="h-7 w-7" />}
             />
-            <ActionIconButton label="+ calendar" onClick={() => toast.message('Calendar sync is next')} icon={<CalendarDays className="h-7 w-7" />} />
+            <ActionIconButton label="+ calendar" onClick={launchCalendarDraft} icon={<CalendarDays className="h-7 w-7" />} />
           </div>
         </div>
       ) : null}
@@ -234,8 +278,15 @@ export function RouteMobile() {
   );
 }
 
-function SavedRoutesList() {
+function SavedRoutesList({ editing, onLoadRoute }: { editing: boolean; onLoadRoute: () => void }) {
   const routePlan = useRoutePlan();
+  const [search, setSearch] = useState('');
+
+  const routes = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return routePlan.savedRoutes;
+    return routePlan.savedRoutes.filter((route) => route.name.toLowerCase().includes(q));
+  }, [routePlan.savedRoutes, search]);
 
   if (routePlan.savedRoutes.length === 0) {
     return <p className="px-6 py-8 text-[22px] text-[#6f7178]">No saved routes yet.</p>;
@@ -244,19 +295,38 @@ function SavedRoutesList() {
   return (
     <div className="pb-28 pt-3">
       <div className="px-4">
-        <MobileSearch value="" onChange={() => {}} placeholder="Search Routes" />
+        <MobileSearch value={search} onChange={setSearch} placeholder="Search Routes" />
       </div>
       <div className="mt-2 border-t border-[#c9cad0]">
-        {routePlan.savedRoutes.map((route) => (
-          <button key={route.id} onClick={() => routePlan.loadSavedRoute(route.id)} className="grid w-full grid-cols-[1fr_24px] items-center border-b border-[#c9cad0] px-6 py-4 text-left">
-            <div>
+        {routes.map((route) => (
+          <div key={route.id} className="grid grid-cols-[1fr_40px] items-center border-b border-[#c9cad0] px-2">
+            <button
+              type="button"
+              onClick={() => {
+                routePlan.loadSavedRoute(route.id);
+                onLoadRoute();
+              }}
+              className="px-4 py-4 text-left"
+            >
               <p className="text-[23px] text-[#3b3d44]">{route.name}</p>
               <p className="text-[20px] text-[#8f9299]">{new Date(route.createdAt).toLocaleDateString()}</p>
               <p className="text-[20px] text-[#6f7278]">Bryce Johnson</p>
-            </div>
-            <ChevronRight className="h-8 w-8 text-[#c3c5cc]" />
-          </button>
+            </button>
+            {editing ? (
+              <button
+                type="button"
+                aria-label={`Delete ${route.name}`}
+                className="grid h-10 w-10 place-items-center rounded-xl text-[#c14a4a]"
+                onClick={() => routePlan.deleteSavedRoute(route.id)}
+              >
+                <Trash2 className="h-6 w-6" />
+              </button>
+            ) : (
+              <ChevronRight className="h-8 w-8 justify-self-center text-[#c3c5cc]" />
+            )}
+          </div>
         ))}
+        {routes.length === 0 ? <p className="px-6 py-6 text-[19px] text-[#7e8189]">No routes match your search.</p> : null}
       </div>
     </div>
   );

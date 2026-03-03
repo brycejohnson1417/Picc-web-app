@@ -19,6 +19,26 @@ export interface TerritoryStorePin {
   city?: string | null;
   state?: string | null;
   daysOverdue?: number | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+  followUpDate?: string | null;
+  notes?: string | null;
+  lastCheckIn?: string | null;
+}
+
+export interface TerritoryStoreContact {
+  id: string;
+  name: string;
+  roleTitle: string;
+  email: string;
+  phone: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  linkedWork: string;
+}
+
+export interface TerritoryStoreDetailResponse {
+  store: TerritoryStorePin;
+  contacts: TerritoryStoreContact[];
 }
 
 export interface TerritoryFilterCount {
