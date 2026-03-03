@@ -9,9 +9,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "eslint app components lib prisma --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
+    "perf:collect": "lhci collect --config=.lighthouserc.json",
+    "perf:assert": "lhci assert --config=.lighthouserc.json",
+    "perf:lighthouse": "lhci autorun --config=.lighthouserc.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -59,6 +63,8 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@lhci/cli": "^0.15.1",
+    "@next/bundle-analyzer": "^15.5.0",
     "@eslint/eslintrc": "^3.2.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/leaflet": "^1.9.21",

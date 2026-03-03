@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { Channel } from '@prisma/client';
 import { Card, CardContent, CardHeader, CardTitle, Input, Textarea, Button, Badge } from '@/components/ui';
@@ -44,7 +45,7 @@ export default async function ConversationsPage({
         ] as const).map(([value, label]) => {
           const active = (params.channel ?? 'ALL') === value;
           return (
-            <a
+            <Link
               key={value}
               href={`/conversations?channel=${value}`}
               className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
@@ -57,7 +58,7 @@ export default async function ConversationsPage({
               <span className={`rounded-full px-2 py-0.5 text-xs ${active ? 'bg-white/20' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
                 {counts[value as keyof typeof counts] ?? 0}
               </span>
-            </a>
+            </Link>
           );
         })}
       </div>
@@ -69,14 +70,14 @@ export default async function ConversationsPage({
           </CardHeader>
           <CardContent className="space-y-2">
             {conversations.map((conversation) => (
-              <a key={conversation.id} href={`/conversations?channel=${params.channel ?? 'ALL'}&selected=${conversation.id}`} className="block rounded-lg border p-3 hover:bg-slate-50 dark:hover:bg-slate-900">
+              <Link key={conversation.id} href={`/conversations?channel=${params.channel ?? 'ALL'}&selected=${conversation.id}`} className="block rounded-lg border p-3 hover:bg-slate-50 dark:hover:bg-slate-900">
                 <div className="flex items-center justify-between">
                   <p className="font-semibold">{conversation.account.name}</p>
                   {conversation.unreadCount > 0 && <Badge>{conversation.unreadCount}</Badge>}
                 </div>
                 <p className="text-xs text-slate-500">{conversation.channel} · {conversation.contact ? `${conversation.contact.firstName} ${conversation.contact.lastName}` : 'No contact'}</p>
                 <p className="truncate text-sm text-slate-600 dark:text-slate-300">{conversation.messages[0]?.body ?? 'No messages yet.'}</p>
-              </a>
+              </Link>
             ))}
           </CardContent>
         </Card>

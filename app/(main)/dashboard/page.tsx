@@ -1,6 +1,6 @@
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { ActivityTimeline } from '@/components/crm/activity-timeline';
-import { AccountGrowthChart, PipelineStageChart } from '@/components/crm/dashboard-charts';
+import { AccountGrowthChartLazy, PipelineStageChartLazy } from '@/components/crm/dashboard-charts-lazy';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui';
 import { currency, number } from '@/lib/utils';
 import { getDashboardData } from '@/lib/data/queries';
@@ -40,7 +40,7 @@ export default async function DashboardPage() {
             <CardDescription>Open opportunities grouped by current stage.</CardDescription>
           </CardHeader>
           <CardContent>
-            <PipelineStageChart data={data.pipelineByStage} />
+            <PipelineStageChartLazy data={data.pipelineByStage} />
           </CardContent>
         </Card>
 
@@ -50,7 +50,7 @@ export default async function DashboardPage() {
             <CardDescription>Active account growth over recent months.</CardDescription>
           </CardHeader>
           <CardContent>
-            <AccountGrowthChart data={growthSeries} />
+            <AccountGrowthChartLazy data={growthSeries} />
           </CardContent>
         </Card>
       </section>

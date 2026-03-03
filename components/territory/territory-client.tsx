@@ -13,6 +13,7 @@ import type { RouteMode, TerritoryOptimizedRouteResponse, TerritoryStorePin, Ter
 
 export function TerritoryClient() {
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
   const [focusedStoreId, setFocusedStoreId] = useState<string | null>(null);
@@ -22,18 +23,26 @@ export function TerritoryClient() {
   const [optimizedRoute, setOptimizedRoute] = useState<TerritoryOptimizedRouteResponse | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
   const storesQuery = useQuery({
-    queryKey: ['territory-stores', selectedStatuses.join('|'), selectedReps.join('|'), search, refreshNonce],
+    queryKey: ['territory-stores', selectedStatuses.join('|'), selectedReps.join('|'), debouncedSearch, refreshNonce],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (refreshNonce > 0) {
         params.set('refresh', '1');
       }
-      if (search.trim()) params.set('q', search.trim());
+      if (debouncedSearch) params.set('q', debouncedSearch);
       for (const status of selectedStatuses) params.append('status', status);
       for (const rep of selectedReps) params.append('rep', rep);
 
-      const response = await fetch(`/api/territory/stores?${params.toString()}`, { cache: 'no-store' });
+      const response = await fetch(`/api/territory/stores?${params.toString()}`);
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.error ?? 'Failed to load territory stores');
@@ -41,6 +50,7 @@ export function TerritoryClient() {
       return (await response.json()) as TerritoryStoresResponse;
     },
     staleTime: 30000,
+    placeholderData: (previousData) => previousData,
   });
 
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Command } from 'cmdk';
 import { PlusCircle } from 'lucide-react';
@@ -16,21 +16,14 @@ const items = [
   { id: 'cmd-export', label: 'Export Contacts CSV', href: '/contacts?export=1', section: 'Commands' },
 ];
 
-export function CommandPalette() {
-  const [open, setOpen] = useState(false);
+export function CommandPalette({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const router = useRouter();
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        setOpen((prev) => !prev);
-      }
-    };
-
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   const grouped = useMemo(() => {
     return items.reduce<Record<string, typeof items>>((acc, item) => {
@@ -43,7 +36,7 @@ export function CommandPalette() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 p-4" onClick={() => setOpen(false)}>
+    <div className="fixed inset-0 z-50 bg-black/40 p-4" onClick={() => onOpenChange(false)}>
       <Command
         className="mx-auto mt-20 w-full max-w-2xl overflow-hidden rounded-2xl border bg-white shadow-2xl dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
@@ -58,7 +51,7 @@ export function CommandPalette() {
                   key={item.id}
                   className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
                   onSelect={() => {
-                    setOpen(false);
+                    onOpenChange(false);
                     router.push(item.href);
                   }}
                 >

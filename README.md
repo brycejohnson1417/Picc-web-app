@@ -97,10 +97,11 @@ prisma/
 ## Local Setup
 Prerequisite:
 - Node.js LTS (`20.x` or `22.x`). Node `25.x` is not supported for this project and can cause Next build/lint hangs.
+- If you use `nvm`, run `nvm use` from the repo root (uses `.nvmrc`).
 
 1. Install deps
 ```bash
-npm install
+npm ci
 ```
 
 2. Create env file
