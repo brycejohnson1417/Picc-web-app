@@ -17,6 +17,8 @@ export default async function ConversationsPage({
   const conversations = await getConversationOverview(orgId, channel as Channel | undefined);
   const selectedId = params.selected ?? conversations[0]?.id;
   const selected = conversations.find((c) => c.id === selectedId) ?? conversations[0] ?? null;
+  const activeChannel = params.channel ?? 'ALL';
+  const inboxHref = `/conversations?channel=${activeChannel}`;
 
   const counts = {
     ALL: conversations.length,
@@ -43,7 +45,7 @@ export default async function ConversationsPage({
           ['WHATSAPP', 'WhatsApp'],
           ['OTHER', 'Other'],
         ] as const).map(([value, label]) => {
-          const active = (params.channel ?? 'ALL') === value;
+          const active = activeChannel === value;
           return (
             <Link
               key={value}
@@ -63,14 +65,68 @@ export default async function ConversationsPage({
         })}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="xl:hidden">
+        {params.selected ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between gap-2">
+                <span>{selected ? `${selected.account.name} Thread` : 'Thread'}</span>
+                <Link href={inboxHref} className="text-sm text-primary underline underline-offset-2">
+                  Back to Inbox
+                </Link>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!selected && <p className="text-sm text-slate-500">Select a conversation to open the thread.</p>}
+              {selected?.messages.map((message) => (
+                <div key={message.id} className="rounded-lg border p-3">
+                  <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
+                    <Badge variant="secondary">{message.channel}</Badge>
+                    <span>{message.direction}</span>
+                    <span>{new Date(message.sentAt).toLocaleString()}</span>
+                  </div>
+                  <p className="text-sm">{message.body}</p>
+                </div>
+              ))}
+
+              <div className="space-y-2 rounded-xl border bg-white p-3 dark:bg-slate-950">
+                <Input placeholder="Subject (optional)" />
+                <Textarea placeholder="Compose message... (mock mode)" />
+                <div className="flex justify-end">
+                  <Button className="min-h-11">Send (mock)</Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Inbox</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {conversations.map((conversation) => (
+                <Link key={conversation.id} href={`/conversations?channel=${activeChannel}&selected=${conversation.id}`} className="block rounded-lg border p-3 hover:bg-slate-50 dark:hover:bg-slate-900">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold">{conversation.account.name}</p>
+                    {conversation.unreadCount > 0 && <Badge>{conversation.unreadCount}</Badge>}
+                  </div>
+                  <p className="text-xs text-slate-500">{conversation.channel} · {conversation.contact ? `${conversation.contact.firstName} ${conversation.contact.lastName}` : 'No contact'}</p>
+                  <p className="truncate text-sm text-slate-600 dark:text-slate-300">{conversation.messages[0]?.body ?? 'No messages yet.'}</p>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <div className="hidden grid-cols-1 gap-4 xl:grid xl:grid-cols-3">
         <Card className="xl:col-span-1">
           <CardHeader>
             <CardTitle>Inbox</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {conversations.map((conversation) => (
-              <Link key={conversation.id} href={`/conversations?channel=${params.channel ?? 'ALL'}&selected=${conversation.id}`} className="block rounded-lg border p-3 hover:bg-slate-50 dark:hover:bg-slate-900">
+              <Link key={conversation.id} href={`/conversations?channel=${activeChannel}&selected=${conversation.id}`} className="block rounded-lg border p-3 hover:bg-slate-50 dark:hover:bg-slate-900">
                 <div className="flex items-center justify-between">
                   <p className="font-semibold">{conversation.account.name}</p>
                   {conversation.unreadCount > 0 && <Badge>{conversation.unreadCount}</Badge>}

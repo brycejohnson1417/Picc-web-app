@@ -13,6 +13,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { Download, Filter, Settings2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Button, Input } from '@/components/ui';
 
@@ -22,6 +23,7 @@ interface Props<TData, TValue> {
   title: string;
   searchPlaceholder?: string;
   onExportCsv?: () => void;
+  mobileCardRenderer?: (row: TData) => ReactNode;
 }
 
 export function AdvancedDataTable<TData, TValue>({
@@ -30,6 +32,7 @@ export function AdvancedDataTable<TData, TValue>({
   title,
   searchPlaceholder = 'Search...',
   onExportCsv,
+  mobileCardRenderer,
 }: Props<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -67,31 +70,54 @@ export function AdvancedDataTable<TData, TValue>({
           <h2 className="text-h2 font-semibold">{title}</h2>
           <p className="text-sm text-slate-500">Sticky headers, saved views, and bulk actions for power users.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <Input
             value={globalFilter}
             onChange={(event) => setGlobalFilter(event.target.value)}
             placeholder={searchPlaceholder}
-            className="w-[260px]"
+            className="h-11 w-full sm:w-[260px]"
           />
-          <Button variant="secondary"><Filter className="h-4 w-4" /> Filters</Button>
-          <Button variant="secondary"><Settings2 className="h-4 w-4" /> Saved Views</Button>
-          <Button variant="outline" onClick={onExportCsv}><Download className="h-4 w-4" /> Export</Button>
+          <Button variant="secondary" className="h-11 min-w-[44px]"><Filter className="h-4 w-4" /> Filters</Button>
+          <Button variant="secondary" className="h-11 min-w-[44px]"><Settings2 className="h-4 w-4" /> Saved Views</Button>
+          <Button variant="outline" className="h-11 min-w-[44px]" onClick={onExportCsv}><Download className="h-4 w-4" /> Export</Button>
         </div>
       </div>
 
       {selectedCount > 0 && (
-        <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+        <div className="flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 sm:flex-row sm:items-center sm:justify-between">
           <span>{selectedCount} selected</span>
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary">Tag</Button>
-            <Button size="sm" variant="secondary">Assign</Button>
-            <Button size="sm" variant="danger">Delete</Button>
+            <Button size="sm" variant="secondary" className="min-h-11">Tag</Button>
+            <Button size="sm" variant="secondary" className="min-h-11">Assign</Button>
+            <Button size="sm" variant="danger" className="min-h-11">Delete</Button>
           </div>
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border">
+      <div className="space-y-2 md:hidden">
+        {table.getRowModel().rows?.length ? (
+          table.getRowModel().rows.map((row) => (
+            <article key={row.id} className="space-y-2 rounded-xl border bg-white p-3 dark:bg-slate-950">
+              {mobileCardRenderer ? (
+                mobileCardRenderer(row.original)
+              ) : (
+                row.getVisibleCells().map((cell) => (
+                  <div key={cell.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-slate-500">
+                      {typeof cell.column.columnDef.header === 'string' ? cell.column.columnDef.header : String(cell.column.id)}
+                    </span>
+                    <span className="text-right">{flexRender(cell.column.columnDef.cell, cell.getContext())}</span>
+                  </div>
+                ))
+              )}
+            </article>
+          ))
+        ) : (
+          <div className="rounded-xl border p-6 text-center text-slate-500">No results.</div>
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-xl border md:block">
         <div className="max-h-[560px] overflow-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
@@ -138,11 +164,11 @@ export function AdvancedDataTable<TData, TValue>({
         <p className="text-sm text-slate-500">
           Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() || 1}
         </p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" size="sm" className="min-h-11" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
             Previous
           </Button>
-          <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+          <Button variant="outline" size="sm" className="min-h-11" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
             Next
           </Button>
         </div>

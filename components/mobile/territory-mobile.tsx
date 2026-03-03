@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { ListFilter, MapPinned, MessageCircleMore, Navigation, Plus, Search, SlidersHorizontal } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 import { MobileSearch } from '@/components/mobile/mobile-search';
@@ -31,18 +31,27 @@ export function TerritoryMobile() {
   const routePlan = useRoutePlan();
   const [view, setView] = useState<'map' | 'list'>('map');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
   const storesQuery = useQuery({
-    queryKey: ['territory-mobile', search, refreshNonce],
+    queryKey: ['territory-mobile', debouncedSearch, refreshNonce],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (search.trim()) params.set('q', search.trim());
+      if (debouncedSearch) params.set('q', debouncedSearch);
       if (refreshNonce > 0) params.set('refresh', '1');
-      const response = await fetch(`/api/territory/stores?${params.toString()}`, { cache: 'no-store' });
+      const response = await fetch(`/api/territory/stores?${params.toString()}`);
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.error ?? 'Failed to load stores');
@@ -50,6 +59,7 @@ export function TerritoryMobile() {
       return (await response.json()) as TerritoryStoresResponse;
     },
     staleTime: 30000,
+    placeholderData: (previousData) => previousData,
   });
 
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);

@@ -50,5 +50,29 @@ const columns: ColumnDef<ContactTableRow>[] = [
 ];
 
 export function ContactsTable({ rows }: { rows: ContactTableRow[] }) {
-  return <AdvancedDataTable title="Contact Directory" data={rows} columns={columns} searchPlaceholder="Search contact, role, or dispensary..." />;
+  return (
+    <AdvancedDataTable
+      title="Contact Directory"
+      data={rows}
+      columns={columns}
+      searchPlaceholder="Search contact, role, or dispensary..."
+      mobileCardRenderer={(row) => (
+        <>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">{row.name}</p>
+              <p className="text-xs text-slate-500">{row.roleTitle}</p>
+            </div>
+            <Badge variant={row.status === 'ACTIVE' ? 'success' : 'secondary'}>{row.status}</Badge>
+          </div>
+          <div className="space-y-1 text-sm text-slate-600">
+            <p>{row.accountName}</p>
+            <p>{row.email}</p>
+            <p>{row.phone}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">{row.linkedWork}</p>
+          </div>
+        </>
+      )}
+    />
+  );
 }

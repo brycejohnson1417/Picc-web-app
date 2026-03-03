@@ -31,7 +31,7 @@ export function RouteMobile() {
   const storesQuery = useQuery({
     queryKey: ['route-mobile-stores'],
     queryFn: async () => {
-      const response = await fetch('/api/territory/stores', { cache: 'no-store' });
+      const response = await fetch('/api/territory/stores');
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.error ?? 'Failed to load stores');
@@ -39,6 +39,7 @@ export function RouteMobile() {
       return (await response.json()) as TerritoryStoresResponse;
     },
     staleTime: 30000,
+    placeholderData: (previousData) => previousData,
   });
 
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);

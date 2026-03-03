@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
@@ -19,17 +19,26 @@ function firstLetter(name: string) {
 
 export function AccountsMobile() {
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [scope, setScope] = useState<'all' | 'recent' | 'follow-ups'>('all');
   const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const routePlan = useRoutePlan();
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
   const storesQuery = useQuery({
-    queryKey: ['accounts-mobile', search],
+    queryKey: ['accounts-mobile', debouncedSearch],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (search.trim()) params.set('q', search.trim());
-      const response = await fetch(`/api/territory/stores?${params.toString()}`, { cache: 'no-store' });
+      if (debouncedSearch) params.set('q', debouncedSearch);
+      const response = await fetch(`/api/territory/stores?${params.toString()}`);
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.error ?? 'Failed to load stores');
@@ -37,6 +46,7 @@ export function AccountsMobile() {
       return (await response.json()) as TerritoryStoresResponse;
     },
     staleTime: 30000,
+    placeholderData: (previousData) => previousData,
   });
 
   const stores = useMemo(() => {

@@ -54,7 +54,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="pb-[92px]">{children}</main>
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-[4000] bg-[#1f232b] text-white">
+      <nav className="fixed bottom-0 left-0 right-0 z-[4000] bg-[#1f232b] text-white" aria-label="Primary navigation">
         <div className="mx-auto grid h-[92px] max-w-[480px] grid-cols-5 border-t border-[#2f3540] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
           {tabs.map((item) => {
             const active = isActive(pathname, item.href);
@@ -62,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const showBadge = item.href === '/route' && routePlan.selectedCount > 0;
 
             return (
-              <Link key={item.href} href={item.href} className="relative flex flex-col items-center justify-center gap-1">
+              <Link key={item.href} href={item.href} className="relative flex min-h-[44px] flex-col items-center justify-center gap-1" aria-current={active ? 'page' : undefined}>
                 <div className={cn('relative rounded-full p-1.5', active ? 'text-white' : 'text-[#7f8691]')}>
                   <Icon className="h-7 w-7" strokeWidth={2.2} />
                   {showBadge ? (
