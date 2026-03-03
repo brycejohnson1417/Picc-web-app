@@ -127,6 +127,11 @@ model OrganizationWorkspace {
   syncRuns        SyncRun[]
   importJobs      ImportJob[]
   exportJobs      ExportJob[]
+  territories     Territory[]
+  salesRoutes     SalesRoute[]
+  checkIns        CheckIn[]
+  territoryStores TerritoryStoreReadModel[]
+  territoryFilterPresets TerritoryFilterPreset[]
 }
 
 model Membership {
@@ -156,6 +161,9 @@ model Account {
   state                 String
   zipcode               String
   phone                 String?
+  geoLat                Float?
+  geoLng                Float?
+  geoPoint              Unsupported("geometry(Point,4326)")?
   status                RecordStatus                     @default(ACTIVE)
   lastContactedAt       DateTime?
   createdAt             DateTime                         @default(now())
@@ -193,6 +201,9 @@ model Contact {
   roleTitle           String
   email               String?
   phone               String?
+  geoLat              Float?
+  geoLng              Float?
+  geoPoint            Unsupported("geometry(Point,4326)")?
   status              RecordStatus              @default(ACTIVE)
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
@@ -803,4 +814,111 @@ model NotionCacheSnapshot {
   lastEditedMax           DateTime?
   syncedAt                DateTime @default(now())
   updatedAt               DateTime @updatedAt
+}
+
+model Territory {
+  id            String                @id @default(cuid())
+  orgId         String
+  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  geometry      Unsupported("geometry(MultiPolygon,4326)")
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([orgId, name])
+}
+
+model SalesRoute {
+  id                  String                @id @default(cuid())
+  orgId               String
+  org                 OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name                String
+  mode                String                @default("car")
+  orderedStopIds      String[]              @default([])
+  totalDistanceMeters Int                   @default(0)
+  totalDurationSeconds Int                  @default(0)
+  geometry            Unsupported("geometry(LineString,4326)")?
+  createdBy           String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([orgId, createdAt])
+}
+
+model CheckIn {
+  id            String                @id @default(cuid())
+  orgId         String
+  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  storeId       String?
+  contactId     String?
+  happenedAt    DateTime              @default(now())
+  noteText      String?
+  photoUrls     String[]              @default([])
+  mileageMiles  Float?
+  geoLat        Float?
+  geoLng        Float?
+  geoPoint      Unsupported("geometry(Point,4326)")?
+  createdByEmail String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([orgId, storeId, happenedAt])
+}
+
+model TerritoryStoreReadModel {
+  id                    String                @id
+  orgId                 String
+  org                   OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  notionPageId          String                @unique
+  name                  String
+  status                String
+  statusKey             String
+  statusColor           String
+  pinKind               String
+  repNames              String[]              @default([])
+  repEmails             String[]              @default([])
+  lat                   Float
+  lng                   Float
+  locationLabel         String?
+  locationAddress       String?
+  locationSource        String
+  lastEditedTime        DateTime
+  licenseNumber         String?
+  city                  String?
+  state                 String?
+  daysOverdue           Int?
+  phoneNumber           String?
+  email                 String?
+  followUpDate          DateTime?
+  notes                 String?
+  lastCheckIn           DateTime?
+  interactionsScore     Float                 @default(0)
+  purchasesScore        Float                 @default(0)
+  followUpUrgencyScore  Float                 @default(0)
+  geoPoint              Unsupported("geometry(Point,4326)")?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([orgId, name])
+  @@index([orgId, statusKey])
+  @@index([orgId, followUpDate])
+}
+
+model TerritoryFilterPreset {
+  id               String                @id @default(cuid())
+  orgId            String
+  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ownerEmail       String
+  name             String
+  search           String                @default("")
+  selectedStatuses String[]              @default([])
+  selectedReps     String[]              @default([])
+  showRouteOnly    Boolean               @default(false)
+  pinColorMode     String                @default("status")
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@unique([orgId, ownerEmail, name])
+  @@index([orgId, ownerEmail, updatedAt])
 }
