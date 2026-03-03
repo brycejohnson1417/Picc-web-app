@@ -56,6 +56,8 @@ export function ContactsTable({ rows }: { rows: ContactTableRow[] }) {
       data={rows}
       columns={columns}
       searchPlaceholder="Search contact, role, or dispensary..."
+      getRowHref={(row) => `/contacts/${encodeURIComponent(row.id)}`}
+      rowAriaLabel={(row) => `Open contact ${row.name}`}
       mobileCardRenderer={(row) => (
         <>
           <div className="flex items-start justify-between gap-3">
