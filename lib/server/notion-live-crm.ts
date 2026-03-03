@@ -34,6 +34,16 @@ interface CachedContactRow extends ContactTableRow {
   lastEditedTime: string;
 }
 
+export interface LiveAccountContact {
+  id: string;
+  name: string;
+  roleTitle: string;
+  email: string;
+  phone: string;
+  status: ContactTableRow['status'];
+  linkedWork: string;
+}
+
 function requiredEnv(name: 'NOTION_API_KEY') {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -403,6 +413,27 @@ export async function loadLiveNotionContacts(): Promise<ContactTableRow[]> {
     status: row.status,
     linkedWork: row.linkedWork,
   }));
+}
+
+export async function loadLiveNotionContactsForAccount(accountPageId: string): Promise<LiveAccountContact[]> {
+  const normalizedTargetId = accountPageId.replace(/-/g, '').trim();
+  if (!normalizedTargetId) {
+    return [];
+  }
+
+  const contacts = await getCachedContacts();
+  return contacts.rows
+    .filter((row) => row.accountPageIds.includes(normalizedTargetId))
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      roleTitle: row.roleTitle,
+      email: row.email,
+      phone: row.phone,
+      status: row.status,
+      linkedWork: row.linkedWork,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function prewarmLiveCrmCaches() {

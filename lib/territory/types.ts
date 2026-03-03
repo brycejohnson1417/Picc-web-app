@@ -7,6 +7,7 @@ export interface TerritoryStorePin {
   status: string;
   statusKey: string;
   statusColor: string;
+  pinKind: 'lead' | 'customer' | 'other';
   repNames: string[];
   repEmails: string[];
   lat: number;
@@ -116,4 +117,15 @@ export function normalizeStatus(value: string | null | undefined) {
 
 export function colorForStatus(value: string | null | undefined) {
   return STATUS_COLORS[normalizeStatus(value)] ?? '#0f172a';
+}
+
+export function pinKindForStatus(value: string | null | undefined): TerritoryStorePin['pinKind'] {
+  const key = normalizeStatus(value);
+  if (key.includes('customer')) {
+    return 'customer';
+  }
+  if (key.includes('lead') || key === 'open inbound' || key === 'send proposal' || key === 'in progress') {
+    return 'lead';
+  }
+  return 'other';
 }

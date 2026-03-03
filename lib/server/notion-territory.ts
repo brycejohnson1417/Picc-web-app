@@ -8,7 +8,7 @@ import {
   type NotionCacheSnapshot,
   writeNotionCacheSnapshot,
 } from '@/lib/server/notion-cache-store';
-import { colorForStatus, normalizeStatus, type TerritoryStoreContact, type TerritoryStoresResponse, type TerritoryStorePin } from '@/lib/territory/types';
+import { colorForStatus, normalizeStatus, pinKindForStatus, type TerritoryStoreContact, type TerritoryStoresResponse, type TerritoryStorePin } from '@/lib/territory/types';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
@@ -533,6 +533,7 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
       status: statusName,
       statusKey,
       statusColor: colorForStatus(statusName),
+      pinKind: pinKindForStatus(statusName),
       repNames,
       repEmails,
       lat: resolvedLat,
