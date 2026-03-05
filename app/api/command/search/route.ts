@@ -40,6 +40,9 @@ export async function GET(req: Request) {
       { id: 'new-account', label: 'Create new dispensary', href: '/accounts?new=1' },
       { id: 'new-contact', label: 'Create new contact', href: '/contacts?new=1' },
       { id: 'new-task', label: 'Create new task', href: '/tasks?new=1' },
+      { id: 'new-appointment', label: 'Create new appointment', href: '/calendar?new=1' },
+      { id: 'export-accounts', label: 'Export accounts CSV', href: '/accounts?export=1' },
+      { id: 'export-contacts', label: 'Export contacts CSV', href: '/contacts?export=1' },
     ],
   });
 }

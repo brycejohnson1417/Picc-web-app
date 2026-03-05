@@ -7,7 +7,15 @@ export async function GET() {
   const ctx = await guard(['ADMIN', 'OPS_TEAM', 'FINANCE']);
   if ('error' in ctx) return ctx.error;
 
-  const path = process.env.NABIS_MASTER_SHEET_PATH || '/Users/brycejohnson/Downloads/Nabis Notion Master Sheet.xlsx';
+  const path = process.env.NABIS_MASTER_SHEET_PATH?.trim();
+  if (!path) {
+    return NextResponse.json(
+      {
+        error: 'NABIS_MASTER_SHEET_PATH is not configured',
+      },
+      { status: 503 },
+    );
+  }
 
   try {
     const data = inspectNabisWorkbook(path);

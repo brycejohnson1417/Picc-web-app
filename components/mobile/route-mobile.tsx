@@ -443,10 +443,6 @@ function AddLocationModal({
     <div className="fixed inset-0 z-[5200] bg-black/35">
       <div className="mx-auto h-full max-w-[480px] bg-[#e6e6e9]">
         <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
-          <div className="mb-2 flex items-center justify-between text-sm opacity-90">
-            <span className="font-semibold">12:18</span>
-            <span className="font-semibold">100%</span>
-          </div>
           <div className="relative flex items-center justify-between py-2">
             <button onClick={onClose} className="min-w-14 text-left" aria-label="Close">
               <X className="h-8 w-8" />

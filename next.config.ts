@@ -7,6 +7,9 @@ const withBundleAnalyzer = createBundleAnalyzer({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  eslint: {
+    dirs: ['app', 'components', 'lib', 'prisma'],
+  },
 
   images: {
     remotePatterns: [

@@ -1,9 +1,10 @@
 'use client';
 
-import { Channel } from '@prisma/client';
 import { Button } from '@/components/ui';
 import { Mail, MessageSquare, Phone, Smartphone, CircleEllipsis } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+type Channel = 'EMAIL' | 'SMS' | 'PHONE_CALL' | 'WHATSAPP' | 'OTHER';
 
 const CHANNELS: Array<{ key: 'ALL' | Channel; label: string; icon: React.ReactNode }> = [
   { key: 'ALL', label: 'All', icon: <CircleEllipsis className="h-4 w-4" /> },

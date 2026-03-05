@@ -40,6 +40,7 @@ export async function GET(request: Request) {
       statuses: readMultiParam(searchParams, 'status'),
       reps: readMultiParam(searchParams, 'rep'),
       query: searchParams.get('q')?.trim() ?? '',
+      orgId: access.orgId,
     });
 
     return NextResponse.json(payload, {

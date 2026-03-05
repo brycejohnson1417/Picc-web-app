@@ -59,13 +59,14 @@ const columns: ColumnDef<AccountTableRow>[] = [
   },
 ];
 
-export function AccountsTable({ rows }: { rows: AccountTableRow[] }) {
+export function AccountsTable({ rows, onExportCsv }: { rows: AccountTableRow[]; onExportCsv?: () => void }) {
   return (
     <AdvancedDataTable
       title="Dispensary Master List"
       columns={columns}
       data={rows}
       searchPlaceholder="Search dispensary or license..."
+      onExportCsv={onExportCsv}
       getRowHref={(row) => `/accounts/${row.id}`}
       rowAriaLabel={(row) => `Open account ${row.name}`}
       mobileCardRenderer={(row) => (

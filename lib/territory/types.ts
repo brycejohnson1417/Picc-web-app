@@ -46,9 +46,23 @@ export interface TerritoryStoreContact {
   linkedWork: string;
 }
 
+export interface TerritoryCheckInHistoryItem {
+  id: string;
+  happenedAt: string;
+  noteText: string | null;
+  createdByEmail: string | null;
+  mode: string | null;
+  associatedContactName: string | null;
+  associatedContactRole: string | null;
+  associatedContactEmail: string | null;
+  associatedContactPhone: string | null;
+  notionNoteUrl: string | null;
+}
+
 export interface TerritoryStoreDetailResponse {
   store: TerritoryStorePin;
   contacts: TerritoryStoreContact[];
+  checkIns: TerritoryCheckInHistoryItem[];
 }
 
 export interface TerritoryFilterCount {

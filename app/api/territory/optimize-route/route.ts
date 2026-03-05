@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
+import { enforceRateLimit, getClientIdentifier } from '@/lib/server/rate-limit';
 import type { RouteMode, TerritoryOptimizedRouteResponse } from '@/lib/territory/types';
 
 export const dynamic = 'force-dynamic';
@@ -302,6 +303,19 @@ export async function POST(request: Request) {
   const access = await requireTerritoryApiAccess();
   if ('error' in access) {
     return access.error;
+  }
+
+  const clientKey = getClientIdentifier(request, access.email);
+  const limit = enforceRateLimit({
+    key: `territory-optimize:${access.orgId}:${clientKey}`,
+    limit: 40,
+    windowMs: 60_000,
+  });
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } },
+    );
   }
 
   try {

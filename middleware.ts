@@ -1,5 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { DEMO_MODE } from '@/lib/config/runtime';
 
 const isProtectedRoute = createRouteMatcher(['/(main)(.*)', '/api/(.*)']);
@@ -22,7 +22,18 @@ export default hasClerkEnv
         return NextResponse.next();
       }
     : protectedMiddleware
-  : function bypassMiddleware() {
+  : function bypassMiddleware(req: NextRequest) {
+      if (isCronSyncRoute(req)) {
+        return NextResponse.next();
+      }
+      if (req.url.includes('/api/')) {
+        return NextResponse.json(
+          {
+            error: 'Auth environment not configured',
+          },
+          { status: 503 },
+        );
+      }
       return NextResponse.next();
     };
 

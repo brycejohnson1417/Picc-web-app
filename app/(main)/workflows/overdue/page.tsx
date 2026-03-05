@@ -1,38 +1,44 @@
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
-import { Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
 import { prisma } from '@/lib/db/prisma';
+import { WorkflowBoard } from '@/components/workflows/workflow-board';
 import { currency } from '@/lib/utils';
 
 export default async function OverdueWorkflowPage() {
   const { orgId } = await requireWorkspaceContext();
 
-  const overdue = await prisma.overdueSnapshot.findMany({
-    where: { orgId, OR: [{ daysOverdue1: { gt: 0 } }, { daysOverdue2: { gt: 0 } }, { daysOverdue3: { gt: 0 } }] },
-    include: { account: true },
-    orderBy: { snapshotDate: 'desc' },
-  });
+  const [overdue, accounts] = await Promise.all([
+    prisma.overdueSnapshot.findMany({
+      where: { orgId, OR: [{ daysOverdue1: { gt: 0 } }, { daysOverdue2: { gt: 0 } }, { daysOverdue3: { gt: 0 } }] },
+      include: { account: true },
+      orderBy: { snapshotDate: 'desc' },
+    }),
+    prisma.account.findMany({ where: { orgId }, select: { id: true, name: true }, orderBy: { name: 'asc' }, take: 400 }),
+  ]);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold">Overdue Accounts</h1>
-        <p className="text-sm text-slate-500">Payment history snapshots from Sheets to prioritize collections.</p>
-      </header>
-      <Card>
-        <CardHeader><CardTitle>Collections Queue</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {overdue.map((item) => (
-            <div key={item.id} className="rounded-lg border p-3">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold">{item.account.name}</p>
-                <Badge variant="danger">{Math.max(item.daysOverdue1, item.daysOverdue2, item.daysOverdue3)} days</Badge>
-              </div>
-              <p className="text-sm text-slate-500">Credit Status: {item.creditStatus ?? 'Unknown'}</p>
-              <p className="text-sm">Amount Overdue: {currency(Number(item.amountOverdue || 0))}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+    <WorkflowBoard
+      title="Overdue Accounts"
+      description="Payment history snapshots from Sheets to prioritize collections."
+      rows={overdue.map((item) => ({
+        id: item.id,
+        status: 'IN_REVIEW',
+        primary: item.account.name,
+        secondary: `Credit: ${item.creditStatus ?? 'Unknown'} · ${Math.max(item.daysOverdue1, item.daysOverdue2, item.daysOverdue3)} days overdue`,
+        description: `Amount Overdue: ${currency(Number(item.amountOverdue || 0))}`,
+        detail: `Snapshot: ${new Date(item.snapshotDate).toLocaleDateString()}`,
+        createdAt: item.snapshotDate.toISOString(),
+      }))}
+      createEndpoint="/api/workflows/overdue"
+      patchEndpointBase="/api/workflows/overdue"
+      accounts={accounts}
+      createFields={[
+        { key: 'accountId', label: 'Account', type: 'account', required: true },
+        { key: 'creditStatus', label: 'Credit Status', type: 'text' },
+        { key: 'overdueOrders', label: 'Overdue Orders', type: 'number' },
+        { key: 'daysOverdue1', label: 'Days Overdue Bucket 1', type: 'number' },
+        { key: 'amountOverdue', label: 'Amount Overdue', type: 'number' },
+      ]}
+      defaultCreateValues={{ overdueOrders: '0', daysOverdue1: '0', amountOverdue: '0' }}
+    />
   );
 }

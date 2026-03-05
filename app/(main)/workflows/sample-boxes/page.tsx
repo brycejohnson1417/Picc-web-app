@@ -1,33 +1,35 @@
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
-import { Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
 import { prisma } from '@/lib/db/prisma';
+import { WorkflowBoard } from '@/components/workflows/workflow-board';
 
 export default async function SampleBoxesWorkflowPage() {
   const { orgId } = await requireWorkspaceContext();
 
-  const requests = await prisma.sampleBoxRequest.findMany({ where: { orgId }, include: { account: true, contact: true }, orderBy: { createdAt: 'desc' } });
+  const [requests, accounts] = await Promise.all([
+    prisma.sampleBoxRequest.findMany({ where: { orgId }, include: { account: true, contact: true }, orderBy: { createdAt: 'desc' } }),
+    prisma.account.findMany({ where: { orgId }, select: { id: true, name: true }, orderBy: { name: 'asc' }, take: 400 }),
+  ]);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold">Sample Box Requests</h1>
-        <p className="text-sm text-slate-500">Track lead sample box approvals, fulfillment status, and follow-up dependencies.</p>
-      </header>
-      <Card>
-        <CardHeader><CardTitle>Request Queue</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {requests.map((request) => (
-            <div key={request.id} className="rounded-lg border p-3">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold">{request.account.name}</p>
-                <Badge variant={request.status === 'APPROVED' || request.status === 'COMPLETED' ? 'success' : 'warning'}>{request.status}</Badge>
-              </div>
-              <p className="text-sm text-slate-500">Requested by: {request.requestedBy} · Contact: {request.contact ? `${request.contact.firstName} ${request.contact.lastName}` : 'N/A'}</p>
-              <p className="text-sm">Reason: {request.requestReason}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+    <WorkflowBoard
+      title="Sample Box Requests"
+      description="Track lead sample box approvals, fulfillment status, and follow-up dependencies."
+      rows={requests.map((request) => ({
+        id: request.id,
+        status: request.status,
+        primary: request.account.name,
+        secondary: `Requested by ${request.requestedBy} · ${request.contact ? `${request.contact.firstName} ${request.contact.lastName}` : 'No contact'}`,
+        description: request.requestReason,
+        detail: request.shippingNotes,
+        createdAt: request.createdAt.toISOString(),
+      }))}
+      createEndpoint="/api/workflows/sample-box-requests"
+      patchEndpointBase="/api/workflows/sample-box-requests"
+      accounts={accounts}
+      createFields={[
+        { key: 'accountId', label: 'Account', type: 'account', required: true },
+        { key: 'requestReason', label: 'Request Reason', type: 'textarea', required: true },
+      ]}
+    />
   );
 }

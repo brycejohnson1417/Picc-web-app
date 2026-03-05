@@ -26,6 +26,13 @@ function formatDateLabel(value: string | null | undefined, fallback: string) {
   return date.toLocaleDateString();
 }
 
+function toDateInputValue(value: string | null | undefined) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
 function cleanContactField(value: string | null | undefined) {
   if (!value) return undefined;
   const trimmed = value.trim();
@@ -54,6 +61,8 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [notesDraft, setNotesDraft] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [followUpDraft, setFollowUpDraft] = useState('');
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
   const [checkInMode, setCheckInMode] = useState<CheckInMode>('written');
@@ -70,6 +79,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
       setCheckInDraft('');
       setCheckInContact(null);
       setStreetViewLoadError(false);
+      setFollowUpDraft('');
       return;
     }
 
@@ -97,10 +107,12 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
         const payload = (await response.json()) as TerritoryStoreDetailResponse;
         setDetail(payload);
         setNotesDraft(payload.store.notes ?? '');
+        setFollowUpDraft(toDateInputValue(payload.store.followUpDate));
       } catch (error) {
         if (controller.signal.aborted) return;
         setDetail(null);
         setNotesDraft(store.notes ?? '');
+        setFollowUpDraft(toDateInputValue(store.followUpDate));
         toast.error(error instanceof Error ? error.message : 'Failed to load account detail');
       } finally {
         if (!controller.signal.aborted) {
@@ -271,6 +283,42 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
     }
   }
 
+  async function handleSaveFollowUp() {
+    setSavingFollowUp(true);
+    try {
+      const response = await fetch(`/api/territory/stores/${activeStore.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          followUpDate: followUpDraft.trim() ? followUpDraft.trim() : null,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'Failed to save follow-up date');
+      }
+
+      const savedValue = typeof payload?.followUpDate === 'string' ? payload.followUpDate : followUpDraft.trim() || null;
+      setDetail((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          store: {
+            ...prev.store,
+            followUpDate: savedValue,
+          },
+        };
+      });
+      setFollowUpDraft(toDateInputValue(savedValue));
+      toast.success('Follow-up date saved');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save follow-up date');
+    } finally {
+      setSavingFollowUp(false);
+    }
+  }
+
   function handleCenter() {
     if (onCenterStore) {
       onCenterStore(activeStore);
@@ -284,10 +332,6 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
     <div className="fixed inset-0 z-[5000] bg-black/35">
       <div className="mx-auto h-full max-w-[480px] bg-[#e6e6e9]">
         <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
-          <div className="mb-2 flex items-center justify-between text-sm opacity-90">
-            <span className="font-semibold">12:20</span>
-            <span className="font-semibold">100%</span>
-          </div>
           <div className="relative flex items-center justify-between py-2">
             <button onClick={onClose} className="min-w-14 text-left" aria-label="Close">
               <X className="h-8 w-8" />
@@ -327,6 +371,20 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
               <DetailRow label="Account Status" value={activeStore.status} strong />
               <DetailRow label="PICC Rep" value={activeStore.repNames.join(', ') || '—'} />
               <DetailRow label="License" value={activeStore.licenseNumber ?? '—'} />
+              <div className="border-b border-[#c6c7cb] px-5 py-4">
+                <p className="text-[20px] text-[#a2a3a8]">Set Follow-up Date</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={followUpDraft}
+                    onChange={(event) => setFollowUpDraft(event.target.value)}
+                    className="h-10 min-w-0 flex-1 rounded-lg border border-[#c4c7cf] bg-white px-3 text-[15px] text-[#1d1f23]"
+                  />
+                  <Button type="button" className="h-10 px-4" onClick={handleSaveFollowUp} disabled={savingFollowUp}>
+                    {savingFollowUp ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
+              </div>
 
               <div className="border-b border-[#c6c7cb] px-5 py-4">
                 <p className="text-[20px] text-[#a2a3a8]">Associated Contacts</p>
@@ -444,6 +502,35 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
               <DetailRow label="Last check-in" value={formatCheckInLabel(activeStore.lastCheckIn)} strong />
               <DetailRow label="Route status" value={routeSelected ? 'In current route' : 'Not in current route'} />
               <DetailRow label="Sync source" value="Notion live cache" />
+              <div className="border-b border-[#c6c7cb] px-5 py-4">
+                <p className="text-[20px] text-[#a2a3a8]">Check-in History</p>
+                {detail?.checkIns?.length ? (
+                  <div className="mt-2 space-y-2">
+                    {detail.checkIns.map((item) => (
+                      <div key={item.id} className="rounded-lg border border-[#c7c8cd] bg-[#f3f3f6] px-3 py-2">
+                        <p className="text-[15px] font-semibold text-[#1d1f23]">{new Date(item.happenedAt).toLocaleString()}</p>
+                        <p className="text-[14px] text-[#595c64]">
+                          {(item.mode ?? 'written').toUpperCase()} · {item.createdByEmail ?? 'unknown'}
+                        </p>
+                        {item.associatedContactName ? (
+                          <p className="text-[14px] text-[#595c64]">
+                            Contact: {item.associatedContactName}
+                            {item.associatedContactRole ? ` (${item.associatedContactRole})` : ''}
+                          </p>
+                        ) : null}
+                        {item.noteText ? <p className="mt-1 text-[14px] text-[#1f2126]">{item.noteText}</p> : null}
+                        {item.notionNoteUrl ? (
+                          <a href={item.notionNoteUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[13px] font-medium text-[#1f4e9f] underline">
+                            Open note
+                          </a>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[18px] text-[#1d1f23]">No check-ins yet.</p>
+                )}
+              </div>
             </>
           ) : null}
         </div>

@@ -117,6 +117,20 @@ let lastGeocodeLookupAt = 0;
 const memoryGeocodeCache = new Map<string, { lat: number; lng: number; formattedAddress: string }>();
 let territorySyncInFlight: Promise<void> | null = null;
 let territoryLastSyncError: string | null = null;
+
+function resolveTerritoryOrgId(orgId?: string) {
+  const cleaned = orgId?.trim();
+  if (cleaned) {
+    return cleaned;
+  }
+
+  const envOrgId = process.env.TERRITORY_ORG_ID?.trim();
+  if (envOrgId) {
+    return envOrgId;
+  }
+
+  throw new Error('Territory org context is required');
+}
 const CONTACTS_SNAPSHOT_KEY = 'crm-contacts-v1';
 
 function requiredEnv(name: 'NOTION_API_KEY' | 'NOTION_MASTER_LIST_DATABASE_ID') {
@@ -595,8 +609,6 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
     unresolvedLocationCount,
     lastEditedMax,
   });
-  await syncTerritoryStoresReadModel(stores);
-
   const snapshot: NotionCacheSnapshot<TerritoryStorePin[]> = {
     key: TERRITORY_SNAPSHOT_KEY,
     payload: stores,
@@ -763,9 +775,12 @@ async function patchStoreInSnapshot(storeId: string, updater: (store: TerritoryS
   });
 }
 
-export async function loadTerritoryStoreDetail(storeId: string) {
+export async function loadTerritoryStoreDetail(storeId: string, input?: { orgId?: string }) {
+  const orgId = resolveTerritoryOrgId(input?.orgId);
   const snapshot = await getTerritorySnapshot();
-  const store = (await loadTerritoryStoreFromReadModel(storeId)) ?? findStoreById(snapshot.stores, storeId);
+  const store =
+    (await loadTerritoryStoreFromReadModel(storeId, { orgId })) ??
+    findStoreById(snapshot.stores, storeId);
   if (!store) {
     throw new Error('Store not found');
   }
@@ -774,6 +789,14 @@ export async function loadTerritoryStoreDetail(storeId: string) {
   const contacts = normalizeCachedContacts(contactsSnapshot?.payload).filter((contact) =>
     contact.accountPageIds.some((pageId) => normalizePageId(pageId) === normalizePageId(store.notionPageId)),
   );
+  const checkIns = await prisma.checkIn.findMany({
+    where: {
+      orgId,
+      storeId: { in: [store.id, store.notionPageId] },
+    },
+    orderBy: { happenedAt: 'desc' },
+    take: 80,
+  });
 
   contacts.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -788,10 +811,23 @@ export async function loadTerritoryStoreDetail(storeId: string) {
       status: contact.status,
       linkedWork: contact.linkedWork,
     })),
+    checkIns: checkIns.map((checkIn) => ({
+      id: checkIn.id,
+      happenedAt: checkIn.happenedAt.toISOString(),
+      noteText: checkIn.noteText,
+      createdByEmail: checkIn.createdByEmail,
+      mode: checkIn.mode,
+      associatedContactName: checkIn.associatedContactName,
+      associatedContactRole: checkIn.associatedContactRole,
+      associatedContactEmail: checkIn.associatedContactEmail,
+      associatedContactPhone: checkIn.associatedContactPhone,
+      notionNoteUrl: checkIn.notionNoteUrl,
+    })),
   };
 }
 
-export async function updateTerritoryStoreNotes(storeId: string, notes: string) {
+export async function updateTerritoryStoreNotes(storeId: string, notes: string, input?: { orgId?: string }) {
+  const orgId = resolveTerritoryOrgId(input?.orgId);
   const snapshot = await getTerritorySnapshot();
   const store = findStoreById(snapshot.stores, storeId);
   if (!store) {
@@ -837,6 +873,7 @@ export async function updateTerritoryStoreNotes(storeId: string, notes: string) 
   }));
   await patchTerritoryStoreReadModel(store.id, {
     notes: trimmed || null,
+    orgId,
   });
 
   return {
@@ -846,7 +883,79 @@ export async function updateTerritoryStoreNotes(storeId: string, notes: string) 
   };
 }
 
-export async function recordTerritoryStoreCheckIn(storeId: string) {
+export async function updateTerritoryStoreFollowUpDate(storeId: string, followUpDate: string | null, input?: { orgId?: string }) {
+  const orgId = resolveTerritoryOrgId(input?.orgId);
+  const snapshot = await getTerritorySnapshot();
+  const store = findStoreById(snapshot.stores, storeId);
+  if (!store) {
+    throw new Error('Store not found');
+  }
+
+  const schema = await fetchAndValidateDatabaseSchema();
+  const followUpProperty = pickPropertyNameByType(
+    schema.database.properties ?? {},
+    ['Follow-up Date', 'Follow Up Date', 'Next Follow-up', 'Next Follow Up'],
+    'date',
+  );
+
+  if (!followUpProperty) {
+    throw new Error('No writable Follow-up date property found in Notion database');
+  }
+
+  const normalized = followUpDate && followUpDate.trim().length > 0 ? followUpDate.trim() : null;
+  if (normalized) {
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error('Invalid follow-up date');
+    }
+  }
+
+  await notionRequest<unknown>(`/pages/${store.notionPageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      properties: {
+        [followUpProperty]: {
+          date: normalized ? { start: normalized } : null,
+        },
+      },
+    }),
+  });
+
+  const now = new Date().toISOString();
+  await patchStoreInSnapshot(store.id, (entry) => ({
+    ...entry,
+    followUpDate: normalized,
+    lastEditedTime: now,
+  }));
+  await patchTerritoryStoreReadModel(store.id, {
+    followUpDate: normalized,
+    orgId,
+  });
+
+  return {
+    storeId: store.id,
+    followUpDate: normalized,
+    updatedAt: now,
+  };
+}
+
+export async function recordTerritoryStoreCheckIn(
+  storeId: string,
+  input?: {
+    noteText?: string | null;
+    mode?: 'written' | 'voice';
+    createdByEmail?: string | null;
+    associatedContact?: {
+      name?: string | null;
+      roleTitle?: string | null;
+      email?: string | null;
+      phone?: string | null;
+    } | null;
+    notionNoteUrl?: string | null;
+    orgId?: string;
+  },
+) {
+  const orgId = resolveTerritoryOrgId(input?.orgId);
   const snapshot = await getTerritorySnapshot();
   const store = findStoreById(snapshot.stores, storeId);
   if (!store) {
@@ -887,13 +996,22 @@ export async function recordTerritoryStoreCheckIn(storeId: string) {
   }));
   await patchTerritoryStoreReadModel(store.id, {
     lastCheckIn: checkedInAt,
+    orgId,
   });
   await recordTerritoryCheckInEvent({
     storeId: store.id,
     lat: store.lat,
     lng: store.lng,
-    noteText: `Check-in recorded at ${checkedInAt}`,
+    noteText: input?.noteText?.trim() || `Check-in recorded at ${checkedInAt}`,
+    mode: input?.mode ?? null,
+    createdByEmail: input?.createdByEmail ?? null,
+    associatedContactName: input?.associatedContact?.name?.trim() || null,
+    associatedContactRole: input?.associatedContact?.roleTitle?.trim() || null,
+    associatedContactEmail: input?.associatedContact?.email?.trim() || null,
+    associatedContactPhone: input?.associatedContact?.phone?.trim() || null,
+    notionNoteUrl: input?.notionNoteUrl ?? null,
     happenedAt: checkedInAt,
+    orgId,
   });
 
   return {
@@ -919,16 +1037,19 @@ export async function loadTerritoryStores(input?: {
   query?: string;
   refresh?: boolean;
   maxLiveGeocodeLookups?: number;
+  orgId?: string;
 }): Promise<TerritoryStoresResponse> {
+  const orgId = resolveTerritoryOrgId(input?.orgId);
   const snapshot = await getTerritorySnapshot({
     refresh: input?.refresh,
     maxLiveGeocodeLookups: input?.maxLiveGeocodeLookups,
   });
-  await syncTerritoryStoresReadModel(snapshot.stores);
+  await syncTerritoryStoresReadModel(snapshot.stores, { orgId });
   const readModel = await loadTerritoryStoresFromReadModel({
     statuses: input?.statuses,
     reps: input?.reps,
     query: input?.query,
+    orgId,
   });
 
   return {

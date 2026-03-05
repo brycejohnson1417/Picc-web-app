@@ -2,12 +2,14 @@ import 'server-only';
 
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 
 interface AccessResult {
   ok: boolean;
   status: number;
   error?: string;
   email?: string;
+  orgId?: string;
 }
 
 function parseCsv(value: string | undefined) {
@@ -38,12 +40,29 @@ function getAdminAllowlist(allowlist: Set<string>) {
 }
 
 export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): Promise<AccessResult> {
-  const { userId } = await auth();
+  let userId: string | null = null;
+  let authOrgId: string | null = null;
+  try {
+    const authResult = await auth();
+    userId = authResult.userId ?? null;
+    authOrgId = authResult.orgId ?? null;
+  } catch {
+    return { ok: false, status: 503, error: 'Auth unavailable' };
+  }
+
   if (!userId) {
     return { ok: false, status: 401, error: 'Unauthenticated' };
   }
 
-  const user = await currentUser();
+  let workspaceOrgId: string;
+  try {
+    const workspaceKey = authOrgId ?? `user_${userId}`;
+    workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId);
+  } catch {
+    return { ok: false, status: 500, error: 'Workspace bootstrap failed' };
+  }
+
+  const user = await currentUser().catch(() => null);
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress;
   if (!email) {
     return { ok: false, status: 403, error: 'User email not found' };
@@ -71,7 +90,7 @@ export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): P
     }
   }
 
-  return { ok: true, status: 200, email: normalizedEmail };
+  return { ok: true, status: 200, email: normalizedEmail, orgId: workspaceOrgId };
 }
 
 export async function requireTerritoryApiAccess(opts?: { requireAdmin?: boolean }) {
@@ -91,5 +110,6 @@ export async function requireTerritoryApiAccess(opts?: { requireAdmin?: boolean 
 
   return {
     email: result.email!,
+    orgId: result.orgId!,
   };
 }

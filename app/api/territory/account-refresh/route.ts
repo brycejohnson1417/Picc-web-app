@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const payload = requestSchema.parse(await request.json());
     const normalizedPageId = payload.storePageId.replace(/-/g, '').toLowerCase();
-    const refreshed = await loadTerritoryStores({ refresh: true });
+    const refreshed = await loadTerritoryStores({ refresh: true, orgId: access.orgId });
     const store = refreshed.stores.find((entry) => entry.notionPageId.replace(/-/g, '').toLowerCase() === normalizedPageId);
 
     if (!store) {

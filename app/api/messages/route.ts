@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { guard } from '@/lib/auth/api-guard';
 import { prisma } from '@/lib/db/prisma';
 import { writeActivity } from '@/lib/activity-log/write';
+import { enforceRateLimit, getClientIdentifier } from '@/lib/server/rate-limit';
 
 const schema = z.object({
   conversationId: z.string().cuid(),
@@ -14,6 +15,16 @@ const schema = z.object({
 export async function POST(req: Request) {
   const ctx = await guard(['ADMIN', 'OPS_TEAM', 'SALES_REP', 'BRAND_AMBASSADOR']);
   if ('error' in ctx) return ctx.error;
+
+  const clientKey = getClientIdentifier(req, ctx.userId);
+  const limit = enforceRateLimit({
+    key: `messages:${ctx.orgId}:${clientKey}`,
+    limit: 100,
+    windowMs: 60_000,
+  });
+  if (!limit.ok) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } });
+  }
 
   const body = await req.json();
   const payload = schema.parse(body);
@@ -36,7 +47,7 @@ export async function POST(req: Request) {
       direction: payload.direction,
       body: payload.body,
       createdByUserId: ctx.userId,
-      isMock: true,
+      isMock: false,
     },
   });
 
@@ -55,7 +66,7 @@ export async function POST(req: Request) {
     messageId: message.id,
     actorClerkUserId: ctx.userId,
     type: payload.direction === 'OUTBOUND' ? ActivityType.MESSAGE_SENT : ActivityType.MESSAGE_RECEIVED,
-    title: payload.direction === 'OUTBOUND' ? 'Message sent (mock)' : 'Message received (mock)',
+    title: payload.direction === 'OUTBOUND' ? 'Message sent' : 'Message received',
     description: payload.body,
     channel: conversation.channel,
   });

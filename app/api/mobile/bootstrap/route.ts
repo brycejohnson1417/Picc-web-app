@@ -4,7 +4,16 @@ import { auth } from '@clerk/nextjs/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const { userId } = await auth();
+  const { userId, orgId } = await auth();
+
+  if (!userId) {
+    return NextResponse.json(
+      {
+        error: 'Unauthenticated',
+      },
+      { status: 401 },
+    );
+  }
 
   return NextResponse.json({
     app: {
@@ -13,9 +22,9 @@ export async function GET() {
       minSupportedVersion: '0.1.0',
     },
     session: {
-      authenticated: Boolean(userId),
-      userId: userId ?? null,
-      orgId: process.env.TERRITORY_ORG_ID ?? 'org_picc_demo',
+      authenticated: true,
+      userId,
+      orgId: orgId ?? null,
     },
     api: {
       territoryStores: '/api/territory/stores',

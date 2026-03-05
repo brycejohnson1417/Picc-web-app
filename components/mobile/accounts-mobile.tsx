@@ -1,6 +1,5 @@
 'use client';
 
-import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -99,19 +98,7 @@ export function AccountsMobile() {
 
   return (
     <div className="min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
-      <MobileHeader
-        title="Accounts"
-        right={(
-          <button
-            type="button"
-            className="text-[42px] leading-none"
-            onClick={() => toast.message('Create account is available in desktop mode.')}
-            aria-label="Create account"
-          >
-            <Plus className="ml-auto h-9 w-9" />
-          </button>
-        )}
-      >
+      <MobileHeader title="Accounts">
         <SegmentedControl
           value={scope}
           onChange={(value) => setScope(value as 'all' | 'recent' | 'follow-ups')}

@@ -1,46 +1,52 @@
-import { CalendarMobile } from '@/components/mobile/calendar-mobile';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { prisma } from '@/lib/db/prisma';
+import { CalendarClient } from '@/components/calendar/calendar-client';
 
-export default async function CalendarPage() {
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
   const { orgId } = await requireWorkspaceContext();
+  const params = await searchParams;
 
-  const appointments = await prisma.appointment.findMany({
-    where: { orgId },
-    include: { account: true, contact: true },
-    orderBy: { startsAt: 'asc' },
-    take: 120,
-  });
+  const [appointments, vendorDays, accounts] = await Promise.all([
+    prisma.appointment.findMany({
+      where: { orgId },
+      include: {
+        account: { select: { id: true, name: true } },
+        contact: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { startsAt: 'asc' },
+      take: 500,
+    }),
+    prisma.vendorDayEvent.findMany({
+      where: { orgId },
+      include: { account: { select: { id: true, name: true } } },
+      orderBy: { eventDate: 'asc' },
+      take: 300,
+    }),
+    prisma.account.findMany({
+      where: { orgId },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+      take: 400,
+    }),
+  ]);
 
   return (
-    <>
-      <div className="md:hidden">
-        <CalendarMobile />
-      </div>
-
-      <div className="hidden space-y-6 md:block">
-        <header>
-          <h1 className="text-3xl font-bold">Calendar</h1>
-          <p className="text-sm text-slate-500">Month/week/day planning with account-linked appointments and reminders.</p>
-        </header>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Upcoming Appointments</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {appointments.map((appt) => (
-              <div key={appt.id} className="rounded-lg border p-3">
-                <p className="font-semibold">{appt.title}</p>
-                <p className="text-sm text-slate-500">
-                  {new Date(appt.startsAt).toLocaleString()} - {new Date(appt.endsAt).toLocaleTimeString()} · {appt.account.name}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    </>
+    <CalendarClient
+      initialAppointments={appointments.map((appointment) => ({
+        ...appointment,
+        startsAt: appointment.startsAt.toISOString(),
+        endsAt: appointment.endsAt.toISOString(),
+      }))}
+      initialVendorDays={vendorDays.map((event) => ({
+        ...event,
+        eventDate: event.eventDate.toISOString(),
+      }))}
+      accounts={accounts}
+      autoOpenCreate={params.new === '1'}
+    />
   );
 }
