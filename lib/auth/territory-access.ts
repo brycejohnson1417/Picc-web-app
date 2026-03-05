@@ -67,17 +67,23 @@ export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): P
   if (!email) {
     return { ok: false, status: 403, error: 'User email not found' };
   }
+  const normalizedEmail = email.toLowerCase();
 
   const allowlist = getAllowlist();
   if (allowlist.size === 0) {
-    return {
-      ok: false,
-      status: 503,
-      error: 'TERRITORY_ALLOWED_EMAILS is not configured',
-    };
+    if (opts?.requireAdmin) {
+      return {
+        ok: false,
+        status: 503,
+        error: 'TERRITORY_ADMIN_EMAILS is not configured',
+      };
+    }
+
+    // Backward-compatible fallback: authenticated users can access territory
+    // surfaces when no explicit email allowlist is configured.
+    return { ok: true, status: 200, email: normalizedEmail, orgId: workspaceOrgId };
   }
 
-  const normalizedEmail = email.toLowerCase();
   const allowAll = allowlist.has('*');
   if (!allowAll && !allowlist.has(normalizedEmail)) {
     return { ok: false, status: 403, error: 'Access denied for this user' };
