@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { Role } from '@prisma/client';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 import { prisma } from '@/lib/db/prisma';
+import { resolveWorkspaceKey } from '@/lib/auth/workspace-key';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +51,9 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     redirect('/sign-in');
   }
 
-  const workspaceKey = orgId ?? `user_${userId}`;
+  const user = await currentUser().catch(() => null);
+  const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? null;
+  const workspaceKey = resolveWorkspaceKey({ authOrgId: orgId, userId, email });
   await ensureWorkspaceAndMembership(workspaceKey, userId);
 
   return <AppShell>{children}</AppShell>;

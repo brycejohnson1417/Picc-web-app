@@ -1,6 +1,7 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
+import { resolveWorkspaceKey } from '@/lib/auth/workspace-key';
 
 export async function requireOrgContext() {
   if (DEMO_MODE) {
@@ -13,10 +14,9 @@ export async function requireOrgContext() {
     throw new Error('UNAUTHENTICATED');
   }
 
-  if (!orgId) {
-    throw new Error('NO_ORGANIZATION');
-  }
-
-  const workspaceOrgId = await ensureWorkspaceAndMembership(orgId, userId);
+  const user = await currentUser().catch(() => null);
+  const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? null;
+  const workspaceKey = resolveWorkspaceKey({ authOrgId: orgId, userId, email });
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId);
   return { userId, orgId: workspaceOrgId };
 }

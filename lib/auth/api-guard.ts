@@ -1,9 +1,10 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { AppRole } from '@/lib/types/rbac';
 import { getUserRole } from '@/lib/rbac/guards';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
+import { resolveWorkspaceKey } from '@/lib/auth/workspace-key';
 
 export async function guard(allowedRoles?: AppRole[]) {
   if (DEMO_MODE) {
@@ -41,7 +42,9 @@ export async function guard(allowedRoles?: AppRole[]) {
     return { error: NextResponse.json({ error: 'Unauthenticated' }, { status: 401 }) };
   }
 
-  const workspaceKey = orgId ?? `user_${userId}`;
+  const user = await currentUser().catch(() => null);
+  const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? null;
+  const workspaceKey = resolveWorkspaceKey({ authOrgId: orgId, userId, email });
   let workspaceOrgId = workspaceKey;
   try {
     workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId);

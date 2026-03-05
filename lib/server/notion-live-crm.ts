@@ -370,38 +370,67 @@ async function getCachedContacts(input?: { refresh?: boolean }) {
 }
 
 export async function loadLiveNotionAccounts(orgIdInput?: string): Promise<AccountTableRow[]> {
-  const orgId = orgIdInput?.trim() || process.env.TERRITORY_ORG_ID?.trim();
-  if (!orgId) {
-    throw new Error('Territory org context is required');
-  }
+  const requestedOrgId = orgIdInput?.trim() || null;
+  const sharedOrgId = process.env.TERRITORY_ORG_ID?.trim() || null;
+  const primaryOrgId = requestedOrgId ?? sharedOrgId;
 
-  const [territoryResult, contacts, localAccounts, localContactCounts, openOppValueByAccount] = await Promise.all([
+  const [territoryResult, contacts] = await Promise.all([
     getCachedTerritoryStores().catch(() => null),
     getCachedContacts().catch(() => ({ rows: [] as CachedContactRow[] })),
-    prisma.account.findMany({
-      where: { orgId },
-      select: {
-        id: true,
-        name: true,
-        licenseNumber: true,
-        notionPageId: true,
-        city: true,
-        state: true,
-        status: true,
-        updatedAt: true,
-      },
-    }),
-    prisma.contact.groupBy({
-      by: ['accountId'],
-      where: { orgId },
-      _count: { accountId: true },
-    }),
-    prisma.opportunity.groupBy({
-      by: ['accountId'],
-      where: { orgId, status: 'OPEN' },
-      _sum: { value: true },
-    }),
   ]);
+
+  async function loadLocalCrmContext(targetOrgId: string) {
+    const [accounts, contactCounts, oppValueByAccount] = await Promise.all([
+      prisma.account.findMany({
+        where: { orgId: targetOrgId },
+        select: {
+          id: true,
+          name: true,
+          licenseNumber: true,
+          notionPageId: true,
+          city: true,
+          state: true,
+          status: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.contact.groupBy({
+        by: ['accountId'],
+        where: { orgId: targetOrgId },
+        _count: { accountId: true },
+      }),
+      prisma.opportunity.groupBy({
+        by: ['accountId'],
+        where: { orgId: targetOrgId, status: 'OPEN' },
+        _sum: { value: true },
+      }),
+    ]);
+
+    return {
+      accounts,
+      contactCounts,
+      oppValueByAccount,
+    };
+  }
+
+  type LocalCrmContext = Awaited<ReturnType<typeof loadLocalCrmContext>>;
+  let localContext: LocalCrmContext = {
+    accounts: [],
+    contactCounts: [],
+    oppValueByAccount: [],
+  };
+
+  if (primaryOrgId) {
+    localContext = await loadLocalCrmContext(primaryOrgId);
+  }
+
+  if (localContext.accounts.length === 0 && sharedOrgId && sharedOrgId !== primaryOrgId) {
+    localContext = await loadLocalCrmContext(sharedOrgId);
+  }
+  const localAccounts = localContext.accounts;
+  const localContactCounts = localContext.contactCounts;
+  const openOppValueByAccount = localContext.oppValueByAccount;
+
   const territoryStores = territoryResult?.stores ?? [];
 
   const accountByNotionId = new Map(
