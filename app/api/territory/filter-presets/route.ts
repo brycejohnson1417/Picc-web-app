@@ -21,7 +21,7 @@ export async function GET() {
   }
 
   try {
-    const presets = await listTerritoryFilterPresets(access.email);
+    const presets = await listTerritoryFilterPresets(access.email, { orgId: access.orgId });
     return NextResponse.json({ presets });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load filter presets';
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
   try {
     const parsed = presetSchema.parse(await request.json());
-    const preset = await upsertTerritoryFilterPreset(access.email, parsed);
+    const preset = await upsertTerritoryFilterPreset(access.email, parsed, { orgId: access.orgId });
     return NextResponse.json({ preset });
   } catch (error) {
     if (error instanceof z.ZodError) {

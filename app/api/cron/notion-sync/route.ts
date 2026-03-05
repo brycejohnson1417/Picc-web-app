@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { prewarmLiveCrmCaches } from '@/lib/server/notion-live-crm';
 import { prewarmTerritoryGeocodeCache } from '@/lib/server/notion-territory';
 
@@ -8,7 +9,13 @@ function isAuthorized(request: Request) {
   const secret = process.env.CRON_SECRET?.trim();
   if (secret) {
     const authHeader = request.headers.get('authorization') ?? '';
-    return authHeader === `Bearer ${secret}`;
+    const expected = `Bearer ${secret}`;
+    const receivedBuffer = Buffer.from(authHeader);
+    const expectedBuffer = Buffer.from(expected);
+    if (receivedBuffer.length !== expectedBuffer.length) {
+      return false;
+    }
+    return timingSafeEqual(receivedBuffer, expectedBuffer);
   }
 
   const cronHeader = request.headers.get('x-vercel-cron');

@@ -153,6 +153,7 @@ model Account {
   id                    String                           @id @default(cuid())
   orgId                 String
   org                   OrganizationWorkspace            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  notionPageId          String?
   name                  String
   licenseNumber         String
   address1              String
@@ -186,8 +187,10 @@ model Account {
   editSuggestions       EditSuggestion[]
 
   @@unique([orgId, licenseNumber])
+  @@unique([orgId, notionPageId])
   @@index([orgId, name])
   @@index([orgId, status])
+  @@index([orgId, lastContactedAt])
 }
 
 model Contact {
@@ -371,6 +374,7 @@ model Opportunity {
   @@index([orgId, accountId])
   @@index([orgId, stageId])
   @@index([orgId, status])
+  @@index([orgId, status, updatedAt])
 }
 
 model Task {
@@ -396,6 +400,7 @@ model Task {
   @@index([orgId, accountId])
   @@index([orgId, assignedToUserId])
   @@index([orgId, status])
+  @@index([orgId, status, dueDate])
 }
 
 model Appointment {
@@ -467,6 +472,7 @@ model Message {
   @@index([orgId, accountId])
   @@index([orgId, conversationId])
   @@index([orgId, sentAt])
+  @@index([orgId, accountId, sentAt])
 }
 
 model ActivityLog {
@@ -852,6 +858,12 @@ model CheckIn {
   org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
   storeId       String?
   contactId     String?
+  mode          String?
+  associatedContactName String?
+  associatedContactRole String?
+  associatedContactEmail String?
+  associatedContactPhone String?
+  notionNoteUrl String?
   happenedAt    DateTime              @default(now())
   noteText      String?
   photoUrls     String[]              @default([])

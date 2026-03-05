@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
+import { enforceRateLimit, getClientIdentifier } from '@/lib/server/rate-limit';
 import { loadTerritoryStores } from '@/lib/server/notion-territory';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,22 @@ export async function GET(request: Request) {
     return access.error;
   }
 
+  const clientKey = getClientIdentifier(request, access.email);
+  const limit = enforceRateLimit({
+    key: `territory-stores:${access.orgId}:${clientKey}`,
+    limit: 120,
+    windowMs: 60_000,
+  });
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded' },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(limit.retryAfterSeconds) },
+      },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const statuses = readMultiParam(searchParams, 'status');
   const reps = readMultiParam(searchParams, 'rep');
@@ -30,6 +47,7 @@ export async function GET(request: Request) {
       reps,
       query: q,
       refresh,
+      orgId: access.orgId,
     });
 
     console.log('territory_stores_ok', {

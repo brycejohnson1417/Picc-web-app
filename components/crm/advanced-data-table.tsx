@@ -24,6 +24,11 @@ interface Props<TData, TValue> {
   title: string;
   searchPlaceholder?: string;
   onExportCsv?: () => void;
+  onOpenFilters?: () => void;
+  onOpenSavedViews?: () => void;
+  onBulkTag?: () => void;
+  onBulkAssign?: () => void;
+  onBulkDelete?: () => void;
   mobileCardRenderer?: (row: TData) => ReactNode;
   getRowHref?: (row: TData) => string | null;
   rowAriaLabel?: (row: TData) => string;
@@ -35,6 +40,11 @@ export function AdvancedDataTable<TData, TValue>({
   title,
   searchPlaceholder = 'Search...',
   onExportCsv,
+  onOpenFilters,
+  onOpenSavedViews,
+  onBulkTag,
+  onBulkAssign,
+  onBulkDelete,
   mobileCardRenderer,
   getRowHref,
   rowAriaLabel,
@@ -83,9 +93,21 @@ export function AdvancedDataTable<TData, TValue>({
             placeholder={searchPlaceholder}
             className="h-11 w-full sm:w-[260px]"
           />
-          <Button variant="secondary" className="h-11 min-w-[44px]"><Filter className="h-4 w-4" /> Filters</Button>
-          <Button variant="secondary" className="h-11 min-w-[44px]"><Settings2 className="h-4 w-4" /> Saved Views</Button>
-          <Button variant="outline" className="h-11 min-w-[44px]" onClick={onExportCsv}><Download className="h-4 w-4" /> Export</Button>
+          {onOpenFilters ? (
+            <Button variant="secondary" className="h-11 min-w-[44px]" onClick={onOpenFilters}>
+              <Filter className="h-4 w-4" /> Filters
+            </Button>
+          ) : null}
+          {onOpenSavedViews ? (
+            <Button variant="secondary" className="h-11 min-w-[44px]" onClick={onOpenSavedViews}>
+              <Settings2 className="h-4 w-4" /> Saved Views
+            </Button>
+          ) : null}
+          {onExportCsv ? (
+            <Button variant="outline" className="h-11 min-w-[44px]" onClick={onExportCsv}>
+              <Download className="h-4 w-4" /> Export
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -93,9 +115,21 @@ export function AdvancedDataTable<TData, TValue>({
         <div className="flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 sm:flex-row sm:items-center sm:justify-between">
           <span>{selectedCount} selected</span>
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" className="min-h-11">Tag</Button>
-            <Button size="sm" variant="secondary" className="min-h-11">Assign</Button>
-            <Button size="sm" variant="danger" className="min-h-11">Delete</Button>
+            {onBulkTag ? (
+              <Button size="sm" variant="secondary" className="min-h-11" onClick={onBulkTag}>
+                Tag
+              </Button>
+            ) : null}
+            {onBulkAssign ? (
+              <Button size="sm" variant="secondary" className="min-h-11" onClick={onBulkAssign}>
+                Assign
+              </Button>
+            ) : null}
+            {onBulkDelete ? (
+              <Button size="sm" variant="danger" className="min-h-11" onClick={onBulkDelete}>
+                Delete
+              </Button>
+            ) : null}
           </div>
         </div>
       )}

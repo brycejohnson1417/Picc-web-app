@@ -1,34 +1,39 @@
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
-import { Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
 import { prisma } from '@/lib/db/prisma';
+import { WorkflowBoard } from '@/components/workflows/workflow-board';
 import { currency } from '@/lib/utils';
 
 export default async function PennyBundlesWorkflowPage() {
   const { orgId } = await requireWorkspaceContext();
 
-  const items = await prisma.pennyBundleCreditSubmission.findMany({ where: { orgId }, include: { account: true, vendorDayEvent: true }, orderBy: { createdAt: 'desc' } });
+  const [items, accounts] = await Promise.all([
+    prisma.pennyBundleCreditSubmission.findMany({ where: { orgId }, include: { account: true, vendorDayEvent: true }, orderBy: { createdAt: 'desc' } }),
+    prisma.account.findMany({ where: { orgId }, select: { id: true, name: true }, orderBy: { name: 'asc' }, take: 400 }),
+  ]);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold">Penny Bundle Credits</h1>
-        <p className="text-sm text-slate-500">Review and process penny bundle promotion credit submissions.</p>
-      </header>
-      <Card>
-        <CardHeader><CardTitle>Submission Queue</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {items.map((item) => (
-            <div key={item.id} className="rounded-lg border p-3">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold">{item.account.name}</p>
-                <Badge variant={item.status === 'APPROVED' || item.status === 'COMPLETED' ? 'success' : 'warning'}>{item.status}</Badge>
-              </div>
-              <p className="text-sm text-slate-500">Order #{item.orderNumber ?? '—'} · Credit Memo {item.creditMemo ?? '—'}</p>
-              <p className="text-sm">Amount: {currency(Number(item.creditAmount || 0))}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+    <WorkflowBoard
+      title="Penny Bundle Credits"
+      description="Review and process penny bundle promotion credit submissions."
+      rows={items.map((item) => ({
+        id: item.id,
+        status: item.status,
+        primary: item.account.name,
+        secondary: `Order #${item.orderNumber ?? '—'} · Credit Memo ${item.creditMemo ?? '—'}`,
+        description: `Amount: ${currency(Number(item.creditAmount || 0))}`,
+        detail: item.notes,
+        createdAt: item.createdAt.toISOString(),
+      }))}
+      createEndpoint="/api/workflows/penny-bundle-submissions"
+      patchEndpointBase="/api/workflows/penny-bundle-submissions"
+      accounts={accounts}
+      createFields={[
+        { key: 'accountId', label: 'Account', type: 'account', required: true },
+        { key: 'orderNumber', label: 'Order Number', type: 'text' },
+        { key: 'creditMemo', label: 'Credit Memo', type: 'text' },
+        { key: 'creditAmount', label: 'Credit Amount', type: 'number' },
+        { key: 'notes', label: 'Notes', type: 'textarea' },
+      ]}
+    />
   );
 }

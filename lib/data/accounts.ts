@@ -20,7 +20,10 @@ export async function getAccounts(orgId: string) {
 
 export async function getAccountDetail(orgId: string, accountId: string) {
   return prisma.account.findFirst({
-    where: { id: accountId, orgId },
+    where: {
+      orgId,
+      OR: [{ id: accountId }, { notionPageId: accountId }],
+    },
     include: {
       contacts: true,
       opportunities: { include: { stage: true }, orderBy: { updatedAt: 'desc' } },

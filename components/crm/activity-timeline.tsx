@@ -1,7 +1,7 @@
 import { ActivityLog, Channel } from '@prisma/client';
 import { format } from 'date-fns';
 import { Mail, MessageSquare, Phone, Smartphone, StickyNote } from 'lucide-react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 
 type TimelineItem = ActivityLog & {
   account?: { name: string } | null;
@@ -34,7 +34,6 @@ export function ActivityTimeline({ items }: { items: TimelineItem[] }) {
     <Card>
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle>Activity Timeline</CardTitle>
-        <Button variant="outline" size="sm">Filter by channel/date</Button>
       </CardHeader>
       <CardContent className="space-y-6">
         {Object.entries(grouped).length === 0 && (

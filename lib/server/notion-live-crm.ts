@@ -9,6 +9,7 @@ import {
   writeNotionCacheSnapshot,
 } from '@/lib/server/notion-cache-store';
 import { getCachedTerritoryStores } from '@/lib/server/notion-territory';
+import { prisma } from '@/lib/db/prisma';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
@@ -368,9 +369,39 @@ async function getCachedContacts(input?: { refresh?: boolean }) {
   };
 }
 
-export async function loadLiveNotionAccounts(): Promise<AccountTableRow[]> {
+export async function loadLiveNotionAccounts(orgIdInput?: string): Promise<AccountTableRow[]> {
   const territory = await getCachedTerritoryStores();
   const contacts = await getCachedContacts().catch(() => ({ rows: [] as CachedContactRow[] }));
+  const orgId = orgIdInput?.trim() || process.env.TERRITORY_ORG_ID?.trim();
+  if (!orgId) {
+    throw new Error('Territory org context is required');
+  }
+
+  const [localAccounts, openOppValueByAccount] = await Promise.all([
+    prisma.account.findMany({
+      where: { orgId },
+      select: {
+        id: true,
+        name: true,
+        licenseNumber: true,
+        notionPageId: true,
+      },
+    }),
+    prisma.opportunity.groupBy({
+      by: ['accountId'],
+      where: { orgId, status: 'OPEN' },
+      _sum: { value: true },
+    }),
+  ]);
+
+  const accountByNotionId = new Map(
+    localAccounts
+      .filter((account) => Boolean(account.notionPageId))
+      .map((account) => [account.notionPageId?.replace(/-/g, '').toLowerCase() ?? '', account]),
+  );
+  const accountByLicense = new Map(localAccounts.map((account) => [account.licenseNumber.trim().toLowerCase(), account]));
+  const accountByName = new Map(localAccounts.map((account) => [account.name.trim().toLowerCase(), account]));
+  const openOppByAccountId = new Map(openOppValueByAccount.map((row) => [row.accountId, Number(row._sum.value ?? 0)]));
 
   const contactsByAccountId = new Map<string, number>();
   for (const row of contacts.rows) {
@@ -381,16 +412,20 @@ export async function loadLiveNotionAccounts(): Promise<AccountTableRow[]> {
 
   const rows: AccountTableRow[] = territory.stores.map((store) => {
     const normalizedPageId = store.notionPageId.replace(/-/g, '');
+    const localAccount =
+      accountByNotionId.get(normalizedPageId.toLowerCase()) ??
+      (store.licenseNumber ? accountByLicense.get(store.licenseNumber.trim().toLowerCase()) : undefined) ??
+      accountByName.get(store.name.trim().toLowerCase());
 
     return {
-      id: store.notionPageId,
+      id: localAccount?.id ?? store.notionPageId,
       name: store.name,
       licenseNumber: store.licenseNumber || '—',
       status: toAccountStatus(store.status),
       city: store.city || '—',
       state: store.state || parseStateFromAddress(store.locationAddress),
       contactsCount: contactsByAccountId.get(normalizedPageId) ?? 0,
-      openValue: 0,
+      openValue: localAccount ? openOppByAccountId.get(localAccount.id) ?? 0 : 0,
       daysOverdue: Math.max(0, Math.trunc(store.daysOverdue ?? 0)),
       lastUpdated: new Date(store.lastEditedTime).toLocaleDateString(),
     };

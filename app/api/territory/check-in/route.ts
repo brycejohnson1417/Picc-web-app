@@ -59,7 +59,21 @@ export async function POST(request: Request) {
       let syncWarning: string | null = null;
 
       try {
-        const checkIn = await recordTerritoryStoreCheckIn(storeId);
+        const checkIn = await recordTerritoryStoreCheckIn(storeId, {
+          noteText: payload.noteText ?? null,
+          mode: payload.mode,
+          createdByEmail: access.email,
+          orgId: access.orgId,
+          associatedContact: payload.associatedContact
+            ? {
+                name: payload.associatedContact.name,
+                roleTitle: payload.associatedContact.roleTitle ?? null,
+                email: payload.associatedContact.email ?? null,
+                phone: payload.associatedContact.phone ?? null,
+              }
+            : null,
+          notionNoteUrl: note.url ?? null,
+        });
         checkedInAt = checkIn.checkedInAt;
       } catch (syncError) {
         const message = syncError instanceof Error ? syncError.message : 'Failed to update store check-in timestamp';
@@ -89,7 +103,7 @@ export async function POST(request: Request) {
 
     const legacyPayload = legacyRequestSchema.safeParse(body);
     if (legacyPayload.success) {
-      const result = await recordTerritoryStoreCheckIn(legacyPayload.data.storeId);
+      const result = await recordTerritoryStoreCheckIn(legacyPayload.data.storeId, { orgId: access.orgId });
       return NextResponse.json(result);
     }
 

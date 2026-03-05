@@ -3,7 +3,7 @@ import 'server-only';
 import { prisma } from '@/lib/db/prisma';
 import { normalizeStatus, type TerritoryFilterCount, type TerritoryStorePin } from '@/lib/territory/types';
 
-const DEFAULT_ORG_ID = process.env.TERRITORY_ORG_ID?.trim() || 'org_picc_demo';
+const DEFAULT_ORG_ID = process.env.TERRITORY_ORG_ID?.trim() || null;
 
 export type TerritoryLayerMetric = 'interactions' | 'purchases' | 'follow_up';
 export type TerritoryLayerMode = 'pins' | 'heatmap' | 'hex';
@@ -129,7 +129,9 @@ function hydrateSearch(store: TerritoryStorePin) {
 
 function orgIdOrDefault(orgId?: string) {
   const clean = orgId?.trim();
-  return clean || DEFAULT_ORG_ID;
+  if (clean) return clean;
+  if (DEFAULT_ORG_ID) return DEFAULT_ORG_ID;
+  throw new Error('Territory org context is required');
 }
 
 function toPin(record: {
@@ -283,11 +285,22 @@ export async function syncTerritoryStoresReadModel(stores: TerritoryStorePin[], 
           name: row.name,
         };
 
-    await prisma.account.updateMany({
+    const account = await prisma.account.findFirst({
       where: accountWhere,
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, notionPageId: true },
+    });
+
+    if (!account) {
+      continue;
+    }
+
+    await prisma.account.update({
+      where: { id: account.id },
       data: {
         geoLat: row.lat,
         geoLng: row.lng,
+        notionPageId: account.notionPageId && account.notionPageId !== row.notionPageId ? account.notionPageId : row.notionPageId,
       },
     });
   }
@@ -413,7 +426,10 @@ export async function loadTerritoryStoreFromReadModel(storeId: string, input?: {
   });
 }
 
-export async function patchTerritoryStoreReadModel(storeId: string, input: { notes?: string | null; lastCheckIn?: string | null; orgId?: string }) {
+export async function patchTerritoryStoreReadModel(
+  storeId: string,
+  input: { notes?: string | null; lastCheckIn?: string | null; followUpDate?: string | null; orgId?: string },
+) {
   const orgId = orgIdOrDefault(input.orgId);
   const record = await prisma.territoryStoreReadModel.findFirst({
     where: {
@@ -434,6 +450,9 @@ export async function patchTerritoryStoreReadModel(storeId: string, input: { not
       ...(Object.prototype.hasOwnProperty.call(input, 'lastCheckIn')
         ? { lastCheckIn: input.lastCheckIn ? new Date(input.lastCheckIn) : null }
         : {}),
+      ...(Object.prototype.hasOwnProperty.call(input, 'followUpDate')
+        ? { followUpDate: input.followUpDate ? new Date(input.followUpDate) : null }
+        : {}),
       ...(Object.prototype.hasOwnProperty.call(input, 'lastCheckIn') ? { interactionsScore: { increment: 1 } } : {}),
     },
   });
@@ -443,6 +462,12 @@ export async function recordTerritoryCheckInEvent(input: {
   storeId: string;
   contactId?: string | null;
   noteText?: string | null;
+  mode?: string | null;
+  associatedContactName?: string | null;
+  associatedContactRole?: string | null;
+  associatedContactEmail?: string | null;
+  associatedContactPhone?: string | null;
+  notionNoteUrl?: string | null;
   lat?: number;
   lng?: number;
   mileageMiles?: number | null;
@@ -458,6 +483,12 @@ export async function recordTerritoryCheckInEvent(input: {
       storeId: input.storeId,
       contactId: input.contactId ?? null,
       noteText: input.noteText ?? null,
+      mode: input.mode ?? null,
+      associatedContactName: input.associatedContactName ?? null,
+      associatedContactRole: input.associatedContactRole ?? null,
+      associatedContactEmail: input.associatedContactEmail ?? null,
+      associatedContactPhone: input.associatedContactPhone ?? null,
+      notionNoteUrl: input.notionNoteUrl ?? null,
       geoLat: typeof input.lat === 'number' ? input.lat : null,
       geoLng: typeof input.lng === 'number' ? input.lng : null,
       mileageMiles: input.mileageMiles ?? null,

@@ -3,6 +3,7 @@ import { Channel } from '@prisma/client';
 import { z } from 'zod';
 import { guard } from '@/lib/auth/api-guard';
 import { prisma } from '@/lib/db/prisma';
+import { enforceRateLimit, getClientIdentifier } from '@/lib/server/rate-limit';
 
 const createSchema = z.object({
   accountId: z.string().cuid(),
@@ -38,6 +39,16 @@ export async function POST(req: Request) {
   const ctx = await guard(['ADMIN', 'OPS_TEAM', 'SALES_REP', 'BRAND_AMBASSADOR']);
   if ('error' in ctx) return ctx.error;
 
+  const clientKey = getClientIdentifier(req, ctx.userId);
+  const limit = enforceRateLimit({
+    key: `conversations:${ctx.orgId}:${clientKey}`,
+    limit: 60,
+    windowMs: 60_000,
+  });
+  if (!limit.ok) {
+    return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } });
+  }
+
   const body = await req.json();
   const payload = createSchema.parse(body);
 
@@ -49,7 +60,7 @@ export async function POST(req: Request) {
       channel: payload.channel,
       subject: payload.subject,
       assignedToUserId: ctx.userId,
-      isMock: true,
+      isMock: false,
     },
   });
 

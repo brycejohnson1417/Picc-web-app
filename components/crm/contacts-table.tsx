@@ -49,13 +49,14 @@ const columns: ColumnDef<ContactTableRow>[] = [
   },
 ];
 
-export function ContactsTable({ rows }: { rows: ContactTableRow[] }) {
+export function ContactsTable({ rows, onExportCsv }: { rows: ContactTableRow[]; onExportCsv?: () => void }) {
   return (
     <AdvancedDataTable
       title="Contact Directory"
       data={rows}
       columns={columns}
       searchPlaceholder="Search contact, role, or dispensary..."
+      onExportCsv={onExportCsv}
       getRowHref={(row) => `/contacts/${encodeURIComponent(row.id)}`}
       rowAriaLabel={(row) => `Open contact ${row.name}`}
       mobileCardRenderer={(row) => (

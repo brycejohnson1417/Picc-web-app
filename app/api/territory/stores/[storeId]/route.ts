@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
-import { loadTerritoryStoreDetail, updateTerritoryStoreNotes } from '@/lib/server/notion-territory';
+import { loadTerritoryStoreDetail, updateTerritoryStoreFollowUpDate, updateTerritoryStoreNotes } from '@/lib/server/notion-territory';
 
 const patchSchema = z.object({
-  notes: z.string().max(4000),
+  notes: z.string().max(4000).optional(),
+  followUpDate: z.union([z.string().trim().min(1), z.null()]).optional(),
+}).refine((value) => value.notes !== undefined || value.followUpDate !== undefined, {
+  message: 'At least one writable field is required',
+  path: ['notes'],
 });
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +22,7 @@ export async function GET(_request: Request, context: { params: Promise<{ storeI
   const { storeId } = await context.params;
 
   try {
-    const detail = await loadTerritoryStoreDetail(storeId);
+    const detail = await loadTerritoryStoreDetail(storeId, { orgId: access.orgId });
     return NextResponse.json(detail);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load store detail';
@@ -36,8 +40,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ store
 
   try {
     const payload = patchSchema.parse(await request.json());
-    const result = await updateTerritoryStoreNotes(storeId, payload.notes);
-    return NextResponse.json(result);
+    const [notesResult, followUpResult] = await Promise.all([
+      payload.notes !== undefined ? updateTerritoryStoreNotes(storeId, payload.notes, { orgId: access.orgId }) : Promise.resolve(null),
+      payload.followUpDate !== undefined ? updateTerritoryStoreFollowUpDate(storeId, payload.followUpDate, { orgId: access.orgId }) : Promise.resolve(null),
+    ]);
+
+    return NextResponse.json({
+      storeId,
+      notes: notesResult?.notes ?? null,
+      followUpDate: followUpResult?.followUpDate ?? null,
+      updatedAt: followUpResult?.updatedAt ?? notesResult?.updatedAt ?? new Date().toISOString(),
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

@@ -11,13 +11,13 @@
 }
 
 .dark {
-  --background: 230 230 233;
-  --foreground: 23 24 28;
-  --card: 255 255 255;
-  --card-foreground: 23 24 28;
-  --muted: 127 130 137;
-  --primary: 201 52 18;
-  --border: 201 202 208;
+  --background: 16 20 28;
+  --foreground: 240 244 252;
+  --card: 25 30 42;
+  --card-foreground: 240 244 252;
+  --muted: 153 163 183;
+  --primary: 224 92 62;
+  --border: 62 72 94;
 }
 
 * {
