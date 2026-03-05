@@ -370,14 +370,14 @@ async function getCachedContacts(input?: { refresh?: boolean }) {
 }
 
 export async function loadLiveNotionAccounts(orgIdInput?: string): Promise<AccountTableRow[]> {
-  const territory = await getCachedTerritoryStores();
-  const contacts = await getCachedContacts().catch(() => ({ rows: [] as CachedContactRow[] }));
   const orgId = orgIdInput?.trim() || process.env.TERRITORY_ORG_ID?.trim();
   if (!orgId) {
     throw new Error('Territory org context is required');
   }
 
-  const [localAccounts, openOppValueByAccount] = await Promise.all([
+  const [territoryResult, contacts, localAccounts, localContactCounts, openOppValueByAccount] = await Promise.all([
+    getCachedTerritoryStores().catch(() => null),
+    getCachedContacts().catch(() => ({ rows: [] as CachedContactRow[] })),
     prisma.account.findMany({
       where: { orgId },
       select: {
@@ -385,7 +385,16 @@ export async function loadLiveNotionAccounts(orgIdInput?: string): Promise<Accou
         name: true,
         licenseNumber: true,
         notionPageId: true,
+        city: true,
+        state: true,
+        status: true,
+        updatedAt: true,
       },
+    }),
+    prisma.contact.groupBy({
+      by: ['accountId'],
+      where: { orgId },
+      _count: { accountId: true },
     }),
     prisma.opportunity.groupBy({
       by: ['accountId'],
@@ -393,6 +402,7 @@ export async function loadLiveNotionAccounts(orgIdInput?: string): Promise<Accou
       _sum: { value: true },
     }),
   ]);
+  const territoryStores = territoryResult?.stores ?? [];
 
   const accountByNotionId = new Map(
     localAccounts
@@ -402,6 +412,7 @@ export async function loadLiveNotionAccounts(orgIdInput?: string): Promise<Accou
   const accountByLicense = new Map(localAccounts.map((account) => [account.licenseNumber.trim().toLowerCase(), account]));
   const accountByName = new Map(localAccounts.map((account) => [account.name.trim().toLowerCase(), account]));
   const openOppByAccountId = new Map(openOppValueByAccount.map((row) => [row.accountId, Number(row._sum.value ?? 0)]));
+  const localContactCountByAccountId = new Map(localContactCounts.map((row) => [row.accountId, row._count.accountId]));
 
   const contactsByAccountId = new Map<string, number>();
   for (const row of contacts.rows) {
@@ -410,12 +421,20 @@ export async function loadLiveNotionAccounts(orgIdInput?: string): Promise<Accou
     }
   }
 
-  const rows: AccountTableRow[] = territory.stores.map((store) => {
+  const matchedLocalAccountIds = new Set<string>();
+
+  const territoryRows: AccountTableRow[] = territoryStores.map((store) => {
     const normalizedPageId = store.notionPageId.replace(/-/g, '');
     const localAccount =
       accountByNotionId.get(normalizedPageId.toLowerCase()) ??
       (store.licenseNumber ? accountByLicense.get(store.licenseNumber.trim().toLowerCase()) : undefined) ??
       accountByName.get(store.name.trim().toLowerCase());
+    if (localAccount) {
+      matchedLocalAccountIds.add(localAccount.id);
+    }
+
+    const notionContacts = contactsByAccountId.get(normalizedPageId) ?? 0;
+    const localContacts = localAccount ? localContactCountByAccountId.get(localAccount.id) ?? 0 : 0;
 
     return {
       id: localAccount?.id ?? store.notionPageId,
@@ -424,13 +443,29 @@ export async function loadLiveNotionAccounts(orgIdInput?: string): Promise<Accou
       status: toAccountStatus(store.status),
       city: store.city || '—',
       state: store.state || parseStateFromAddress(store.locationAddress),
-      contactsCount: contactsByAccountId.get(normalizedPageId) ?? 0,
+      contactsCount: Math.max(notionContacts, localContacts),
       openValue: localAccount ? openOppByAccountId.get(localAccount.id) ?? 0 : 0,
       daysOverdue: Math.max(0, Math.trunc(store.daysOverdue ?? 0)),
       lastUpdated: new Date(store.lastEditedTime).toLocaleDateString(),
     };
   });
 
+  const localOnlyRows: AccountTableRow[] = localAccounts
+    .filter((account) => !matchedLocalAccountIds.has(account.id))
+    .map((account) => ({
+      id: account.id,
+      name: account.name,
+      licenseNumber: account.licenseNumber || '—',
+      status: account.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+      city: account.city || '—',
+      state: account.state || '—',
+      contactsCount: localContactCountByAccountId.get(account.id) ?? 0,
+      openValue: openOppByAccountId.get(account.id) ?? 0,
+      daysOverdue: 0,
+      lastUpdated: new Date(account.updatedAt).toLocaleDateString(),
+    }));
+
+  const rows: AccountTableRow[] = [...territoryRows, ...localOnlyRows];
   rows.sort((a, b) => a.name.localeCompare(b.name));
   return rows;
 }
