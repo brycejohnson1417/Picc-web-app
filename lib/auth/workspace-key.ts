@@ -39,7 +39,11 @@ export function resolveWorkspaceKey(input: {
   }
 
   if (isPiccDomainEmail(input.email)) {
-    return process.env.PICC_SHARED_ORG_ID?.trim() || DEFAULT_PICC_SHARED_ORG_ID;
+    return (
+      process.env.PICC_SHARED_ORG_ID?.trim() ||
+      process.env.TERRITORY_ORG_ID?.trim() ||
+      DEFAULT_PICC_SHARED_ORG_ID
+    );
   }
 
   return `user_${input.userId}`;
