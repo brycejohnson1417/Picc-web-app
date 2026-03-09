@@ -1,9 +1,9 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
-import { DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
+import { AUTH_BYPASS_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 
 export async function requireOrgContext() {
-  if (DEMO_MODE) {
+  if (AUTH_BYPASS_MODE) {
     return { userId: DEMO_USER_ID, orgId: DEMO_ORG_ID };
   }
 
@@ -17,6 +17,8 @@ export async function requireOrgContext() {
     throw new Error('NO_ORGANIZATION');
   }
 
-  const workspaceOrgId = await ensureWorkspaceAndMembership(orgId, userId);
+  const user = await currentUser();
+  const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '';
+  const workspaceOrgId = await ensureWorkspaceAndMembership(orgId, userId, email);
   return { userId, orgId: workspaceOrgId };
 }

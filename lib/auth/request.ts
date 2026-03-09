@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { requireRole } from '@/lib/rbac/guards';
 import type { AppRole } from '@/lib/types/rbac';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
-import { DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
+import { AUTH_BYPASS_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 
 export async function withOrg() {
-  if (DEMO_MODE) {
+  if (AUTH_BYPASS_MODE) {
     return { userId: DEMO_USER_ID, orgId: DEMO_ORG_ID };
   }
 
@@ -17,7 +17,9 @@ export async function withOrg() {
   }
 
   const workspaceKey = orgId ?? `user_${userId}`;
-  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId);
+  const user = await currentUser();
+  const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '';
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, email);
   return { userId, orgId: workspaceOrgId };
 }
 

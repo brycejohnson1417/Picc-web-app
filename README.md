@@ -2,6 +2,9 @@
 
 Account-centric CRM for cannabis dispensary sales, ops, finance, and brand ambassador workflows.
 
+Production URL:
+- `https://picc-push.vercel.app`
+
 ## Stack
 - Next.js 15 App Router + TypeScript strict
 - Tailwind CSS v4 + Radix + shadcn-style primitives
@@ -165,7 +168,7 @@ npm run dev
 All mutating endpoints are guarded by org scope + RBAC and write to `ActivityLog` for account-level timeline integrity.
 
 ## Deployment (Vercel)
-1. Push repo to `piccweb` remote.
+1. Push repo to GitHub (`bryce-picc/Picc-web-app`).
 2. Import project in Vercel.
 3. Set all environment variables from `.env.example`.
 4. Add Postgres connection string (`DATABASE_URL`).
@@ -176,6 +179,7 @@ npx prisma migrate deploy
 ```
 
 ## Notes
-- This repo still contains legacy Vite-era folders (`src/`, `api/`) that are excluded from Next TypeScript checks.
 - Current active app is under `app/` + `components/` + `lib/` + `prisma/`.
+- The canonical deployment is `picc-push.vercel.app`; do not point repo metadata or docs at older Vercel projects.
+- Google Maps is the active territory map provider for the live app.
 - On macOS, if `/Users/.../Downloads/...xlsx` returns `EPERM`, grant the terminal/Codex app Files access or move the workbook to a permitted directory and update `NABIS_MASTER_SHEET_PATH`.

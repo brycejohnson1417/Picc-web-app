@@ -1,10 +1,11 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { Role } from '@prisma/client';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
-import { DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
+import { isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
+import { AUTH_BYPASS_MODE, DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 import { prisma } from '@/lib/db/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -39,7 +40,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     );
   }
 
-  if (DEMO_MODE) {
+  if (AUTH_BYPASS_MODE) {
     await ensureDemoWorkspace();
     return <AppShell>{children}</AppShell>;
   }
@@ -50,14 +51,40 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     redirect('/sign-in');
   }
 
+  const user = await currentUser();
+  const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '';
+  const allowlist = parseEmailAllowlist(process.env.TERRITORY_ALLOWED_EMAILS);
+  if (allowlist.entries.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
+        <div className="w-full max-w-2xl space-y-4 rounded-xl border bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <h1 className="text-2xl font-bold">Access Configuration Required</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-300">`TERRITORY_ALLOWED_EMAILS` must be configured before users can access the app.</p>
+        </div>
+      </div>
+    );
+  }
+  if (!isEmailAllowed(email, allowlist)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
+        <div className="w-full max-w-2xl space-y-4 rounded-xl border bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <h1 className="text-2xl font-bold">Access Denied</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Your account is not allowlisted for this workspace. Use a `@piccplatform.com` account or contact an admin.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const workspaceKey = orgId ?? `user_${userId}`;
-  await ensureWorkspaceAndMembership(workspaceKey, userId);
+  await ensureWorkspaceAndMembership(workspaceKey, userId, email);
 
   return <AppShell>{children}</AppShell>;
 }
 
 function getMissingEnv() {
-  const required = DEMO_MODE
+  const required = AUTH_BYPASS_MODE
     ? (['DATABASE_URL'] as const)
     : (['NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'DATABASE_URL'] as const);
   return required.filter((key) => !process.env[key]);
@@ -86,7 +113,7 @@ async function ensureDemoWorkspace() {
       orgId: DEMO_ORG_ID,
       clerkUserId: DEMO_USER_ID,
       role: Role.ADMIN,
-      source: 'DEMO_MODE',
+      source: DEMO_MODE ? 'DEMO_MODE' : 'AUTH_BYPASS_MODE',
       active: true,
     },
   });

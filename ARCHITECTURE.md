@@ -30,5 +30,5 @@
 ## Rollout
 1. Foundation rails and CI.
 2. Geospatial model and API cutover.
-3. Map UX cutover to MapLibre.
+3. Map UX cutover to Google Maps.
 4. Native + integration tracks.

@@ -14,7 +14,7 @@
 4. Current notable mobile constraints:
 [territory-client.tsx](/Users/brycejohnson/Documents/New project/picc-push/components/territory/territory-client.tsx) uses hard minimum heights/absolute overlays; [advanced-data-table.tsx](/Users/brycejohnson/Documents/New project/picc-push/components/crm/advanced-data-table.tsx) has fixed-width controls and desktop-first table UX.
 5. Current architecture constraints:
-runtime DDL/raw SQL table management in [notion-cache-store.ts](/Users/brycejohnson/Documents/New project/picc-push/lib/server/notion-cache-store.ts) and [notion-territory.ts](/Users/brycejohnson/Documents/New project/picc-push/lib/server/notion-territory.ts); legacy Vite-era dirs are still in repo and excluded from checks.
+runtime DDL/raw SQL table management in [notion-cache-store.ts](/Users/brycejohnson/Documents/New project/Picc-web-app/lib/server/notion-cache-store.ts) and [notion-territory.ts](/Users/brycejohnson/Documents/New project/Picc-web-app/lib/server/notion-territory.ts); the legacy Vite-era surface has been removed and the active app is the Next.js app-router code under `app/`, `components/`, `lib/`, and `prisma/`.
 
 ## Public APIs / Interfaces / Types
 1. No breaking external API changes are planned.
@@ -73,7 +73,7 @@ centralize workspace/auth context retrieval to avoid repeated bootstrap calls wi
 5. Structure cleanup (targeted, not broad rewrite):
 organize Notion-related server logic into clearer module boundaries while preserving existing behavior.
 6. Legacy code handling:
-do not delete `src/` and `api/` this cycle; mark explicitly as archived/deferred to avoid risky churn.
+keep the repository aligned to the active Next.js surface only; do not reintroduce root-level Vite `src/` or `api/` app surfaces.
 
 ### 5) PR Creation and Merge Protocol
 1. Open PRs against `main` on remote `piccweb` in the exact order above.

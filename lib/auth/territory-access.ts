@@ -2,6 +2,8 @@ import 'server-only';
 
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { firstAllowlistEntryAsCsv, isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
+import { AUTH_BYPASS_MODE } from '@/lib/config/runtime';
 
 interface AccessResult {
   ok: boolean;
@@ -11,33 +13,38 @@ interface AccessResult {
 }
 
 function parseCsv(value: string | undefined) {
-  return new Set(
-    (value ?? '')
-      .split(',')
-      .map((entry) => entry.trim().toLowerCase())
-      .filter(Boolean),
-  );
+  return parseEmailAllowlist(value);
 }
 
 function getAllowlist() {
   return parseCsv(process.env.TERRITORY_ALLOWED_EMAILS);
 }
 
-function getAdminAllowlist(allowlist: Set<string>) {
+function getAdminAllowlistCsv(allowlist: ReturnType<typeof parseEmailAllowlist>) {
   const explicitAdmins = parseCsv(process.env.TERRITORY_ADMIN_EMAILS);
-  if (explicitAdmins.size > 0) {
-    return explicitAdmins;
+  if (explicitAdmins.entries.length > 0) {
+    return process.env.TERRITORY_ADMIN_EMAILS;
   }
 
-  if (allowlist.has('*')) {
-    return new Set(['*']);
+  if (allowlist.allowAll) {
+    return '*';
   }
 
-  const fallbackFirst = [...allowlist][0];
-  return fallbackFirst ? new Set([fallbackFirst]) : new Set<string>();
+  return firstAllowlistEntryAsCsv(allowlist);
 }
 
 export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): Promise<AccessResult> {
+  if (AUTH_BYPASS_MODE) {
+    const allowlist = getAllowlist();
+    const fallbackEmail =
+      firstAllowlistEntryAsCsv(allowlist)
+        .split(',')
+        .map((value) => value.trim())
+        .find(Boolean) ?? 'demo@piccplatform.com';
+
+    return { ok: true, status: 200, email: fallbackEmail.toLowerCase() };
+  }
+
   const { userId } = await auth();
   if (!userId) {
     return { ok: false, status: 401, error: 'Unauthenticated' };
@@ -50,7 +57,7 @@ export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): P
   }
 
   const allowlist = getAllowlist();
-  if (allowlist.size === 0) {
+  if (allowlist.entries.length === 0) {
     return {
       ok: false,
       status: 503,
@@ -59,14 +66,13 @@ export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): P
   }
 
   const normalizedEmail = email.toLowerCase();
-  const allowAll = allowlist.has('*');
-  if (!allowAll && !allowlist.has(normalizedEmail)) {
+  if (!isEmailAllowed(normalizedEmail, allowlist)) {
     return { ok: false, status: 403, error: 'Access denied for this user' };
   }
 
   if (opts?.requireAdmin) {
-    const adminAllowlist = getAdminAllowlist(allowlist);
-    if (!adminAllowlist.has('*') && !adminAllowlist.has(normalizedEmail)) {
+    const adminAllowlist = parseEmailAllowlist(getAdminAllowlistCsv(allowlist));
+    if (!isEmailAllowed(normalizedEmail, adminAllowlist)) {
       return { ok: false, status: 403, error: 'Admin access required' };
     }
   }

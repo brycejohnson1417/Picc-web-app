@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import { Providers } from '@/components/layout/providers';
-import { DEMO_MODE } from '@/lib/config/runtime';
 
 export const metadata: Metadata = {
   title: 'PICC Dispensary CRM',
@@ -21,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 
-  if (!hasClerk || DEMO_MODE) {
+  if (!hasClerk) {
     return content;
   }
 

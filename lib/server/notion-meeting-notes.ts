@@ -2,7 +2,6 @@ import 'server-only';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2025-09-03';
-const DEFAULT_MEETING_NOTES_ID = '2cba86d9999881b7bc4dc863b58ef347';
 
 export type CheckInMode = 'written' | 'voice';
 
@@ -131,11 +130,13 @@ function requiredEnv(name: 'NOTION_API_KEY') {
 }
 
 function meetingNotesId() {
-  return (
+  const configured =
     process.env.NOTION_MEETING_NOTES_DATA_SOURCE_ID?.trim() ||
-    process.env.NOTION_MEETING_NOTES_DATABASE_ID?.trim() ||
-    DEFAULT_MEETING_NOTES_ID
-  );
+    process.env.NOTION_MEETING_NOTES_DATABASE_ID?.trim();
+  if (!configured) {
+    throw new Error('NOTION_MEETING_NOTES_DATA_SOURCE_ID or NOTION_MEETING_NOTES_DATABASE_ID is required');
+  }
+  return configured;
 }
 
 function notionHeaders() {
@@ -398,6 +399,10 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
       })?.[0] ?? propertyByCandidates(properties, ['Account', 'Dispensary', 'Store'], ['relation'])
     : propertyByCandidates(properties, ['Account', 'Dispensary', 'Store'], ['relation']);
 
+  if (!relationPropertyName) {
+    throw new Error('Meeting Notes is missing a relation property to the Dispensary Master List. Check-in could not be linked.');
+  }
+
   const datePropertyName = propertyByCandidates(properties, ['Date', 'Meeting Date', 'Check-in Date'], ['date']);
   const accountPropertyName = propertyByCandidates(properties, ['Account', 'Dispensary', 'Store', 'Store Name'], ['rich_text', 'title']);
   const addressPropertyName = propertyByCandidates(properties, ['Address', 'Location'], ['rich_text']);
@@ -418,11 +423,9 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
     },
   };
 
-  if (relationPropertyName) {
-    notionProperties[relationPropertyName] = {
-      relation: [{ id: normalizePageId(input.store.notionPageId) }],
-    };
-  }
+  notionProperties[relationPropertyName] = {
+    relation: [{ id: normalizePageId(input.store.notionPageId) }],
+  };
 
   if (datePropertyName) {
     notionProperties[datePropertyName] = {
@@ -501,14 +504,31 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
             text: {
               content:
                 input.mode === 'voice'
-                  ? 'Voice check-in started from PICC Command Center. Start voice transcription in this note.'
-                  : 'Written check-in created from PICC Command Center.',
+                  ? 'Voice check-in started from PICC Push. Start voice transcription in this note.'
+                  : 'Written check-in created from PICC Push.',
             },
           },
         ],
       },
     },
   ] as Array<Record<string, unknown>>;
+
+  if (input.actorEmail?.trim()) {
+    children.push({
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: [
+          {
+            type: 'text',
+            text: {
+              content: `Recorded by: ${input.actorEmail.trim()}`,
+            },
+          },
+        ],
+      },
+    });
+  }
 
   if (input.associatedContact?.name) {
     const contactParts = [

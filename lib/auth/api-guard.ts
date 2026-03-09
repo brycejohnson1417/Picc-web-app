@@ -1,12 +1,13 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { AppRole } from '@/lib/types/rbac';
 import { getUserRole } from '@/lib/rbac/guards';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
-import { DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
+import { isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
+import { AUTH_BYPASS_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 
 export async function guard(allowedRoles?: AppRole[]) {
-  if (DEMO_MODE) {
+  if (AUTH_BYPASS_MODE) {
     const role: AppRole = 'ADMIN';
     if (allowedRoles?.length && !allowedRoles.includes(role)) {
       return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
@@ -41,10 +42,25 @@ export async function guard(allowedRoles?: AppRole[]) {
     return { error: NextResponse.json({ error: 'Unauthenticated' }, { status: 401 }) };
   }
 
+  let email = '';
+  try {
+    const user = await currentUser();
+    email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '';
+  } catch {
+    return { error: NextResponse.json({ error: 'Auth unavailable' }, { status: 503 }) };
+  }
+  const allowlist = parseEmailAllowlist(process.env.TERRITORY_ALLOWED_EMAILS);
+  if (allowlist.entries.length === 0) {
+    return { error: NextResponse.json({ error: 'TERRITORY_ALLOWED_EMAILS is not configured' }, { status: 503 }) };
+  }
+  if (!isEmailAllowed(email, allowlist)) {
+    return { error: NextResponse.json({ error: 'Access denied for this user' }, { status: 403 }) };
+  }
+
   const workspaceKey = orgId ?? `user_${userId}`;
   let workspaceOrgId = workspaceKey;
   try {
-    workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId);
+    workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, email);
   } catch {
     return { error: NextResponse.json({ error: 'Workspace bootstrap failed' }, { status: 500 }) };
   }
