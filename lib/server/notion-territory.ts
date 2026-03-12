@@ -17,10 +17,11 @@ import {
   recordTerritoryCheckInEvent,
   syncTerritoryStoresReadModel,
 } from '@/lib/server/territory-read-model';
+import { createTerritoryCheckInService } from '@/lib/server/notion-territory-checkins';
 import { loadNotionVendorDayEvents } from '@/lib/server/notion-vendor-days';
 import { resolveAccountIdentity } from '@/lib/server/account-identity';
 import { checkGoogleBudgetCap, estimateGoogleUsageCostUsd, recordGoogleUsage } from '@/lib/server/google-usage';
-import { colorForStatus, normalizeStatus, pinKindForStatus, type TerritoryStoreCheckIn, type TerritoryStoreContact, type TerritoryStorePin, type TerritoryStoresResponse, type TerritoryVendorDaySummary } from '@/lib/territory/types';
+import { colorForStatus, normalizeStatus, pinKindForStatus, type TerritoryStoreContact, type TerritoryStorePin, type TerritoryStoresResponse, type TerritoryVendorDaySummary } from '@/lib/territory/types';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
@@ -54,27 +55,6 @@ type NotionQueryResponse = {
     last_edited_time: string;
     properties: Record<string, NotionPropertyValue>;
   }>;
-  has_more?: boolean;
-  next_cursor?: string | null;
-};
-
-type NotionComment = {
-  id: string;
-  discussion_id?: string | null;
-  created_time: string;
-  last_edited_time?: string;
-  created_by?: NotionPerson | null;
-  display_name?: {
-    resolved_name?: string | null;
-    custom?: {
-      name?: string | null;
-    } | null;
-  } | null;
-  rich_text?: NotionTextSegment[];
-};
-
-type NotionCommentListResponse = {
-  results?: NotionComment[];
   has_more?: boolean;
   next_cursor?: string | null;
 };
@@ -255,10 +235,6 @@ function textFromTitleProperty(property: NotionPropertyValue | undefined) {
 function textFromRichTextProperty(property: NotionPropertyValue | undefined) {
   const textArray = Array.isArray(property?.rich_text) ? property.rich_text : [];
   return textArray.map((item) => item?.plain_text ?? '').join('').trim();
-}
-
-function textFromRichTextSegments(segments: NotionTextSegment[] | undefined) {
-  return (segments ?? []).map((item) => item?.plain_text ?? '').join('').trim();
 }
 
 function readPhoneNumberProperty(property: NotionPropertyValue | undefined) {
@@ -1177,279 +1153,20 @@ async function patchStoreInSnapshot(storeId: string, updater: (store: TerritoryS
   });
 }
 
-function inferCheckInMode(noteText: string | null | undefined): 'written' | 'voice' | 'unknown' {
-  const normalized = (noteText ?? '').toLowerCase();
-  if (!normalized) {
-    return 'unknown';
-  }
-  if (normalized.includes('voice')) {
-    return 'voice';
-  }
-  return 'written';
-}
+const territoryCheckIns = createTerritoryCheckInService({
+  notionRequest,
+  getTerritorySnapshot,
+  loadTerritoryStoreFromReadModel,
+  patchStoreInSnapshot,
+  patchTerritoryStoreReadModel,
+  recordTerritoryCheckInEvent,
+  fetchAndValidateDatabaseSchema,
+  pickPropertyNameByType,
+  territoryOrgId,
+});
 
-function extractActorEmailFromCommentText(noteText: string | null | undefined) {
-  if (!noteText) {
-    return null;
-  }
-
-  const match = noteText.match(/(?:^|\n)By:\s+([^\n]+)/i);
-  const candidate = match?.[1]?.trim() ?? '';
-  if (!candidate || !candidate.includes('@')) {
-    return null;
-  }
-  return candidate;
-}
-
-function commentAuthorLabel(comment: NotionComment, noteText: string | null | undefined) {
-  const explicitActor = extractActorEmailFromCommentText(noteText);
-  if (explicitActor) {
-    return explicitActor;
-  }
-
-  const displayName = comment.display_name?.resolved_name?.trim() || comment.display_name?.custom?.name?.trim();
-  if (displayName) {
-    return displayName;
-  }
-
-  const personEmail = comment.created_by?.person?.email?.trim();
-  if (personEmail) {
-    return personEmail;
-  }
-
-  const personName = comment.created_by?.name?.trim();
-  return personName || null;
-}
-
-async function listNotionCommentsForPage(pageId: string, limit: number): Promise<NotionComment[]> {
-  const normalizedLimit = Math.min(Math.max(limit, 1), 100);
-  const results: NotionComment[] = [];
-  let nextCursor: string | null = null;
-
-  while (results.length < normalizedLimit) {
-    const searchParams = new URLSearchParams({
-      block_id: pageId,
-      page_size: String(Math.min(100, normalizedLimit - results.length)),
-    });
-
-    if (nextCursor) {
-      searchParams.set('start_cursor', nextCursor);
-    }
-
-    const response = await notionRequest<NotionCommentListResponse>(`/comments?${searchParams.toString()}`);
-    const comments = Array.isArray(response.results) ? response.results : [];
-
-    for (const comment of comments) {
-      results.push(comment);
-
-      if (results.length >= normalizedLimit) {
-        break;
-      }
-    }
-
-    if (!response.has_more || !response.next_cursor) {
-      break;
-    }
-
-    nextCursor = response.next_cursor;
-  }
-
-  return results;
-}
-
-function mapMirroredCheckInRow(row: {
-  notionCommentId: string;
-  source: string;
-  happenedAt: Date;
-  mode: string;
-  noteText: string | null;
-  notionPageId: string;
-  createdByLabel: string | null;
-  createdByEmail: string | null;
-}) {
-  return {
-    id: row.notionCommentId,
-    source: row.source === 'notion-comment' ? 'notion-comment' : 'local-check-in',
-    happenedAt: row.happenedAt.toISOString(),
-    mode: row.mode === 'voice' || row.mode === 'written' ? row.mode : 'unknown',
-    notePreview: row.noteText ? row.noteText.slice(0, 280) : null,
-    url: `https://www.notion.so/${row.notionPageId.replace(/-/g, '')}`,
-    createdByLabel: row.createdByLabel,
-    createdByEmail: row.createdByEmail,
-  } satisfies TerritoryStoreCheckIn;
-}
-
-async function upsertMirroredTerritoryCheckInComment(store: TerritoryStorePin, comment: NotionComment) {
-  const noteText = textFromRichTextSegments(comment.rich_text);
-  const createdByLabel = commentAuthorLabel(comment, noteText);
-  const createdByEmail = extractActorEmailFromCommentText(noteText) ?? comment.created_by?.person?.email?.trim() ?? null;
-
-  return prisma.territoryCheckInMirror.upsert({
-    where: {
-      notionCommentId: comment.id,
-    },
-    update: {
-      storeId: store.id,
-      notionPageId: store.notionPageId,
-      notionDiscussionId: comment.discussion_id ?? null,
-      noteText: noteText || null,
-      mode: inferCheckInMode(noteText),
-      happenedAt: new Date(comment.created_time),
-      lastEditedTime: comment.last_edited_time ? new Date(comment.last_edited_time) : null,
-      createdByLabel,
-      createdByEmail,
-      source: 'notion-comment',
-      lastSyncedAt: new Date(),
-    },
-    create: {
-      orgId: territoryOrgId(),
-      storeId: store.id,
-      notionPageId: store.notionPageId,
-      notionCommentId: comment.id,
-      notionDiscussionId: comment.discussion_id ?? null,
-      noteText: noteText || null,
-      mode: inferCheckInMode(noteText),
-      happenedAt: new Date(comment.created_time),
-      lastEditedTime: comment.last_edited_time ? new Date(comment.last_edited_time) : null,
-      createdByLabel,
-      createdByEmail,
-      source: 'notion-comment',
-      lastSyncedAt: new Date(),
-    },
-  });
-}
-
-async function mirrorKnownTerritoryCheckInComment(
-  store: TerritoryStorePin,
-  input: {
-    notionCommentId: string | null;
-    discussionId?: string | null;
-    noteText: string;
-    createdAt: string;
-    actorEmail?: string | null;
-  },
-) {
-  if (!input.notionCommentId) {
-    return null;
-  }
-
-  return prisma.territoryCheckInMirror.upsert({
-    where: {
-      notionCommentId: input.notionCommentId,
-    },
-    update: {
-      storeId: store.id,
-      notionPageId: store.notionPageId,
-      notionDiscussionId: input.discussionId ?? null,
-      noteText: input.noteText || null,
-      mode: inferCheckInMode(input.noteText),
-      happenedAt: new Date(input.createdAt),
-      createdByLabel: input.actorEmail?.trim() || null,
-      createdByEmail: input.actorEmail?.trim() || null,
-      source: 'notion-comment',
-      lastSyncedAt: new Date(),
-    },
-    create: {
-      orgId: territoryOrgId(),
-      storeId: store.id,
-      notionPageId: store.notionPageId,
-      notionCommentId: input.notionCommentId,
-      notionDiscussionId: input.discussionId ?? null,
-      noteText: input.noteText || null,
-      mode: inferCheckInMode(input.noteText),
-      happenedAt: new Date(input.createdAt),
-      createdByLabel: input.actorEmail?.trim() || null,
-      createdByEmail: input.actorEmail?.trim() || null,
-      source: 'notion-comment',
-      lastSyncedAt: new Date(),
-    },
-  });
-}
-
-export async function syncTerritoryCheckInMirrorForStore(
-  storeId: string,
-  input?: {
-    limit?: number;
-  },
-) {
-  const snapshot = await getTerritorySnapshot();
-  const store = (await loadTerritoryStoreFromReadModel(storeId)) ?? (await resolveStoreByIdentifier(snapshot.stores, storeId));
-  if (!store) {
-    throw new Error('Store not found');
-  }
-
-  const comments = await listNotionCommentsForPage(store.notionPageId, input?.limit ?? 100);
-  const mirrored = await Promise.all(comments.map((comment) => upsertMirroredTerritoryCheckInComment(store, comment)));
-
-  return {
-    storeId: store.id,
-    mirroredCount: mirrored.length,
-    syncedAt: new Date().toISOString(),
-  };
-}
-
-export async function syncTerritoryCheckInMirrorByPageId(
-  pageId: string,
-  input?: {
-    limit?: number;
-  },
-) {
-  return syncTerritoryCheckInMirrorForStore(pageId, input);
-}
-
-async function loadStoreCheckIns(store: TerritoryStorePin): Promise<TerritoryStoreCheckIn[]> {
-  await syncTerritoryCheckInMirrorForStore(store.id, { limit: 100 }).catch(() => null);
-
-  const [mirrorRows, localRows] = await Promise.all([
-    prisma.territoryCheckInMirror
-      .findMany({
-        where: {
-          storeId: store.id,
-        },
-        orderBy: { happenedAt: 'desc' },
-        take: 100,
-      })
-      .catch(() => []),
-    prisma.checkIn
-      .findMany({
-        where: {
-          storeId: {
-            in: [store.id, store.notionPageId],
-          },
-        },
-        orderBy: { happenedAt: 'desc' },
-        take: 50,
-      })
-      .catch(() => []),
-  ]);
-
-  const mirrored = mirrorRows.map((row) => mapMirroredCheckInRow(row));
-  const mirroredTimestamps = mirrored.map((row) => ({
-    happenedAt: new Date(row.happenedAt).getTime(),
-    createdByEmail: row.createdByEmail ?? null,
-  }));
-
-  const local = localRows.map<TerritoryStoreCheckIn>((row) => ({
-    id: row.id,
-    source: 'local-check-in',
-    happenedAt: row.happenedAt.toISOString(),
-    mode: inferCheckInMode(row.noteText),
-    notePreview: row.noteText ? row.noteText.slice(0, 280) : null,
-    createdByLabel: row.createdByEmail,
-    createdByEmail: row.createdByEmail,
-  })).filter((row) => {
-    const happenedAt = new Date(row.happenedAt).getTime();
-    return !mirroredTimestamps.some((mirror) => {
-      const sameActor = !row.createdByEmail || !mirror.createdByEmail || row.createdByEmail === mirror.createdByEmail;
-      return sameActor && Math.abs(mirror.happenedAt - happenedAt) <= 120_000;
-    });
-  });
-
-  const merged = [...mirrored, ...local];
-  merged.sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime());
-
-  return merged;
-}
+export const syncTerritoryCheckInMirrorForStore = territoryCheckIns.syncTerritoryCheckInMirrorForStore;
+export const syncTerritoryCheckInMirrorByPageId = territoryCheckIns.syncTerritoryCheckInMirrorByPageId;
 
 async function loadStoreVendorDaySummary(store: TerritoryStorePin): Promise<TerritoryVendorDaySummary> {
   const normalizedStoreName = store.name.trim().toLowerCase();
@@ -1520,7 +1237,7 @@ export async function loadTerritoryStoreCheckIns(storeId: string) {
     throw new Error('Store not found');
   }
 
-  return loadStoreCheckIns(store);
+  return territoryCheckIns.loadStoreCheckIns(store);
 }
 
 type NotionPageResponse = {
@@ -1678,7 +1395,7 @@ export async function loadTerritoryStoreDetail(storeId: string) {
   contacts.sort((a, b) => a.name.localeCompare(b.name));
 
   const [checkIns, vendorDays, crm, analytics] = await Promise.all([
-    loadStoreCheckIns(store),
+    territoryCheckIns.loadStoreCheckIns(store),
     loadStoreVendorDaySummary(store),
     loadStoreCrmFields(store, contacts).catch(() => ({
       contact: contacts.slice(0, 3).map((contact) => contact.name).filter(Boolean).join(', ') || null,
@@ -1894,161 +1611,8 @@ export async function updateTerritoryStoreFields(storeId: string, payload: { not
   };
 }
 
-export async function recordTerritoryStoreCheckIn(
-  storeId: string,
-  input?: {
-    contactId?: string | null;
-    noteText?: string | null;
-    createdByEmail?: string | null;
-    persistEvent?: boolean;
-  },
-) {
-  const snapshot = await getTerritorySnapshot();
-  const store = await resolveStoreByIdentifier(snapshot.stores, storeId);
-  if (!store) {
-    throw new Error('Store not found');
-  }
-
-  const schema = await fetchAndValidateDatabaseSchema();
-  const properties = schema.database.properties ?? {};
-  const checkInProperty = pickPropertyNameByType(
-    properties,
-    ['Last Check-in', 'Last Check In', 'Last Visit', 'Recent Check-in'],
-    'date',
-  );
-
-  if (!checkInProperty) {
-    throw new Error('No check-in date property found in Notion database');
-  }
-
-  const checkedInAt = new Date().toISOString();
-
-  await notionRequest<unknown>(`/pages/${store.notionPageId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      properties: {
-        [checkInProperty]: {
-          date: {
-            start: checkedInAt,
-          },
-        },
-      },
-    }),
-  });
-
-  await patchStoreInSnapshot(store.id, (entry) => ({
-    ...entry,
-    lastCheckIn: checkedInAt,
-    lastEditedTime: checkedInAt,
-  }));
-  await patchTerritoryStoreReadModel(store.id, {
-    lastCheckIn: checkedInAt,
-  });
-  if (input?.persistEvent !== false) {
-    await recordTerritoryCheckInEvent({
-      storeId: store.id,
-      contactId: input?.contactId ?? null,
-      lat: store.lat,
-      lng: store.lng,
-      noteText: input?.noteText ?? `Check-in recorded at ${checkedInAt}`,
-      createdByEmail: input?.createdByEmail ?? null,
-      happenedAt: checkedInAt,
-    });
-  }
-
-  return {
-    storeId: store.id,
-    checkedInAt,
-  };
-}
-
-export async function createTerritoryStoreCheckInComment(
-  storeId: string,
-  input?: {
-    mode?: 'written' | 'voice';
-    noteText?: string | null;
-    actorEmail?: string | null;
-    associatedContact?: {
-      name: string;
-      roleTitle?: string | null;
-      email?: string | null;
-      phone?: string | null;
-    } | null;
-  },
-) {
-  const snapshot = await getTerritorySnapshot();
-  const store = await resolveStoreByIdentifier(snapshot.stores, storeId);
-  if (!store) {
-    throw new Error('Store not found');
-  }
-
-  const mode = input?.mode === 'voice' ? 'Voice' : 'Written';
-  const createdAt = new Date().toISOString();
-  const parts = [`${mode} check-in`, `Store: ${store.name}`, `When: ${new Date(createdAt).toLocaleString()}`];
-
-  if (input?.actorEmail?.trim()) {
-    parts.push(`By: ${input.actorEmail.trim()}`);
-  }
-
-  if (input?.associatedContact?.name?.trim()) {
-    const contactBits = [
-      input.associatedContact.name.trim(),
-      input.associatedContact.roleTitle?.trim() || '',
-      input.associatedContact.email?.trim() || '',
-      input.associatedContact.phone?.trim() || '',
-    ].filter(Boolean);
-    parts.push(`Contact: ${contactBits.join(' · ')}`);
-  }
-
-  if (input?.noteText?.trim()) {
-    parts.push('', input.noteText.trim());
-  }
-
-  const content = parts.join('\n').slice(0, 1800);
-
-  const comment = await notionRequest<{ id?: string; url?: string; discussion_id?: string | null }>(`/comments`, {
-    method: 'POST',
-    body: JSON.stringify({
-      parent: {
-        page_id: store.notionPageId,
-      },
-      ...(input?.actorEmail?.trim()
-        ? {
-            display_name: {
-              type: 'custom',
-              custom: {
-                name: input.actorEmail.trim(),
-              },
-            },
-          }
-        : {}),
-      rich_text: [
-        {
-          type: 'text',
-          text: {
-            content,
-          },
-        },
-      ],
-    }),
-  });
-
-  await mirrorKnownTerritoryCheckInComment(store, {
-    notionCommentId: comment.id ?? null,
-    discussionId: comment.discussion_id ?? null,
-    noteText: content,
-    createdAt,
-    actorEmail: input?.actorEmail ?? null,
-  }).catch(() => null);
-
-  return {
-    id: comment.id ?? null,
-    url: comment.url ?? `https://www.notion.so/${store.notionPageId.replace(/-/g, '')}`,
-    discussionId: comment.discussion_id ?? null,
-    createdAt,
-    storeId: store.id,
-  };
-}
+export const recordTerritoryStoreCheckIn = territoryCheckIns.recordTerritoryStoreCheckIn;
+export const createTerritoryStoreCheckInComment = territoryCheckIns.createTerritoryStoreCheckInComment;
 
 export async function territoryConnectionCheck() {
   const schema = await fetchAndValidateDatabaseSchema();
