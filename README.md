@@ -2,6 +2,22 @@
 
 Account-centric CRM for cannabis dispensary sales, ops, finance, and brand ambassador workflows.
 
+## Canonical AI Entry Point
+
+If this repository is being opened by an AI agent, use these as the source of truth before making changes:
+
+- [`AGENTS.md`](/Users/brycejohnson/Documents/New project/Picc-web-app/AGENTS.md)
+- [`AI_HANDOFF.md`](/Users/brycejohnson/Documents/New project/Picc-web-app/AI_HANDOFF.md)
+
+Non-negotiable baseline:
+
+- Use `main` as the canonical branch.
+- Treat `https://piccnewyork.org` as the canonical live deployment.
+- Treat this as the real live app, not a rebuild project.
+- Keep Google Maps as the only supported map provider.
+- Do not reintroduce MapLibre, Carto, `MapCanvas`, or layer-mode map code.
+- Keep Clerk Google-only sign-in and the current mobile-first PWA shell.
+
 Production URL:
 - `https://piccnewyork.org`
 
