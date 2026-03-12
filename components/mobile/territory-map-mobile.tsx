@@ -33,7 +33,6 @@ export function TerritoryMapMobile({
       focusedStoreId={focusedStoreId}
       routeCoordinates={routeCoordinates}
       pinColorMode={pinColorMode}
-      layerMode="pins"
       cameraMode="manual-focus"
       focusRequestToken={focusRequestToken}
       fitPadding={24}
