@@ -2,10 +2,12 @@ import 'server-only';
 
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { getUserRole } from '@/lib/rbac/guards';
 import { evaluateUserAccess, getWorkspaceAllowlist } from '@/lib/auth/access-policy';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { firstAllowlistEntryAsCsv, isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
 import { AUTH_BYPASS_MODE } from '@/lib/config/runtime';
+import type { AppRole } from '@/lib/types/rbac';
 
 interface AccessResult {
   ok: boolean;
@@ -15,6 +17,7 @@ interface AccessResult {
   userId?: string;
   orgId?: string;
   displayName?: string;
+  role?: AppRole;
 }
 
 function parseCsv(value: string | undefined) {
@@ -38,7 +41,10 @@ function getAdminAllowlistCsv(allowlist: ReturnType<typeof parseEmailAllowlist>)
   return firstAllowlistEntryAsCsv(allowlist);
 }
 
-export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): Promise<AccessResult> {
+export async function checkTerritoryAccess(opts?: {
+  requireAdmin?: boolean;
+  allowedRoles?: AppRole[];
+}): Promise<AccessResult> {
   if (AUTH_BYPASS_MODE) {
     const allowlist = getAllowlist();
     const fallbackEmail =
@@ -47,7 +53,7 @@ export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): P
         .map((value) => value.trim())
         .find(Boolean) ?? 'demo@piccplatform.com';
 
-    return { ok: true, status: 200, email: fallbackEmail.toLowerCase() };
+    return { ok: true, status: 200, email: fallbackEmail.toLowerCase(), role: 'ADMIN' };
   }
 
   const { userId, orgId } = await auth();
@@ -71,8 +77,17 @@ export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): P
     }
   }
 
-  const workspaceKey = orgId ?? `user_${userId}`;
-  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, access.email);
+  const workspaceKey = access.workspaceOrgId ?? orgId ?? `user_${userId}`;
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
+    email: access.email!,
+    accessType: access.accessType ?? 'workspace',
+    workspaceOrgId: access.workspaceOrgId,
+  });
+  const role = await getUserRole(workspaceOrgId, userId);
+
+  if (opts?.allowedRoles?.length && !opts.allowedRoles.includes(role)) {
+    return { ok: false, status: 403, error: 'Forbidden' };
+  }
 
   return {
     ok: true,
@@ -81,10 +96,14 @@ export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): P
     userId,
     orgId: workspaceOrgId,
     displayName: user?.fullName ?? user?.firstName ?? access.email,
+    role,
   };
 }
 
-export async function requireTerritoryApiAccess(opts?: { requireAdmin?: boolean }) {
+export async function requireTerritoryApiAccess(opts?: {
+  requireAdmin?: boolean;
+  allowedRoles?: AppRole[];
+}) {
   const result = await checkTerritoryAccess(opts);
   if (!result.ok) {
     return {
@@ -104,5 +123,6 @@ export async function requireTerritoryApiAccess(opts?: { requireAdmin?: boolean 
     userId: result.userId ?? null,
     orgId: result.orgId ?? null,
     displayName: result.displayName ?? result.email!,
+    role: result.role ?? null,
   };
 }

@@ -5,6 +5,7 @@ import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
 import { writeActivity } from '@/lib/activity-log/write';
 import { prisma } from '@/lib/db/prisma';
 import { createTerritoryStoreCheckInComment, recordTerritoryStoreCheckIn } from '@/lib/server/notion-territory';
+import { WriteEnabledRoles } from '@/lib/types/rbac';
 
 const legacyRequestSchema = z.object({
   storeId: z.string().min(1),
@@ -35,7 +36,7 @@ const meetingNoteRequestSchema = z.object({
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const access = await requireTerritoryApiAccess();
+  const access = await requireTerritoryApiAccess({ allowedRoles: WriteEnabledRoles });
   if ('error' in access) {
     return access.error;
   }

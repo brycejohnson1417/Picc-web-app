@@ -22,8 +22,12 @@ const loadWorkspaceContext = cache(async () => {
     throw new Error(access.status === 503 ? 'ACCESS_VERIFICATION_UNAVAILABLE' : 'ACCESS_DENIED');
   }
 
-  const workspaceKey = orgId ?? `user_${userId}`;
-  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, access.email);
+  const workspaceKey = access.workspaceOrgId ?? orgId ?? `user_${userId}`;
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
+    email: access.email!,
+    accessType: access.accessType ?? 'workspace',
+    workspaceOrgId: access.workspaceOrgId,
+  });
   return { userId, orgId: workspaceOrgId };
 });
 

@@ -12,7 +12,7 @@ export async function guard(allowedRoles?: AppRole[]) {
     if (allowedRoles?.length && !allowedRoles.includes(role)) {
       return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
     }
-    return { orgId: DEMO_ORG_ID, userId: DEMO_USER_ID, ...(allowedRoles?.length ? { role } : {}) };
+    return { orgId: DEMO_ORG_ID, userId: DEMO_USER_ID, email: 'demo@piccplatform.com', ...(allowedRoles?.length ? { role } : {}) };
   }
 
   const missingEnv = getMissingEnv();
@@ -54,13 +54,17 @@ export async function guard(allowedRoles?: AppRole[]) {
     return { error: NextResponse.json({ error: access.error }, { status: access.status }) };
   }
 
-  const workspaceKey = orgId ?? `user_${userId}`;
-  let workspaceOrgId = workspaceKey;
-  try {
-    workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, access.email);
-  } catch {
-    return { error: NextResponse.json({ error: 'Workspace bootstrap failed' }, { status: 500 }) };
-  }
+    const workspaceKey = access.workspaceOrgId ?? orgId ?? `user_${userId}`;
+    let workspaceOrgId = workspaceKey;
+    try {
+      workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
+        email: access.email!,
+        accessType: access.accessType ?? 'workspace',
+        workspaceOrgId: access.workspaceOrgId,
+      });
+    } catch {
+      return { error: NextResponse.json({ error: 'Workspace bootstrap failed' }, { status: 500 }) };
+    }
 
   if (allowedRoles?.length) {
     let role: AppRole;
@@ -72,10 +76,10 @@ export async function guard(allowedRoles?: AppRole[]) {
     if (!allowedRoles.includes(role)) {
       return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
     }
-    return { orgId: workspaceOrgId, userId, role };
+    return { orgId: workspaceOrgId, userId, role, email: access.email! };
   }
 
-  return { orgId: workspaceOrgId, userId };
+  return { orgId: workspaceOrgId, userId, email: access.email! };
 }
 
 function getMissingEnv() {

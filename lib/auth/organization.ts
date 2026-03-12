@@ -25,6 +25,11 @@ export async function requireOrgContext() {
     throw new Error(access.error ?? 'ACCESS_DENIED');
   }
 
-  const workspaceOrgId = await ensureWorkspaceAndMembership(orgId, userId, access.email);
+  const workspaceKey = access.workspaceOrgId ?? orgId;
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
+    email: access.email!,
+    accessType: access.accessType ?? 'workspace',
+    workspaceOrgId: access.workspaceOrgId,
+  });
   return { userId, orgId: workspaceOrgId };
 }

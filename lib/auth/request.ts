@@ -17,7 +17,6 @@ export async function withOrg() {
     throw NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
   }
 
-  const workspaceKey = orgId ?? `user_${userId}`;
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '';
   const access = await evaluateUserAccess(email);
@@ -25,7 +24,12 @@ export async function withOrg() {
     throw NextResponse.json({ error: access.error }, { status: access.status });
   }
 
-  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, access.email);
+  const workspaceKey = access.workspaceOrgId ?? orgId ?? `user_${userId}`;
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
+    email: access.email!,
+    accessType: access.accessType ?? 'workspace',
+    workspaceOrgId: access.workspaceOrgId,
+  });
   return { userId, orgId: workspaceOrgId };
 }
 

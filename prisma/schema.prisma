@@ -13,6 +13,13 @@ enum Role {
   SALES_REP
   FINANCE
   BRAND_AMBASSADOR
+  GUEST_VIEWER
+}
+
+enum GuestInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
 }
 
 enum RecordStatus {
@@ -134,6 +141,7 @@ model OrganizationWorkspace {
   territoryStores TerritoryStoreReadModel[]
   territoryFilterPresets TerritoryFilterPreset[]
   appSessionAudits AppSessionAudit[]
+  guestAccessInvites GuestAccessInvite[]
 }
 
 model Membership {
@@ -142,6 +150,7 @@ model Membership {
   org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
   clerkUserId   String
   role          Role
+  testModeEnabled Boolean               @default(false)
   source        String                @default("NOTION_SYNC")
   active        Boolean               @default(true)
   createdAt     DateTime              @default(now())
@@ -149,6 +158,26 @@ model Membership {
 
   @@unique([orgId, clerkUserId])
   @@index([orgId, role])
+}
+
+model GuestAccessInvite {
+  id                    String                @id @default(cuid())
+  orgId                 String
+  org                   OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  email                 String
+  status                GuestInviteStatus     @default(PENDING)
+  invitedByClerkUserId  String
+  invitedByEmail        String?
+  note                  String?
+  acceptedAt            DateTime?
+  acceptedByClerkUserId String?
+  revokedAt             DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([orgId, email])
+  @@index([orgId, status, createdAt])
+  @@index([email, status])
 }
 
 model Account {

@@ -66,7 +66,7 @@ export function GoogleOnlySignInCard() {
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary">piccnewyork.org</p>
         <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">Sign in with Google</h1>
         <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">
-          Access is limited to Google accounts on <span className="font-semibold">@piccplatform.com</span> that also exist in the PICC Notion workspace.
+          Team members must use a <span className="font-semibold">@piccplatform.com</span> Google account that also exists in the PICC Notion workspace. Invited guests can sign in with the exact Google email address that received their read-only invite.
         </p>
       </div>
 

@@ -8,6 +8,7 @@ import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { recordAppSession } from '@/lib/auth/session-audit';
 import { AUTH_BYPASS_MODE, DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 import { prisma } from '@/lib/db/prisma';
+import { AppRoles, type AppRole } from '@/lib/types/rbac';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +44,19 @@ export default async function MainLayout({ children }: { children: React.ReactNo
 
   if (AUTH_BYPASS_MODE) {
     await ensureDemoWorkspace();
-    return <AppShell>{children}</AppShell>;
+    return (
+      <AppShell
+        access={{
+          role: AppRoles.ADMIN,
+          testModeEnabled: false,
+          isAdmin: true,
+          isGuestViewer: false,
+          canEdit: true,
+        }}
+      >
+        {children}
+      </AppShell>
+    );
   }
 
   const { userId, orgId, sessionId } = await auth();
@@ -66,8 +79,12 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     );
   }
 
-  const workspaceKey = orgId ?? `user_${userId}`;
-  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, access.email);
+  const workspaceKey = access.workspaceOrgId ?? orgId ?? `user_${userId}`;
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
+    email: access.email!,
+    accessType: access.accessType ?? 'workspace',
+    workspaceOrgId: access.workspaceOrgId,
+  });
   await recordAppSession({
     orgId: workspaceOrgId,
     clerkUserId: userId,
@@ -76,7 +93,35 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     displayName: user?.fullName ?? user?.firstName ?? access.email,
   });
 
-  return <AppShell>{children}</AppShell>;
+  const membership = await prisma.membership.findUnique({
+    where: {
+      orgId_clerkUserId: {
+        orgId: workspaceOrgId,
+        clerkUserId: userId,
+      },
+    },
+    select: {
+      role: true,
+      testModeEnabled: true,
+    },
+  });
+
+  const role = (membership?.role as AppRole | undefined) ?? AppRoles.SALES_REP;
+  const isGuestViewer = role === AppRoles.GUEST_VIEWER;
+
+  return (
+    <AppShell
+      access={{
+        role,
+        testModeEnabled: Boolean(membership?.testModeEnabled),
+        isAdmin: role === AppRoles.ADMIN,
+        isGuestViewer,
+        canEdit: !isGuestViewer,
+      }}
+    >
+      {children}
+    </AppShell>
+  );
 }
 
 function getMissingEnv() {

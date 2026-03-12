@@ -5,6 +5,7 @@ import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
 import { writeActivity } from '@/lib/activity-log/write';
 import { prisma } from '@/lib/db/prisma';
 import { loadTerritoryStoreDetail, updateTerritoryStoreFields } from '@/lib/server/notion-territory';
+import { WriteEnabledRoles } from '@/lib/types/rbac';
 
 const patchSchema = z.object({
   notes: z.string().max(4000).optional(),
@@ -33,7 +34,7 @@ export async function GET(_request: Request, context: { params: Promise<{ storeI
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ storeId: string }> }) {
-  const access = await requireTerritoryApiAccess();
+  const access = await requireTerritoryApiAccess({ allowedRoles: WriteEnabledRoles });
   if ('error' in access) {
     return access.error;
   }

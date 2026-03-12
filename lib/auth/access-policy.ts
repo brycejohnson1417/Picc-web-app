@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
+import { getActiveGuestInviteByEmail } from '@/lib/auth/guest-invites';
 import { hasNotionWorkspaceUser } from '@/lib/server/notion-workspace-users';
 
 const REQUIRED_EMAIL_DOMAIN = 'piccplatform.com';
@@ -10,6 +11,8 @@ export interface AccessPolicyResult {
   ok: boolean;
   status: number;
   email?: string;
+  accessType?: 'workspace' | 'guest';
+  workspaceOrgId?: string;
   error?: string;
 }
 
@@ -26,6 +29,17 @@ export async function evaluateUserAccess(email: string | null | undefined): Prom
   const normalizedEmail = email?.trim().toLowerCase() ?? '';
   if (!normalizedEmail) {
     return { ok: false, status: 403, error: 'User email not found' };
+  }
+
+  const guestInvite = await getActiveGuestInviteByEmail(normalizedEmail);
+  if (guestInvite) {
+    return {
+      ok: true,
+      status: 200,
+      email: normalizedEmail,
+      accessType: 'guest',
+      workspaceOrgId: guestInvite.orgId,
+    };
   }
 
   if (!isRequiredCompanyEmail(normalizedEmail)) {
@@ -67,6 +81,7 @@ export async function evaluateUserAccess(email: string | null | undefined): Prom
     ok: true,
     status: 200,
     email: normalizedEmail,
+    accessType: 'workspace',
   };
 }
 

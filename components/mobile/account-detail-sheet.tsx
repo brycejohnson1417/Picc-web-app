@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Copy, Mail, MapPinned, MessageSquare, Navigation, PencilLine, Phone, PhoneCall, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAppAccess } from '@/components/auth/app-access-provider';
 import type { TerritoryStoreContact, TerritoryStoreDetailResponse, TerritoryStorePin } from '@/lib/territory/types';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { Button, Textarea } from '@/components/ui';
@@ -105,6 +106,7 @@ interface AccountDetailSheetProps {
 }
 
 export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterStore }: AccountDetailSheetProps) {
+  const appAccess = useAppAccess();
   const [tab, setTab] = useState<DetailTab>('detail');
   const [detail, setDetail] = useState<TerritoryStoreDetailResponse | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -311,12 +313,17 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   }
 
   function openCheckInModal(contact: TerritoryStoreContact | null = null) {
+    if (!appAccess.canEdit) {
+      toast.message('Guest access is read-only. Check-ins are disabled.');
+      return;
+    }
     setCheckInContact(contact);
     setCheckInDraft('');
     setCheckInModalOpen(true);
   }
 
   async function handleCheckInSubmit() {
+    if (!appAccess.canEdit) return;
     setCheckingIn(true);
     try {
       const response = await fetch('/api/territory/check-in', {
@@ -388,7 +395,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   }
 
   async function handleSaveNotes() {
-    if (!canSaveStoreUpdates) return;
+    if (!appAccess.canEdit || !canSaveStoreUpdates) return;
 
     setSavingNotes(true);
     try {
@@ -466,7 +473,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
               className="text-right text-[16px] font-medium"
               aria-label="Open account in Notion"
             >
-              Edit
+              Open
             </button>
           </div>
           <SegmentedControl
@@ -540,14 +547,16 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                         >
                           Contact
                         </button>
-                        <button
-                          type="button"
-                          className="rounded-md border border-[#b4b7bf] px-2.5 py-1 text-[13px] font-medium text-[#27303f] hover:bg-[#e8eaf0]"
-                          onClick={() => openCheckInModal(contact)}
-                          disabled={checkingIn}
-                        >
-                          Check-in
-                        </button>
+                        {appAccess.canEdit ? (
+                          <button
+                            type="button"
+                            className="rounded-md border border-[#b4b7bf] px-2.5 py-1 text-[13px] font-medium text-[#27303f] hover:bg-[#e8eaf0]"
+                            onClick={() => openCheckInModal(contact)}
+                            disabled={checkingIn}
+                          >
+                            Check-in
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                     <p className="text-[14px] text-[#5e6169]">{contact.roleTitle || '—'}</p>
@@ -632,9 +641,15 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
             <div className="border-b border-[#c6c7cb] px-5 py-5 text-[#5f6269]">
               <p className="text-[20px] font-semibold text-[#1d1f23]">Account Notes</p>
               <p className="mt-1 text-[15px]">Notes and follow-up date save directly to Notion.</p>
+              {!appAccess.canEdit ? (
+                <div className="mt-3 rounded-2xl border border-[#b8c6de] bg-[#eef4ff] px-4 py-3 text-[14px] text-[#3559a9]">
+                  Guest access is read-only. You can review notes and follow-up details here, but only team members can save updates.
+                </div>
+              ) : null}
               <Textarea
                 value={notesDraft}
                 onChange={(event) => setNotesDraft(event.target.value)}
+                disabled={!appAccess.canEdit}
                 className="mt-3 min-h-[160px] border-[#c6c8d0] bg-white text-[18px] text-[#1d1f23] placeholder:text-[#7c8089] caret-[#cd3814]"
                 placeholder="Add visit notes, next steps, or key blockers..."
               />
@@ -643,6 +658,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                 type="date"
                 value={followUpDateDraft}
                 onChange={(event) => setFollowUpDateDraft(event.target.value)}
+                disabled={!appAccess.canEdit}
                 className="mt-1 h-11 w-full rounded-md border border-[#c6c8d0] bg-white px-3 text-[17px] text-[#23262c]"
               />
               <label className="mt-3 block text-[16px] text-[#4f525a]">Follow-up Needed</label>
@@ -651,6 +667,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                   type="button"
                   className={cn('h-10 rounded-md border text-[14px] font-medium', followUpNeededDraft === true ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c6c8d0] bg-white text-[#23262c]')}
                   onClick={() => setFollowUpNeededDraft(true)}
+                  disabled={!appAccess.canEdit}
                 >
                   Yes
                 </button>
@@ -658,6 +675,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                   type="button"
                   className={cn('h-10 rounded-md border text-[14px] font-medium', followUpNeededDraft === false ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c6c8d0] bg-white text-[#23262c]')}
                   onClick={() => setFollowUpNeededDraft(false)}
+                  disabled={!appAccess.canEdit}
                 >
                   No
                 </button>
@@ -666,17 +684,20 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
               <Textarea
                 value={followUpReasonDraft}
                 onChange={(event) => setFollowUpReasonDraft(event.target.value)}
+                disabled={!appAccess.canEdit}
                 className="mt-1 min-h-[90px] border-[#c6c8d0] bg-white text-[16px] text-[#1d1f23] placeholder:text-[#7c8089] caret-[#cd3814]"
                 placeholder="Why this follow-up is needed..."
               />
-              <Button
-                type="button"
-                className="mt-4 h-11 w-full bg-[#cd3814] px-5 text-white hover:bg-[#b52f10] disabled:bg-[#d7b1a7] disabled:text-white/80"
-                onClick={handleSaveNotes}
-                disabled={!canSaveStoreUpdates || savingNotes}
-              >
-                {savingNotes ? 'Saving...' : 'Save Updates'}
-              </Button>
+              {appAccess.canEdit ? (
+                <Button
+                  type="button"
+                  className="mt-4 h-11 w-full bg-[#cd3814] px-5 text-white hover:bg-[#b52f10] disabled:bg-[#d7b1a7] disabled:text-white/80"
+                  onClick={handleSaveNotes}
+                  disabled={!canSaveStoreUpdates || savingNotes}
+                >
+                  {savingNotes ? 'Saving...' : 'Save Updates'}
+                </Button>
+              ) : null}
             </div>
           ) : null}
 
@@ -763,7 +784,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           </div>
         ) : null}
 
-        {checkInModalOpen ? (
+        {checkInModalOpen && appAccess.canEdit ? (
           <div className="fixed inset-0 z-[5200] bg-black/40" onClick={() => !checkingIn && setCheckInModalOpen(false)}>
             <div className="absolute inset-x-0 bottom-0 mx-auto max-w-[720px] rounded-t-2xl bg-[#f8f8fb] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4" onClick={(event) => event.stopPropagation()}>
               <div className="mb-3 flex items-start justify-between gap-3">
@@ -815,9 +836,9 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
         ) : null}
 
         <div className="absolute inset-x-0 bottom-0 z-[5100]">
-          <div className="mx-auto grid max-w-[720px] grid-cols-4 border-t border-[#c6c7cb] bg-[#f2f2f5] py-2 pb-[max(8px,env(safe-area-inset-bottom))] text-[#5a96e8]">
+          <div className={cn('mx-auto grid max-w-[720px] border-t border-[#c6c7cb] bg-[#f2f2f5] py-2 pb-[max(8px,env(safe-area-inset-bottom))] text-[#5a96e8]', appAccess.canEdit ? 'grid-cols-4' : 'grid-cols-3')}>
             <ActionButton label={routeSelected ? 'remove' : 'add to...'} onClick={() => onAddToRoute(activeStore.id)} icon={<MapPinned className="h-5 w-5" />} />
-            <ActionButton label={checkingIn ? 'saving...' : 'check-in'} onClick={() => openCheckInModal()} icon={<PencilLine className="h-5 w-5" />} disabled={checkingIn} />
+            {appAccess.canEdit ? <ActionButton label={checkingIn ? 'saving...' : 'check-in'} onClick={() => openCheckInModal()} icon={<PencilLine className="h-5 w-5" />} disabled={checkingIn} /> : null}
             <ActionButton label="center" onClick={handleCenter} icon={<MapPinned className="h-5 w-5" />} />
             <a href={navigateUrl} target="_blank" rel="noreferrer" className={cn(actionBaseClass, 'text-center')}>
               <Navigation className="h-5 w-5" />
