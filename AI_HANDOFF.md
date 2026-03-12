@@ -7,7 +7,7 @@ Use this file as the canonical handoff context for any other AI working on this 
 - Local repo path: `/Users/brycejohnson/Documents/New project/Picc-web-app`
 - GitHub repo: `https://github.com/bryce-picc/Picc-web-app.git`
 - Canonical branch: `main`
-- Current canonical snapshot commit: `9e25aa1221f90db6ceaeeeff55360679f7e62f58`
+- Current canonical snapshot commit: `cdbe07389dce9465666def8099335bc6b523c8c2`
 
 ## Canonical Deployment
 
