@@ -6,9 +6,8 @@ Use this file as the canonical handoff context for any other AI working on this 
 
 - Local repo path: `/Users/brycejohnson/Documents/New project/Picc-web-app`
 - GitHub repo: `https://github.com/bryce-picc/Picc-web-app.git`
-- Default branch: `main`
-- Current canonical snapshot branch: `codex/canonical-snapshot-20260312`
-- Use the snapshot branch until it is merged back into `main`
+- Canonical branch: `main`
+- Current canonical snapshot commit: `9e25aa1221f90db6ceaeeeff55360679f7e62f58`
 
 ## Canonical Deployment
 
@@ -78,4 +77,4 @@ Use this file as the canonical handoff context for any other AI working on this 
 
 ## Short Prompt To Give Another AI
 
-Work only in `/Users/brycejohnson/Documents/New project/Picc-web-app`, which is the canonical repo for the live PICC app. Use the GitHub repo `https://github.com/bryce-picc/Picc-web-app.git` on branch `codex/canonical-snapshot-20260312` until that snapshot is merged into `main`. The canonical production deployment is `https://piccnewyork.org`, backed by the Vercel project `picc-push` (`prj_zKro1cfUOP9D2MTh0ZahYDREcRUA`). Do not use legacy repos, old Vercel projects, old map providers, or rebuild a separate app surface. Keep Google Maps, the mobile-first PWA shell, Clerk Google-only auth, comment-first check-ins, and Dispensary Master List vendor-day properties as the current baseline.
+Work only in `/Users/brycejohnson/Documents/New project/Picc-web-app`, which is the canonical repo for the live PICC app. Use `main` in `https://github.com/bryce-picc/Picc-web-app.git`. The canonical production deployment is `https://piccnewyork.org`, backed by the Vercel project `picc-push` (`prj_zKro1cfUOP9D2MTh0ZahYDREcRUA`). Do not use legacy repos, old Vercel projects, old map providers, or rebuild a separate app surface. Keep Google Maps, the mobile-first PWA shell, Clerk Google-only auth, comment-first check-ins, and Dispensary Master List vendor-day properties as the current baseline.
