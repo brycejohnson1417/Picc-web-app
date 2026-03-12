@@ -3,8 +3,9 @@ import { Role } from '@prisma/client';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui';
+import { evaluateUserAccess } from '@/lib/auth/access-policy';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
-import { isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
+import { recordAppSession } from '@/lib/auth/session-audit';
 import { AUTH_BYPASS_MODE, DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 import { prisma } from '@/lib/db/prisma';
 
@@ -45,7 +46,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     return <AppShell>{children}</AppShell>;
   }
 
-  const { userId, orgId } = await auth();
+  const { userId, orgId, sessionId } = await auth();
 
   if (!userId) {
     redirect('/sign-in');
@@ -53,32 +54,27 @@ export default async function MainLayout({ children }: { children: React.ReactNo
 
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '';
-  const allowlist = parseEmailAllowlist(process.env.TERRITORY_ALLOWED_EMAILS);
-  if (allowlist.entries.length === 0) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
-        <div className="w-full max-w-2xl space-y-4 rounded-xl border bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h1 className="text-2xl font-bold">Access Configuration Required</h1>
-          <p className="text-sm text-slate-600 dark:text-slate-300">`TERRITORY_ALLOWED_EMAILS` must be configured before users can access the app.</p>
-        </div>
-      </div>
-    );
-  }
-  if (!isEmailAllowed(email, allowlist)) {
+  const access = await evaluateUserAccess(email);
+  if (!access.ok) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
         <div className="w-full max-w-2xl space-y-4 rounded-xl border bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h1 className="text-2xl font-bold">Access Denied</h1>
-          <p className="text-sm text-slate-600 dark:text-slate-300">
-            Your account is not allowlisted for this workspace. Use a `@piccplatform.com` account or contact an admin.
-          </p>
+          <p className="text-sm text-slate-600 dark:text-slate-300">{access.error}</p>
         </div>
       </div>
     );
   }
 
   const workspaceKey = orgId ?? `user_${userId}`;
-  await ensureWorkspaceAndMembership(workspaceKey, userId, email);
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, access.email);
+  await recordAppSession({
+    orgId: workspaceOrgId,
+    clerkUserId: userId,
+    sessionId,
+    email: access.email,
+    displayName: user?.fullName ?? user?.firstName ?? access.email,
+  });
 
   return <AppShell>{children}</AppShell>;
 }

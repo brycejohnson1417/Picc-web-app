@@ -22,8 +22,8 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border bg-gradient-to-r from-blue-600 to-blue-500 p-6 text-white">
-        <h1 className="text-3xl font-bold">Command Center</h1>
-        <p className="mt-2 text-blue-100">Track referrals, vendor days, overdue risk, and sample-box workflows from one account-first workspace.</p>
+        <h1 className="text-3xl font-bold">piccnewyork.org</h1>
+        <p className="mt-2 text-blue-100">Track referrals, vendor days, overdue risk, and sample-box operations from one account-first workspace.</p>
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

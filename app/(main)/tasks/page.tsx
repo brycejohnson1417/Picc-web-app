@@ -16,7 +16,7 @@ export default async function TasksPage() {
     <div className="space-y-6">
       <header>
         <h1 className="text-3xl font-bold">Tasks</h1>
-        <p className="text-sm text-slate-500">Unified list for sales, ops, finance, and ambassador workflows.</p>
+        <p className="text-sm text-slate-500">Unified list for sales, ops, finance, and ambassador task queues.</p>
       </header>
       <Card>
         <CardHeader>

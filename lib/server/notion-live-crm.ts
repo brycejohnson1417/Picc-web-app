@@ -12,7 +12,6 @@ import { getCachedTerritoryStores } from '@/lib/server/notion-territory';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
-const CONTACTS_DB_FALLBACK = '3bce11e6de354ca0bac75ed6114a1b0f';
 const CONTACTS_SNAPSHOT_KEY = 'crm-contacts-v1';
 const DEFAULT_CONTACTS_SYNC_TTL_MINUTES = 20;
 let contactsSyncInFlight: Promise<void> | null = null;
@@ -53,7 +52,11 @@ function requiredEnv(name: 'NOTION_API_KEY') {
 }
 
 function getContactsDbId() {
-  return process.env.NOTION_CONTACTS_DATABASE_ID?.trim() || CONTACTS_DB_FALLBACK;
+  const id = process.env.NOTION_CONTACTS_DATABASE_ID?.trim();
+  if (!id) {
+    throw new Error('NOTION_CONTACTS_DATABASE_ID is required');
+  }
+  return id;
 }
 
 function normalizeKey(key: string) {

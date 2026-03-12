@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
+import { ActivityType } from '@prisma/client';
 import { z } from 'zod';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
-import { createMeetingCheckIn } from '@/lib/server/notion-meeting-notes';
-import { recordTerritoryStoreCheckIn } from '@/lib/server/notion-territory';
+import { writeActivity } from '@/lib/activity-log/write';
+import { prisma } from '@/lib/db/prisma';
+import { createTerritoryStoreCheckInComment, recordTerritoryStoreCheckIn } from '@/lib/server/notion-territory';
 
 const legacyRequestSchema = z.object({
   storeId: z.string().min(1),
@@ -18,7 +20,6 @@ const meetingNoteRequestSchema = z.object({
     address: z.string().optional(),
     repName: z.string().nullable().optional(),
   }),
-  mode: z.enum(['written', 'voice']).default('written'),
   noteText: z.string().max(5000).optional(),
   associatedContact: z
     .object({
@@ -47,9 +48,8 @@ export async function POST(request: Request) {
       const payload = meetingPayload.data;
       const storeId = payload.store.id?.trim() || payload.store.notionPageId;
 
-      const note = await createMeetingCheckIn({
-        store: payload.store,
-        mode: payload.mode,
+      const note = await createTerritoryStoreCheckInComment(storeId, {
+        mode: 'written',
         noteText: payload.noteText,
         actorEmail: access.email,
         associatedContact: payload.associatedContact,
@@ -59,7 +59,12 @@ export async function POST(request: Request) {
       let syncWarning: string | null = null;
 
       try {
-        const checkIn = await recordTerritoryStoreCheckIn(storeId);
+        const checkIn = await recordTerritoryStoreCheckIn(storeId, {
+          contactId: payload.associatedContact?.id ?? null,
+          noteText: payload.noteText?.trim() ?? null,
+          createdByEmail: access.email,
+          persistEvent: false,
+        });
         checkedInAt = checkIn.checkedInAt;
       } catch (syncError) {
         const message = syncError instanceof Error ? syncError.message : 'Failed to update store check-in timestamp';
@@ -70,13 +75,34 @@ export async function POST(request: Request) {
         }
       }
 
+      if (access.orgId && access.userId) {
+        const account = await prisma.account.findFirst({
+          where: {
+            orgId: access.orgId,
+            notionPageId: payload.store.notionPageId,
+          },
+          select: { id: true },
+        });
+
+        if (account) {
+          await writeActivity({
+            orgId: access.orgId,
+            accountId: account.id,
+            actorClerkUserId: access.userId,
+            type: ActivityType.NOTE_ADDED,
+            title: 'Territory check-in added',
+            description: payload.noteText?.trim() || payload.associatedContact?.name || undefined,
+          });
+        }
+      }
+
       return NextResponse.json({
         ok: true,
         id: note.id,
         url: note.url,
         storeId,
         checkedInAt,
-        mode: payload.mode,
+        mode: 'written',
         syncWarning,
         associatedContact: payload.associatedContact
           ? {
@@ -89,8 +115,36 @@ export async function POST(request: Request) {
 
     const legacyPayload = legacyRequestSchema.safeParse(body);
     if (legacyPayload.success) {
-      const result = await recordTerritoryStoreCheckIn(legacyPayload.data.storeId);
-      return NextResponse.json(result);
+      const note = await createTerritoryStoreCheckInComment(legacyPayload.data.storeId, {
+        actorEmail: access.email,
+        mode: 'written',
+      });
+      let checkedInAt = new Date().toISOString();
+      let syncWarning: string | null = null;
+
+      try {
+        const result = await recordTerritoryStoreCheckIn(legacyPayload.data.storeId, {
+          createdByEmail: access.email,
+          persistEvent: false,
+        });
+        checkedInAt = result.checkedInAt;
+      } catch (syncError) {
+        const message = syncError instanceof Error ? syncError.message : 'Failed to update store check-in timestamp';
+        if (message.includes('No check-in date property') || message === 'Store not found') {
+          syncWarning = message;
+        } else {
+          throw syncError;
+        }
+      }
+
+      return NextResponse.json({
+        storeId: legacyPayload.data.storeId,
+        checkedInAt,
+        ok: true,
+        id: note.id,
+        url: note.url,
+        syncWarning,
+      });
     }
 
     return NextResponse.json(
@@ -105,6 +159,8 @@ export async function POST(request: Request) {
     const status =
       message === 'Store not found'
         ? 404
+        : message.includes('missing a relation property')
+          ? 400
         : message.includes('No check-in date property')
           ? 400
           : 500;

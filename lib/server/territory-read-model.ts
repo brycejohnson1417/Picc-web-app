@@ -12,9 +12,6 @@ const TERRITORY_BOUNDS_BY_STATE: Partial<Record<string, { latMin: number; latMax
   NY: { latMin: 40.4, latMax: 45.2, lngMin: -79.9, lngMax: -71.7 },
 };
 
-export type TerritoryLayerMetric = 'interactions' | 'purchases' | 'follow_up';
-export type TerritoryLayerMode = 'pins' | 'heatmap' | 'hex';
-
 export interface TerritoryFilterPresetInput {
   name: string;
   search: string;
@@ -22,15 +19,6 @@ export interface TerritoryFilterPresetInput {
   selectedReps: string[];
   showRouteOnly: boolean;
   pinColorMode: 'status' | 'rep';
-}
-
-export interface TerritoryLayerFeature {
-  type: 'Feature';
-  geometry: {
-    type: 'Point';
-    coordinates: [number, number];
-  };
-  properties: Record<string, unknown>;
 }
 
 function asDate(value: string | null | undefined) {
@@ -84,12 +72,6 @@ function metricForStore(store: TerritoryStorePin, checkInCount: number, purchase
     purchasesScore: Math.max(0, purchaseScore),
     followUpUrgencyScore,
   };
-}
-
-function metricValue(pin: TerritoryStorePin, metric: TerritoryLayerMetric) {
-  if (metric === 'interactions') return pin.metrics?.interactionsScore ?? 0;
-  if (metric === 'purchases') return pin.metrics?.purchasesScore ?? 0;
-  return pin.metrics?.followUpUrgencyScore ?? 0;
 }
 
 async function getPurchaseScoreByKey(orgId: string) {
@@ -606,73 +588,6 @@ export async function recordTerritoryCheckInEvent(input: {
   }
 
   return checkIn;
-}
-
-export async function loadTerritoryLayers(input: {
-  metric: TerritoryLayerMetric;
-  mode: TerritoryLayerMode;
-  statuses?: string[];
-  reps?: string[];
-  query?: string;
-  orgId?: string;
-}) {
-  const storesResult = await loadTerritoryStoresFromReadModel(input);
-  const pins = storesResult.stores;
-
-  if (input.mode === 'pins' || input.mode === 'heatmap') {
-    const features: TerritoryLayerFeature[] = pins.map((pin) => ({
-      type: 'Feature',
-      geometry: {
-        type: 'Point',
-        coordinates: [pin.lng, pin.lat],
-      },
-      properties: {
-        id: pin.id,
-        name: pin.name,
-        status: pin.status,
-        weight: metricValue(pin, input.metric),
-      },
-    }));
-
-    return {
-      type: 'FeatureCollection' as const,
-      mode: input.mode,
-      metric: input.metric,
-      features,
-      count: features.length,
-    };
-  }
-
-  const buckets = new Map<string, { lat: number; lng: number; weight: number; count: number }>();
-  for (const pin of pins) {
-    const latBucket = Math.round(pin.lat * 50) / 50;
-    const lngBucket = Math.round(pin.lng * 50) / 50;
-    const key = `${latBucket}:${lngBucket}`;
-    const current = buckets.get(key) ?? { lat: latBucket, lng: lngBucket, weight: 0, count: 0 };
-    current.weight += metricValue(pin, input.metric);
-    current.count += 1;
-    buckets.set(key, current);
-  }
-
-  const features: TerritoryLayerFeature[] = [...buckets.values()].map((bucket) => ({
-    type: 'Feature',
-    geometry: {
-      type: 'Point',
-      coordinates: [bucket.lng, bucket.lat],
-    },
-    properties: {
-      count: bucket.count,
-      weight: bucket.weight,
-    },
-  }));
-
-  return {
-    type: 'FeatureCollection' as const,
-    mode: input.mode,
-    metric: input.metric,
-    features,
-    count: features.length,
-  };
 }
 
 export async function listTerritoryFilterPresets(ownerEmail: string, input?: { orgId?: string }) {

@@ -21,6 +21,11 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const statuses = readMultiParam(searchParams, 'status');
   const reps = readMultiParam(searchParams, 'rep');
+  const locationAvailabilityParam = (searchParams.get('locationStatus') ?? 'all').trim().toLowerCase();
+  const locationAvailability =
+    locationAvailabilityParam === 'available' || locationAvailabilityParam === 'unavailable'
+      ? locationAvailabilityParam
+      : 'all';
   const q = searchParams.get('q')?.trim() ?? '';
   const refresh = searchParams.get('refresh') === '1';
 
@@ -28,6 +33,7 @@ export async function GET(request: Request) {
     const payload = await loadTerritoryStores({
       statuses,
       reps,
+      locationAvailability,
       query: q,
       refresh,
     });

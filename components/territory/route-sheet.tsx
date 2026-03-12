@@ -1,6 +1,6 @@
 'use client';
 
-import { Car, ExternalLink, Navigation2, Trash2, Train } from 'lucide-react';
+import { Bike, Car, ExternalLink, Navigation2, Trash2, Train } from 'lucide-react';
 import { Button } from '@/components/ui';
 import type { RouteMode, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
@@ -50,6 +50,7 @@ export function RouteSheet({
 
       <div className="flex gap-2">
         <ModeButton icon={Car} label="Car" active={mode === 'car'} onClick={() => onSetMode('car')} />
+        <ModeButton icon={Bike} label="Bike" active={mode === 'bike'} onClick={() => onSetMode('bike')} />
         <ModeButton icon={Train} label="Transit" active={mode === 'transit'} onClick={() => onSetMode('transit')} />
         <Button variant="outline" size="sm" className="h-9" onClick={onLaunchDirections} disabled={selectedStops.length < 2}>
           <ExternalLink className="mr-1 h-3.5 w-3.5" />

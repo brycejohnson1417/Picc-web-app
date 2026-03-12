@@ -502,10 +502,7 @@ export async function createMeetingCheckIn(input: MeetingCheckInInput) {
           {
             type: 'text',
             text: {
-              content:
-                input.mode === 'voice'
-                  ? 'Voice check-in started from PICC Push. Start voice transcription in this note.'
-                  : 'Written check-in created from PICC Push.',
+              content: 'Check-in created from piccnewyork.org.',
             },
           },
         ],

@@ -14,7 +14,16 @@ export interface TerritoryStorePin {
   lng: number;
   locationLabel: string | null;
   locationAddress: string | null;
-  locationSource: 'notion-place' | 'nominatim-cache' | 'nominatim-live';
+  locationSource:
+    | 'notion-place'
+    | 'google-address-cache'
+    | 'google-address-live'
+    | 'google-city-cache'
+    | 'google-city-live'
+    | 'synthetic'
+    | 'unavailable';
+  locationPrecision: 'exact' | 'address' | 'city' | 'synthetic' | 'unavailable';
+  isApproximate: boolean;
   lastEditedTime: string;
   licenseNumber?: string | null;
   city?: string | null;
@@ -23,6 +32,8 @@ export interface TerritoryStorePin {
   phoneNumber?: string | null;
   email?: string | null;
   followUpDate?: string | null;
+  followUpNeeded?: boolean | null;
+  followUpReason?: string | null;
   notes?: string | null;
   lastCheckIn?: string | null;
   geometry?: {
@@ -49,6 +60,65 @@ export interface TerritoryStoreContact {
 export interface TerritoryStoreDetailResponse {
   store: TerritoryStorePin;
   contacts: TerritoryStoreContact[];
+  checkIns: TerritoryStoreCheckIn[];
+  vendorDays: TerritoryVendorDaySummary;
+  crm: {
+    contact: string | null;
+    contactEmail: string | null;
+    contactPhone: string | null;
+    primaryContactName: string | null;
+    primaryContactBuyer: string | null;
+    primaryContactEmail: string | null;
+    primaryContactPhone: string | null;
+    rep: string | null;
+    accountManager: string | null;
+    piccCreditStatus: string | null;
+    accountStatus: string | null;
+    lastOrderAmount: number | null;
+    lastContacted: string | null;
+    lastDeliveryDate: string | null;
+    lastSampleOrderDate: string | null;
+    lastOrderDate: string | null;
+    referralSource: string | null;
+    customerSince: string | null;
+    pennyBundlePromoStatus: string | null;
+    pppStatus: string | null;
+    headsetConnectionStatus: string | null;
+    productTracking: string | null;
+    displayTracking: string | null;
+  };
+  analytics: {
+    monthly: Array<{
+      month: string;
+      orderCount: number;
+      orderTotal: number;
+      revenue: number;
+    }>;
+  };
+}
+
+export interface TerritoryStoreCheckIn {
+  id: string;
+  source: 'notion-comment' | 'local-check-in';
+  happenedAt: string;
+  mode: 'written' | 'voice' | 'unknown';
+  notePreview: string | null;
+  url?: string | null;
+  createdByLabel?: string | null;
+  createdByEmail?: string | null;
+}
+
+export interface TerritoryVendorDaySummary {
+  total: number;
+  upcomingCount: number;
+  recent: Array<{
+    id: string;
+    eventDate: string;
+    status: string;
+    repName: string | null;
+    ambassadorName: string | null;
+    notes: string | null;
+  }>;
 }
 
 export interface TerritoryFilterCount {
@@ -61,6 +131,7 @@ export interface TerritoryStoresResponse {
   filters: {
     statuses: TerritoryFilterCount[];
     reps: TerritoryFilterCount[];
+    locationAvailability: TerritoryFilterCount[];
   };
   meta: {
     dataSource: 'notion-live-cache' | 'notion-live-cache-stale';
@@ -96,8 +167,10 @@ export interface TerritoryOptimizedRouteResponse {
   totalDistanceMeters: number;
   totalDurationSeconds: number;
   legs: TerritoryOptimizedLeg[];
-  estimationModel?: 'osrm' | 'transit-heuristic';
+  estimationModel?: 'google-routes' | 'transit-heuristic' | 'fallback-order';
   modeLabel?: string;
+  warning?: string;
+  capExceeded?: boolean;
   geometry: {
     type: 'LineString';
     coordinates: [number, number][];

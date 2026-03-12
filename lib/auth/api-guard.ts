@@ -1,9 +1,9 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { AppRole } from '@/lib/types/rbac';
+import { evaluateUserAccess } from '@/lib/auth/access-policy';
 import { getUserRole } from '@/lib/rbac/guards';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
-import { isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
 import { AUTH_BYPASS_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 
 export async function guard(allowedRoles?: AppRole[]) {
@@ -49,18 +49,15 @@ export async function guard(allowedRoles?: AppRole[]) {
   } catch {
     return { error: NextResponse.json({ error: 'Auth unavailable' }, { status: 503 }) };
   }
-  const allowlist = parseEmailAllowlist(process.env.TERRITORY_ALLOWED_EMAILS);
-  if (allowlist.entries.length === 0) {
-    return { error: NextResponse.json({ error: 'TERRITORY_ALLOWED_EMAILS is not configured' }, { status: 503 }) };
-  }
-  if (!isEmailAllowed(email, allowlist)) {
-    return { error: NextResponse.json({ error: 'Access denied for this user' }, { status: 403 }) };
+  const access = await evaluateUserAccess(email);
+  if (!access.ok) {
+    return { error: NextResponse.json({ error: access.error }, { status: access.status }) };
   }
 
   const workspaceKey = orgId ?? `user_${userId}`;
   let workspaceOrgId = workspaceKey;
   try {
-    workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, email);
+    workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, access.email);
   } catch {
     return { error: NextResponse.json({ error: 'Workspace bootstrap failed' }, { status: 500 }) };
   }

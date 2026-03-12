@@ -1,11 +1,28 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import { Providers } from '@/components/layout/providers';
 
 export const metadata: Metadata = {
-  title: 'PICC Dispensary CRM',
-  description: 'Account-centric CRM for dispensary sales, ops, and finance teams.',
+  applicationName: 'piccnewyork.org',
+  title: 'piccnewyork.org',
+  description: 'piccnewyork.org territory, accounts, route, and calendar workflows for PICC field teams.',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'piccnewyork.org',
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#c93412',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   const content = (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body className="min-h-[100dvh]">
         <Providers>{children}</Providers>
       </body>
     </html>

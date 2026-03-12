@@ -3,7 +3,8 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarDays, MapPinned, Route, Settings, UserRound } from 'lucide-react';
+import { useClerk } from '@clerk/nextjs';
+import { CalendarDays, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
@@ -31,6 +32,7 @@ function isActive(pathname: string, href: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const routePlan = useRoutePlan();
+  const { signOut } = useClerk();
   const [commandMounted, setCommandMounted] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -48,14 +50,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#cfd0d4]">
+    <div className="min-h-[100dvh] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_34%),linear-gradient(180deg,#d7d8dc_0%,#c9cacf_100%)] px-0 md:px-3 lg:px-5">
       {commandMounted ? <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} /> : null}
-      <div className="mx-auto min-h-screen max-w-[480px] bg-[#e6e6e9] shadow-[0_0_0_1px_rgba(0,0,0,0.12)]">
+      <div className="mx-auto min-h-[100dvh] max-w-[var(--app-shell-max)] bg-[#e6e6e9] shadow-[0_0_0_1px_rgba(0,0,0,0.12)] md:min-h-[calc(100dvh-24px)] md:overflow-hidden md:rounded-[28px] md:shadow-[0_20px_60px_rgba(31,35,43,0.18)]">
+        <header className="flex items-center justify-between border-b border-[#c8c9ce] bg-[#f0f1f4] px-3 py-1.5 text-[#1f232b]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em]">piccnewyork.org</p>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#2f3640]"
+            onClick={() => {
+              void signOut({ redirectUrl: '/sign-in' });
+            }}
+            aria-label="Sign out"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign Out
+          </button>
+        </header>
         <main className="pb-[84px]">{children}</main>
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-[4000] bg-[#1f232b] text-white" aria-label="Primary navigation">
-        <div className="mx-auto grid h-[84px] max-w-[480px] grid-cols-5 border-t border-[#2f3540] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5">
+      <nav className="fixed bottom-0 left-0 right-0 z-[4000] text-white" aria-label="Primary navigation">
+        <div className="mx-auto grid h-[84px] max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#2f3540] bg-[#1f232b] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5 md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]">
           {tabs.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;

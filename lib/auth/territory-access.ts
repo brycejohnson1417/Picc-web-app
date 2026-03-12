@@ -2,6 +2,8 @@ import 'server-only';
 
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { evaluateUserAccess, getWorkspaceAllowlist } from '@/lib/auth/access-policy';
+import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { firstAllowlistEntryAsCsv, isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
 import { AUTH_BYPASS_MODE } from '@/lib/config/runtime';
 
@@ -10,6 +12,9 @@ interface AccessResult {
   status: number;
   error?: string;
   email?: string;
+  userId?: string;
+  orgId?: string;
+  displayName?: string;
 }
 
 function parseCsv(value: string | undefined) {
@@ -17,7 +22,7 @@ function parseCsv(value: string | undefined) {
 }
 
 function getAllowlist() {
-  return parseCsv(process.env.TERRITORY_ALLOWED_EMAILS);
+  return getWorkspaceAllowlist();
 }
 
 function getAdminAllowlistCsv(allowlist: ReturnType<typeof parseEmailAllowlist>) {
@@ -45,39 +50,38 @@ export async function checkTerritoryAccess(opts?: { requireAdmin?: boolean }): P
     return { ok: true, status: 200, email: fallbackEmail.toLowerCase() };
   }
 
-  const { userId } = await auth();
+  const { userId, orgId } = await auth();
   if (!userId) {
     return { ok: false, status: 401, error: 'Unauthenticated' };
   }
 
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress;
-  if (!email) {
-    return { ok: false, status: 403, error: 'User email not found' };
-  }
-
-  const allowlist = getAllowlist();
-  if (allowlist.entries.length === 0) {
-    return {
-      ok: false,
-      status: 503,
-      error: 'TERRITORY_ALLOWED_EMAILS is not configured',
-    };
-  }
-
-  const normalizedEmail = email.toLowerCase();
-  if (!isEmailAllowed(normalizedEmail, allowlist)) {
-    return { ok: false, status: 403, error: 'Access denied for this user' };
+  const access = await evaluateUserAccess(email);
+  if (!access.ok) {
+    return { ok: false, status: access.status, error: access.error };
   }
 
   if (opts?.requireAdmin) {
+    const normalizedEmail = access.email!;
+    const allowlist = getAllowlist();
     const adminAllowlist = parseEmailAllowlist(getAdminAllowlistCsv(allowlist));
     if (!isEmailAllowed(normalizedEmail, adminAllowlist)) {
       return { ok: false, status: 403, error: 'Admin access required' };
     }
   }
 
-  return { ok: true, status: 200, email: normalizedEmail };
+  const workspaceKey = orgId ?? `user_${userId}`;
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, access.email);
+
+  return {
+    ok: true,
+    status: 200,
+    email: access.email,
+    userId,
+    orgId: workspaceOrgId,
+    displayName: user?.fullName ?? user?.firstName ?? access.email,
+  };
 }
 
 export async function requireTerritoryApiAccess(opts?: { requireAdmin?: boolean }) {
@@ -97,5 +101,8 @@ export async function requireTerritoryApiAccess(opts?: { requireAdmin?: boolean 
 
   return {
     email: result.email!,
+    userId: result.userId ?? null,
+    orgId: result.orgId ?? null,
+    displayName: result.displayName ?? result.email!,
   };
 }

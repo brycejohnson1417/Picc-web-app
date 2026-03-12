@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { AlertTriangle, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -51,6 +51,9 @@ export function AccountsMobile() {
       return (await response.json()) as TerritoryStoresResponse;
     },
     staleTime: 30000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 15000,
+    retry: 1,
     placeholderData: (previousData) => previousData,
   });
 
@@ -64,7 +67,12 @@ export function AccountsMobile() {
         return Number.isFinite(editedAt) && Date.now() - editedAt < 1000 * 60 * 60 * 24 * 7;
       });
     }
-    return source.filter((store) => (store.daysOverdue ?? 0) > 0 || /lead|proposal|in progress/i.test(store.status));
+    return source.filter((store) => {
+      const dueDate = store.followUpDate ? Date.parse(store.followUpDate) : Number.NaN;
+      const dueNow = Number.isFinite(dueDate) ? dueDate <= Date.now() : true;
+      const followUpFlag = typeof store.followUpNeeded === 'boolean' ? store.followUpNeeded : /lead|proposal|in progress/i.test(store.status);
+      return Boolean(followUpFlag && dueNow);
+    });
   }, [allStores, scope]);
 
   const allStoreById = useMemo(() => new Map(allStores.map((store) => [store.id, store])), [allStores]);
@@ -97,8 +105,44 @@ export function AccountsMobile() {
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [stores]);
 
+  if (storesQuery.isLoading && !storesQuery.data) {
+    return (
+      <div className="flex min-h-[calc(100dvh-92px)] items-center justify-center bg-[#e6e6e9]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#5f636d]" />
+      </div>
+    );
+  }
+
+  if (storesQuery.isError && !storesQuery.data) {
+    return (
+      <div className="min-h-[calc(100dvh-92px)] bg-[#e6e6e9] px-5 py-8">
+        <div className="rounded-xl border border-[#e0b4ab] bg-[#fbe8e4] p-4 text-[#8f2410]">
+          <div className="mb-2 flex items-center gap-2 text-[18px] font-semibold">
+            <AlertTriangle className="h-5 w-5" />
+            Accounts failed to load
+          </div>
+          <p className="text-[14px]">
+            {storesQuery.error instanceof Error
+              ? storesQuery.error.message
+              : 'Unable to fetch live account data.'}
+          </p>
+          <button
+            type="button"
+            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[#ce6f5c] bg-white px-3 py-2 text-[14px] font-medium text-[#8f2410]"
+            onClick={() => {
+              void storesQuery.refetch();
+            }}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
+    <div className="min-h-[calc(100dvh-92px)] bg-[#e6e6e9]">
       <MobileHeader
         title="Accounts"
         right={(
@@ -123,9 +167,21 @@ export function AccountsMobile() {
         />
       </MobileHeader>
 
-      <div className="px-4 pb-28 pt-3">
+      <div className="px-4 pb-28 pt-3 md:px-5 lg:px-6">
         <MobileSearch value={search} onChange={setSearch} placeholder="Search Accounts" />
         <div className="mt-2 border-t border-[#c6c7cb]" />
+
+        {storesQuery.isError ? (
+          <div className="mt-3 rounded-lg border border-[#e6b3a7] bg-[#fdebe7] px-3 py-2 text-[13px] text-[#8f2410]">
+            Live sync warning: {storesQuery.error instanceof Error ? storesQuery.error.message : 'Failed to refresh accounts'}
+          </div>
+        ) : null}
+
+        {grouped.length === 0 ? (
+          <div className="px-1 py-5 text-[17px] text-[#6a6d75]">
+            {debouncedSearch ? 'No accounts match your search.' : 'No accounts available yet.'}
+          </div>
+        ) : null}
 
         {grouped.map(([letter, list]) => (
           <section

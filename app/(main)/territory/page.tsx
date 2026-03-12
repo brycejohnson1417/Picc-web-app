@@ -1,6 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
 import { TerritoryMobile } from '@/components/mobile/territory-mobile';
-import { TerritoryClient } from '@/components/territory/territory-client';
 import { checkTerritoryAccess } from '@/lib/auth/territory-access';
 
 export const dynamic = 'force-dynamic';
@@ -20,14 +19,5 @@ export default async function TerritoryPage() {
     );
   }
 
-  return (
-    <>
-      <div className="md:hidden">
-        <TerritoryMobile />
-      </div>
-      <div className="hidden md:block">
-        <TerritoryClient />
-      </div>
-    </>
-  );
+  return <TerritoryMobile />;
 }

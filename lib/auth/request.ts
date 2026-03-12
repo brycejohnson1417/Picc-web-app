@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
+import { evaluateUserAccess } from '@/lib/auth/access-policy';
 import { requireRole } from '@/lib/rbac/guards';
 import type { AppRole } from '@/lib/types/rbac';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
@@ -19,7 +20,12 @@ export async function withOrg() {
   const workspaceKey = orgId ?? `user_${userId}`;
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '';
-  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, email);
+  const access = await evaluateUserAccess(email);
+  if (!access.ok) {
+    throw NextResponse.json({ error: access.error }, { status: access.status });
+  }
+
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, access.email);
   return { userId, orgId: workspaceOrgId };
 }
 

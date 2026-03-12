@@ -1,7 +1,12 @@
 import { Role } from '@prisma/client';
+import { requireAuthorizedEmail } from '@/lib/auth/access-policy';
 import { prisma } from '@/lib/db/prisma';
 
-export async function ensureWorkspaceAndMembership(clerkOrgId: string, clerkUserId: string) {
+export async function ensureWorkspaceAndMembership(clerkOrgId: string, clerkUserId: string, email?: string) {
+  if (email) {
+    await requireAuthorizedEmail(email);
+  }
+
   const workspace = await prisma.organizationWorkspace.upsert({
     where: { clerkOrgId },
     update: {},

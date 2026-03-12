@@ -1,9 +1,9 @@
-# PICC Dispensary CRM (Next.js 15)
+# piccnewyork.org (Next.js 15)
 
 Account-centric CRM for cannabis dispensary sales, ops, finance, and brand ambassador workflows.
 
 Production URL:
-- `https://picc-push.vercel.app`
+- `https://piccnewyork.org`
 
 ## Stack
 - Next.js 15 App Router + TypeScript strict
@@ -180,6 +180,6 @@ npx prisma migrate deploy
 
 ## Notes
 - Current active app is under `app/` + `components/` + `lib/` + `prisma/`.
-- The canonical deployment is `picc-push.vercel.app`; do not point repo metadata or docs at older Vercel projects.
+- The canonical deployment is `piccnewyork.org`; do not point repo metadata or docs at older Vercel projects.
 - Google Maps is the active territory map provider for the live app.
 - On macOS, if `/Users/.../Downloads/...xlsx` returns `EPERM`, grant the terminal/Codex app Files access or move the workbook to a permitted directory and update `NABIS_MASTER_SHEET_PATH`.

@@ -74,7 +74,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>PICC Field</Text>
+        <Text style={styles.headerTitle}>piccnewyork.org</Text>
         <Text style={styles.headerMeta}>{offlineQueue.length} queued sync items</Text>
       </View>
 

@@ -26,10 +26,6 @@ export async function getAccountDetail(orgId: string, accountId: string) {
       opportunities: { include: { stage: true }, orderBy: { updatedAt: 'desc' } },
       tasks: { orderBy: { dueDate: 'asc' } },
       activityLogs: { orderBy: { createdAt: 'desc' }, take: 200 },
-      conversations: {
-        include: { messages: { orderBy: { sentAt: 'desc' }, take: 3 } },
-        orderBy: { updatedAt: 'desc' },
-      },
       vendorDayEvents: { orderBy: { eventDate: 'desc' }, take: 20 },
       referrals: { orderBy: { createdAt: 'desc' }, take: 20 },
       pennyBundles: { orderBy: { createdAt: 'desc' }, take: 20 },

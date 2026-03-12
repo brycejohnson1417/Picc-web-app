@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
+import { checkGoogleBudgetCap, estimateGoogleUsageCostUsd, recordGoogleUsage } from '@/lib/server/google-usage';
 import type { RouteMode, TerritoryOptimizedRouteResponse } from '@/lib/territory/types';
 
 export const dynamic = 'force-dynamic';
+
+const GOOGLE_ROUTES_BASE = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+const EARTH_RADIUS_METERS = 6_371_000;
 
 const stopSchema = z.object({
   id: z.string().min(1),
@@ -14,288 +18,351 @@ const stopSchema = z.object({
 
 const requestSchema = z.object({
   mode: z.enum(['car', 'bike', 'transit']),
+  optimize: z.boolean().default(true),
   stops: z.array(stopSchema).min(2).max(25),
 });
 
 type TerritoryStop = z.infer<typeof stopSchema>;
-type OsrmProfile = 'driving' | 'cycling';
 
-type OsrmGeometry = {
-  type?: string;
-  coordinates?: [number, number][];
+type UsageCounter = {
+  day: string;
+  computeRoutes: number;
+  optimizeRequests: number;
 };
 
-type OsrmLeg = {
-  distance?: number;
-  duration?: number;
+let usageCounter: UsageCounter = {
+  day: '',
+  computeRoutes: 0,
+  optimizeRequests: 0,
 };
 
-type OsrmRouteResponse = {
-  code?: string;
-  message?: string;
-  routes?: Array<{
-    distance?: number;
-    duration?: number;
-    legs?: OsrmLeg[];
-    geometry?: OsrmGeometry;
-  }>;
-};
-
-type OsrmTripResponse = {
-  code?: string;
-  message?: string;
-  trips?: Array<{
-    distance?: number;
-    duration?: number;
-    legs?: OsrmLeg[];
-    geometry?: OsrmGeometry;
-  }>;
-  waypoints?: Array<{
-    waypoint_index: number;
-  }>;
-};
-
-type OsrmTableResponse = {
-  code?: string;
-  message?: string;
-  durations?: Array<Array<number | null>>;
-  distances?: Array<Array<number | null>>;
-};
-
-function asLineGeometry(geometry: OsrmGeometry | undefined): TerritoryOptimizedRouteResponse['geometry'] {
-  if (geometry?.type !== 'LineString' || !Array.isArray(geometry.coordinates)) {
-    return null;
-  }
-
-  const coordinates = geometry.coordinates
-    .filter((point): point is [number, number] => Array.isArray(point) && point.length === 2 && Number.isFinite(point[0]) && Number.isFinite(point[1]))
-    .map((point) => [point[0], point[1]] as [number, number]);
-
-  if (coordinates.length < 2) {
-    return null;
-  }
-
-  return {
-    type: 'LineString',
-    coordinates,
-  };
+function currentDayKey() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function formatCoord(stop: { lng: number; lat: number }) {
-  return `${stop.lng},${stop.lat}`;
+function parseDailyCap(value: string | undefined, fallback: number) {
+  const parsed = value ? Number.parseInt(value, 10) : Number.NaN;
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return parsed;
 }
 
-function profileForMode(mode: RouteMode): OsrmProfile {
-  if (mode === 'bike') return 'cycling';
-  return 'driving';
-}
-
-async function fetchOsrmJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    cache: 'no-store',
-    signal: AbortSignal.timeout(12_000),
-  });
-  const payload = (await response.json()) as T & { code?: string; message?: string };
-
-  if (!response.ok || payload?.code !== 'Ok') {
-    throw new Error(`OSRM request failed: ${payload?.message ?? response.statusText}`);
-  }
-
-  return payload as T;
-}
-
-async function fetchTrip(profile: OsrmProfile, stops: TerritoryStop[]) {
-  const coordinates = stops.map(formatCoord).join(';');
-  const url = `https://router.project-osrm.org/trip/v1/${profile}/${coordinates}?source=first&destination=last&roundtrip=false&steps=true&overview=full&geometries=geojson`;
-  const payload = await fetchOsrmJson<OsrmTripResponse>(url);
-  const trip = payload.trips?.[0];
-  const waypoints = Array.isArray(payload.waypoints) ? payload.waypoints : [];
-
-  if (!trip || waypoints.length !== stops.length) {
-    throw new Error('OSRM optimization response malformed');
-  }
-
-  const orderedStops: TerritoryStop[] = waypoints
-    .map((waypoint, inputIndex) => ({ waypoint, inputIndex }))
-    .sort((a, b) => a.waypoint.waypoint_index - b.waypoint.waypoint_index)
-    .map((item) => stops[item.inputIndex]);
-
-  const legs = (trip.legs ?? []).map((leg, index) => ({
-    fromStopId: orderedStops[index]?.id ?? '',
-    toStopId: orderedStops[index + 1]?.id ?? '',
-    distanceMeters: Math.round(leg.distance ?? 0),
-    durationSeconds: Math.round(leg.duration ?? 0),
-  }));
-
-  return {
-    orderedStops,
-    totalDistanceMeters: Math.round(trip.distance ?? 0),
-    totalDurationSeconds: Math.round(trip.duration ?? 0),
-    legs,
-    geometry: asLineGeometry(trip.geometry),
-  };
-}
-
-async function fetchRoute(profile: OsrmProfile, stops: TerritoryStop[]) {
-  const coordinates = stops.map(formatCoord).join(';');
-  const url = `https://router.project-osrm.org/route/v1/${profile}/${coordinates}?steps=true&overview=full&geometries=geojson`;
-  const payload = await fetchOsrmJson<OsrmRouteResponse>(url);
-  const route = payload.routes?.[0];
-
-  if (!route) {
-    throw new Error('OSRM route payload missing');
-  }
-
-  return {
-    totalDistanceMeters: Math.round(route.distance ?? 0),
-    totalDurationSeconds: Math.round(route.duration ?? 0),
-    routeLegs: route.legs ?? [],
-    geometry: asLineGeometry(route.geometry),
-  };
-}
-
-async function fetchTable(profile: OsrmProfile, stops: TerritoryStop[]) {
-  const coordinates = stops.map(formatCoord).join(';');
-  const url = `https://router.project-osrm.org/table/v1/${profile}/${coordinates}?annotations=duration,distance`;
-  const payload = await fetchOsrmJson<OsrmTableResponse>(url);
-
-  if (!Array.isArray(payload.durations) || !Array.isArray(payload.distances)) {
-    throw new Error('OSRM matrix response malformed');
-  }
-
-  return {
-    durations: payload.durations,
-    distances: payload.distances,
-  };
-}
-
-function estimateTransitDurationSeconds(drivingDuration: number | null, distanceMeters: number | null) {
-  if (typeof drivingDuration === 'number' && Number.isFinite(drivingDuration) && drivingDuration > 0) {
-    return Math.round(drivingDuration * 1.75 + 7 * 60);
-  }
-
-  if (typeof distanceMeters === 'number' && Number.isFinite(distanceMeters) && distanceMeters > 0) {
-    // Rough 19 km/h door-to-door with transfer overhead.
-    return Math.round((distanceMeters / 1000 / 19) * 3600 + 7 * 60);
-  }
-
-  return 12 * 60;
-}
-
-function totalCost(order: number[], matrix: number[][]) {
-  let sum = 0;
-  for (let i = 0; i < order.length - 1; i += 1) {
-    sum += matrix[order[i]][order[i + 1]];
-  }
-  return sum;
-}
-
-function optimizeOrderWithFixedEndpoints(matrix: number[][]) {
-  const n = matrix.length;
-  if (n <= 2) return [0, 1];
-
-  const destination = n - 1;
-  const unvisited = new Set<number>();
-  for (let i = 1; i < destination; i += 1) {
-    unvisited.add(i);
-  }
-
-  const order: number[] = [0];
-  let current = 0;
-
-  while (unvisited.size > 0) {
-    let bestIndex = -1;
-    let bestScore = Number.POSITIVE_INFINITY;
-
-    for (const candidate of unvisited) {
-      const score = matrix[current][candidate] + matrix[candidate][destination] * 0.05;
-      if (score < bestScore) {
-        bestScore = score;
-        bestIndex = candidate;
-      }
-    }
-
-    if (bestIndex < 0) {
-      break;
-    }
-
-    order.push(bestIndex);
-    unvisited.delete(bestIndex);
-    current = bestIndex;
-  }
-
-  order.push(destination);
-
-  // 2-opt refinement keeping first and last fixed.
-  let improved = true;
-  while (improved) {
-    improved = false;
-    for (let i = 1; i < order.length - 2; i += 1) {
-      for (let j = i + 1; j < order.length - 1; j += 1) {
-        const candidate = [...order.slice(0, i), ...order.slice(i, j + 1).reverse(), ...order.slice(j + 1)];
-        if (totalCost(candidate, matrix) + 1 < totalCost(order, matrix)) {
-          order.splice(0, order.length, ...candidate);
-          improved = true;
-        }
-      }
-    }
-  }
-
-  return order;
-}
-
-async function optimizeForMode(mode: RouteMode, stops: TerritoryStop[]): Promise<TerritoryOptimizedRouteResponse> {
-  if (mode !== 'transit') {
-    const profile = profileForMode(mode);
-    const trip = await fetchTrip(profile, stops);
-
-    return {
-      mode,
-      modeLabel: mode === 'bike' ? 'Bike' : 'Driving',
-      estimationModel: 'osrm',
-      orderedStopIds: trip.orderedStops.map((stop) => stop.id),
-      totalDistanceMeters: trip.totalDistanceMeters,
-      totalDurationSeconds: trip.totalDurationSeconds,
-      legs: trip.legs,
-      geometry: trip.geometry,
+function resetUsageCounterIfNeeded() {
+  const day = currentDayKey();
+  if (usageCounter.day !== day) {
+    usageCounter = {
+      day,
+      computeRoutes: 0,
+      optimizeRequests: 0,
     };
   }
+}
 
-  // Transit optimization uses a transit-time heuristic over an OSRM road matrix.
-  const drivingMatrix = await fetchTable('driving', stops);
-  const transitMatrix = drivingMatrix.durations.map((row, fromIndex) =>
-    row.map((drivingDuration, toIndex) =>
-      estimateTransitDurationSeconds(drivingDuration, drivingMatrix.distances[fromIndex]?.[toIndex] ?? null),
-    ),
-  );
+function hasCapacity(input: { optimize: boolean }) {
+  resetUsageCounterIfNeeded();
 
-  const orderIndexes = optimizeOrderWithFixedEndpoints(transitMatrix);
-  const orderedStops = orderIndexes.map((index) => stops[index]);
+  const computeCap = parseDailyCap(process.env.TERRITORY_GOOGLE_ROUTES_DAILY_CAP, 2500);
+  const optimizeCap = parseDailyCap(process.env.TERRITORY_GOOGLE_ROUTE_OPTIMIZATION_DAILY_CAP, 750);
 
-  const route = await fetchRoute('driving', orderedStops);
+  if (usageCounter.computeRoutes >= computeCap) {
+    return { ok: false, warning: `Google Routes daily cap reached (${computeCap}).` };
+  }
 
-  const legs = orderedStops.slice(0, -1).map((stop, index) => {
-    const fromMatrixIndex = orderIndexes[index];
-    const toMatrixIndex = orderIndexes[index + 1];
+  if (input.optimize && usageCounter.optimizeRequests >= optimizeCap) {
+    return { ok: false, warning: `Google route-optimization cap reached (${optimizeCap}).` };
+  }
+
+  return { ok: true };
+}
+
+function incrementUsage(input: { optimize: boolean }) {
+  resetUsageCounterIfNeeded();
+  usageCounter.computeRoutes += 1;
+  if (input.optimize) {
+    usageCounter.optimizeRequests += 1;
+  }
+}
+
+function routesApiKey() {
+  return process.env.GOOGLE_ROUTES_API_KEY?.trim() || process.env.GOOGLE_MAPS_SERVER_API_KEY?.trim() || '';
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function distanceMeters(from: TerritoryStop, to: TerritoryStop) {
+  const dLat = toRadians(to.lat - from.lat);
+  const dLng = toRadians(to.lng - from.lng);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(from.lat)) * Math.cos(toRadians(to.lat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(EARTH_RADIUS_METERS * c);
+}
+
+function parseDurationSeconds(value: string | undefined) {
+  if (!value) return 0;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized.endsWith('s')) return 0;
+  const parsed = Number.parseFloat(normalized.slice(0, -1));
+  return Number.isFinite(parsed) ? Math.round(parsed) : 0;
+}
+
+function decodePolyline(encoded: string): [number, number][] {
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const coordinates: [number, number][] = [];
+
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let byte: number;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+    const deltaLat = (result & 1) ? ~(result >> 1) : result >> 1;
+    lat += deltaLat;
+
+    shift = 0;
+    result = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+    const deltaLng = (result & 1) ? ~(result >> 1) : result >> 1;
+    lng += deltaLng;
+
+    coordinates.push([lng / 1e5, lat / 1e5]);
+  }
+
+  return coordinates;
+}
+
+function buildFallbackRoute(mode: RouteMode, stops: TerritoryStop[], warning: string): TerritoryOptimizedRouteResponse {
+  const metersPerSecond = mode === 'bike' ? 4.5 : mode === 'transit' ? 5.4 : 13.4;
+  const legs = stops.slice(0, -1).map((stop, index) => {
+    const next = stops[index + 1];
+    const distance = distanceMeters(stop, next);
+    const durationSeconds =
+      mode === 'transit'
+        ? Math.round(distance / metersPerSecond + 7 * 60)
+        : Math.round(distance / metersPerSecond);
 
     return {
       fromStopId: stop.id,
-      toStopId: orderedStops[index + 1]?.id ?? '',
-      distanceMeters: Math.round(drivingMatrix.distances[fromMatrixIndex]?.[toMatrixIndex] ?? route.routeLegs[index]?.distance ?? 0),
-      durationSeconds: Math.round(transitMatrix[fromMatrixIndex]?.[toMatrixIndex] ?? 0),
+      toStopId: next.id,
+      distanceMeters: distance,
+      durationSeconds,
     };
   });
 
   return {
     mode,
-    modeLabel: 'Public Transit',
-    estimationModel: 'transit-heuristic',
-    orderedStopIds: orderedStops.map((stop) => stop.id),
+    modeLabel: mode === 'bike' ? 'Bike' : mode === 'transit' ? 'Public Transit' : 'Driving',
+    estimationModel: mode === 'transit' ? 'transit-heuristic' : 'fallback-order',
+    orderedStopIds: stops.map((stop) => stop.id),
     totalDistanceMeters: legs.reduce((sum, leg) => sum + leg.distanceMeters, 0),
     totalDurationSeconds: legs.reduce((sum, leg) => sum + leg.durationSeconds, 0),
     legs,
-    geometry: route.geometry,
+    warning,
+    capExceeded: mode !== 'transit',
+    geometry: {
+      type: 'LineString',
+      coordinates: stops.map((stop) => [stop.lng, stop.lat] as [number, number]),
+    },
   };
+}
+
+async function computeGoogleRoute(input: {
+  mode: Extract<RouteMode, 'car' | 'bike'>;
+  stops: TerritoryStop[];
+  optimize: boolean;
+}): Promise<TerritoryOptimizedRouteResponse> {
+  const key = routesApiKey();
+  if (!key) {
+    throw new Error('GOOGLE_ROUTES_API_KEY or GOOGLE_MAPS_SERVER_API_KEY is required');
+  }
+
+  const origin = input.stops[0];
+  const destination = input.stops[input.stops.length - 1];
+  const intermediates = input.stops.slice(1, -1);
+  const billedOptimizeSku = input.optimize && intermediates.length > 1;
+  const travelMode = input.mode === 'bike' ? 'BICYCLE' : 'DRIVE';
+  const pendingCostUsd =
+    estimateGoogleUsageCostUsd('routes_compute', 1) +
+    (billedOptimizeSku ? estimateGoogleUsageCostUsd('routes_optimize', 1) : 0);
+  const budgetCheck = await checkGoogleBudgetCap(pendingCostUsd);
+  if (!budgetCheck.allowed) {
+    throw new Error(`Google monthly budget cap reached ($${budgetCheck.summary.budgetUsd.toFixed(2)}).`);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(GOOGLE_ROUTES_BASE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask':
+          'routes.duration,routes.distanceMeters,routes.legs.duration,routes.legs.distanceMeters,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex',
+      },
+      body: JSON.stringify({
+        origin: {
+          location: {
+            latLng: {
+              latitude: origin.lat,
+              longitude: origin.lng,
+            },
+          },
+        },
+        destination: {
+          location: {
+            latLng: {
+              latitude: destination.lat,
+              longitude: destination.lng,
+            },
+          },
+        },
+        intermediates: intermediates.map((stop) => ({
+          location: {
+            latLng: {
+              latitude: stop.lat,
+              longitude: stop.lng,
+            },
+          },
+        })),
+        travelMode,
+        routingPreference: input.mode === 'car' ? 'TRAFFIC_AWARE_OPTIMAL' : 'TRAFFIC_UNAWARE',
+        optimizeWaypointOrder: billedOptimizeSku,
+        polylineQuality: 'HIGH_QUALITY',
+        languageCode: 'en-US',
+        units: 'IMPERIAL',
+      }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12_000),
+    });
+  } finally {
+    const usageWrites: Promise<void>[] = [recordGoogleUsage('routes_compute', 1)];
+    if (billedOptimizeSku) {
+      usageWrites.push(recordGoogleUsage('routes_optimize', 1));
+    }
+    void Promise.allSettled(usageWrites);
+  }
+
+  const payload = (await response.json()) as {
+    routes?: Array<{
+      duration?: string;
+      distanceMeters?: number;
+      legs?: Array<{ duration?: string; distanceMeters?: number }>;
+      polyline?: { encodedPolyline?: string };
+      optimizedIntermediateWaypointIndex?: number[];
+    }>;
+    error?: { message?: string };
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? 'Google Routes request failed');
+  }
+
+  const route = payload.routes?.[0];
+  if (!route) {
+    throw new Error('Google Routes response missing route');
+  }
+
+  let orderedStops = input.stops;
+  if (Array.isArray(route.optimizedIntermediateWaypointIndex) && route.optimizedIntermediateWaypointIndex.length === intermediates.length) {
+    const reorderedIntermediates = route.optimizedIntermediateWaypointIndex.map((index) => intermediates[index]).filter(Boolean);
+    orderedStops = [origin, ...reorderedIntermediates, destination];
+  }
+
+  const legs = (route.legs ?? []).map((leg, index) => ({
+    fromStopId: orderedStops[index]?.id ?? '',
+    toStopId: orderedStops[index + 1]?.id ?? '',
+    distanceMeters: Math.round(leg.distanceMeters ?? 0),
+    durationSeconds: parseDurationSeconds(leg.duration),
+  }));
+
+  const coordinates = route.polyline?.encodedPolyline ? decodePolyline(route.polyline.encodedPolyline) : [];
+
+  return {
+    mode: input.mode,
+    modeLabel: input.mode === 'bike' ? 'Bike' : 'Driving',
+    estimationModel: 'google-routes',
+    orderedStopIds: orderedStops.map((stop) => stop.id),
+    totalDistanceMeters: Math.round(route.distanceMeters ?? legs.reduce((sum, leg) => sum + leg.distanceMeters, 0)),
+    totalDurationSeconds: parseDurationSeconds(route.duration) || legs.reduce((sum, leg) => sum + leg.durationSeconds, 0),
+    legs,
+    capExceeded: false,
+    geometry:
+      coordinates.length > 1
+        ? {
+            type: 'LineString',
+            coordinates,
+          }
+        : {
+            type: 'LineString',
+            coordinates: orderedStops.map((stop) => [stop.lng, stop.lat] as [number, number]),
+          },
+  };
+}
+
+function optimizeTransitHeuristic(stops: TerritoryStop[]) {
+  const legs = stops.slice(0, -1).map((stop, index) => {
+    const next = stops[index + 1];
+    const distance = distanceMeters(stop, next);
+    const durationSeconds = Math.round((distance / 1000 / 19) * 3600 + 7 * 60);
+    return {
+      fromStopId: stop.id,
+      toStopId: next.id,
+      distanceMeters: distance,
+      durationSeconds,
+    };
+  });
+
+  return {
+    mode: 'transit' as const,
+    modeLabel: 'Public Transit',
+    estimationModel: 'transit-heuristic' as const,
+    orderedStopIds: stops.map((stop) => stop.id),
+    totalDistanceMeters: legs.reduce((sum, leg) => sum + leg.distanceMeters, 0),
+    totalDurationSeconds: legs.reduce((sum, leg) => sum + leg.durationSeconds, 0),
+    legs,
+    geometry: {
+      type: 'LineString' as const,
+      coordinates: stops.map((stop) => [stop.lng, stop.lat] as [number, number]),
+    },
+  };
+}
+
+async function optimizeForMode(mode: RouteMode, stops: TerritoryStop[], optimize: boolean): Promise<TerritoryOptimizedRouteResponse> {
+  if (mode === 'transit') {
+    return optimizeTransitHeuristic(stops);
+  }
+
+  const optimizeCounted = optimize && stops.length > 3;
+  const capacity = hasCapacity({ optimize: optimizeCounted });
+  if (!capacity.ok) {
+    return buildFallbackRoute(mode, stops, `${capacity.warning} Using fallback stop order.`);
+  }
+
+  try {
+    const route = await computeGoogleRoute({
+      mode: mode === 'bike' ? 'bike' : 'car',
+      stops,
+      optimize,
+    });
+    incrementUsage({ optimize: optimizeCounted });
+    return route;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Google Routes failed';
+    return buildFallbackRoute(mode, stops, `${message} Using fallback stop order.`);
+  }
 }
 
 export async function POST(request: Request) {
@@ -306,9 +373,8 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { mode, stops } = requestSchema.parse(body);
-
-    const payload = await optimizeForMode(mode, stops);
+    const { mode, stops, optimize } = requestSchema.parse(body);
+    const payload = await optimizeForMode(mode, stops, optimize);
     return NextResponse.json(payload);
   } catch (error) {
     if (error instanceof z.ZodError) {

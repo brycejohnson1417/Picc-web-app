@@ -36,6 +36,7 @@ function formatDuration(seconds: number) {
 
 const MODE_OPTIONS: Array<{ value: RouteMode; label: string }> = [
   { value: 'car', label: 'Drive' },
+  { value: 'bike', label: 'Bike' },
   { value: 'transit', label: 'Transit' },
 ];
 
@@ -122,7 +123,9 @@ export function RouteMobile() {
       const data = payload as TerritoryOptimizedRouteResponse;
       routePlan.setOptimizedRoute(data);
 
-      if (data.estimationModel === 'transit-heuristic') {
+      if (data.warning) {
+        toast.warning(data.warning);
+      } else if (data.estimationModel === 'transit-heuristic') {
         toast.success('Transit route optimized (ETA uses transit heuristic).');
       } else {
         toast.success('Route optimized using road directions.');
@@ -168,7 +171,7 @@ export function RouteMobile() {
 
     const params = new URLSearchParams({
       action: 'TEMPLATE',
-      text: `PICC ${optMode === 'transit' ? 'Transit' : 'Driving'} Route - ${new Date().toLocaleDateString()}`,
+      text: `PICC ${optMode === 'transit' ? 'Transit' : optMode === 'bike' ? 'Bike' : 'Driving'} Route - ${new Date().toLocaleDateString()}`,
       details,
     });
 
@@ -176,7 +179,7 @@ export function RouteMobile() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
+    <div className="min-h-[calc(100dvh-92px)] bg-[#e6e6e9]">
       <MobileHeader
         title="Route"
         right={
@@ -300,7 +303,7 @@ export function RouteMobile() {
 
       {tab === 'current' ? (
         <div className="fixed bottom-[92px] left-0 right-0 z-[2600]">
-          <div className="mx-auto grid max-w-[480px] grid-cols-5 border-t border-[#c4c5cc] bg-[#f3f3f6] py-2 text-[#5a95e7]">
+          <div className="mx-auto grid max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#c4c5cc] bg-[#f3f3f6] py-2 text-[#5a95e7]">
             <button onClick={launchGo} className="mx-2 rounded-3xl bg-[#3ac128] px-2 py-2 text-[20px] font-bold text-white">
               GO
             </button>
@@ -441,7 +444,7 @@ function AddLocationModal({
 
   return (
     <div className="fixed inset-0 z-[5200] bg-black/35">
-      <div className="mx-auto h-full max-w-[480px] bg-[#e6e6e9]">
+      <div className="mx-auto h-full max-w-[var(--app-shell-max)] bg-[#e6e6e9]">
         <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
           <div className="mb-2 flex items-center justify-between text-sm opacity-90">
             <span className="font-semibold">12:18</span>

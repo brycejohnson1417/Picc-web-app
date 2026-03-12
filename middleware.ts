@@ -17,6 +17,7 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 const isApiRoute = createRouteMatcher(['/api/(.*)']);
 const isCronSyncRoute = createRouteMatcher(['/api/cron/notion-sync']);
+const isPublicWebhookRoute = createRouteMatcher(['/api/webhooks/notion']);
 const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 const secretKey = process.env.CLERK_SECRET_KEY ?? '';
 const isProduction = process.env.NODE_ENV === 'production';
@@ -31,6 +32,10 @@ const protectedMiddleware =
         try {
           return clerkMiddleware(async (auth, req) => {
             if (isCronSyncRoute(req)) {
+              return;
+            }
+
+            if (isPublicWebhookRoute(req)) {
               return;
             }
 
@@ -59,6 +64,10 @@ function fallbackBypassMiddleware(req: NextRequest) {
   }
 
   if (isCronSyncRoute(req)) {
+    return NextResponse.next();
+  }
+
+  if (isPublicWebhookRoute(req)) {
     return NextResponse.next();
   }
 

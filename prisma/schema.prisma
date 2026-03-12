@@ -130,8 +130,10 @@ model OrganizationWorkspace {
   territories     Territory[]
   salesRoutes     SalesRoute[]
   checkIns        CheckIn[]
+  territoryCheckInMirrors TerritoryCheckInMirror[]
   territoryStores TerritoryStoreReadModel[]
   territoryFilterPresets TerritoryFilterPreset[]
+  appSessionAudits AppSessionAudit[]
 }
 
 model Membership {
@@ -154,6 +156,7 @@ model Account {
   orgId                 String
   org                   OrganizationWorkspace            @relation(fields: [orgId], references: [id], onDelete: Cascade)
   name                  String
+  notionPageId          String?
   licenseNumber         String
   address1              String
   address2              String?
@@ -186,8 +189,10 @@ model Account {
   editSuggestions       EditSuggestion[]
 
   @@unique([orgId, licenseNumber])
+  @@unique([orgId, notionPageId])
   @@index([orgId, name])
   @@index([orgId, status])
+  @@index([orgId, notionPageId])
 }
 
 model Contact {
@@ -864,6 +869,47 @@ model CheckIn {
   updatedAt     DateTime              @updatedAt
 
   @@index([orgId, storeId, happenedAt])
+  @@index([storeId, happenedAt])
+}
+
+model TerritoryCheckInMirror {
+  id                String                @id @default(cuid())
+  orgId             String
+  org               OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  storeId           String
+  notionPageId      String
+  notionCommentId   String                @unique
+  notionDiscussionId String?
+  noteText          String?
+  mode              String                @default("unknown")
+  happenedAt        DateTime
+  lastEditedTime    DateTime?
+  createdByLabel    String?
+  createdByEmail    String?
+  source            String                @default("notion-comment")
+  lastSyncedAt      DateTime              @default(now())
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([orgId, storeId, happenedAt])
+  @@index([notionPageId, happenedAt])
+}
+
+model AppSessionAudit {
+  id           String                @id @default(cuid())
+  orgId        String
+  org          OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clerkUserId  String
+  sessionId    String                @unique
+  email        String?
+  displayName  String?
+  firstSeenAt  DateTime              @default(now())
+  lastSeenAt   DateTime              @default(now())
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([orgId, clerkUserId, lastSeenAt])
+  @@index([orgId, email, lastSeenAt])
 }
 
 model TerritoryStoreReadModel {
@@ -883,6 +929,8 @@ model TerritoryStoreReadModel {
   locationLabel         String?
   locationAddress       String?
   locationSource        String
+  locationPrecision     String                @default("address")
+  isApproximate         Boolean               @default(false)
   lastEditedTime        DateTime
   licenseNumber         String?
   city                  String?

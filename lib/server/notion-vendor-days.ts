@@ -79,6 +79,11 @@ function requiredEnv(name: 'NOTION_API_KEY') {
   return value;
 }
 
+function optionalEnv(name: string) {
+  const value = process.env[name]?.trim();
+  return value && value.length > 0 ? value : null;
+}
+
 function notionHeaders() {
   return {
     Authorization: `Bearer ${requiredEnv('NOTION_API_KEY')}`,
@@ -229,6 +234,11 @@ function propertyToString(property: NotionPropertyValue | undefined): string | n
 }
 
 export async function loadNotionVendorDayEvents(): Promise<NotionVendorDayEvent[]> {
+  const masterListEvents = await loadMasterListVendorDayEvents().catch(() => []);
+  if (masterListEvents.length > 0) {
+    return masterListEvents;
+  }
+
   const parent = await resolveVendorDayParent();
   if (!parent) {
     return [];
@@ -272,6 +282,69 @@ export async function loadNotionVendorDayEvents(): Promise<NotionVendorDayEvent[
 
     const eventDate = dateValue || row.created_time || row.last_edited_time;
     if (!eventDate) continue;
+
+    events.push({
+      id: row.id,
+      eventDate,
+      repName,
+      ambassadorName,
+      notes,
+      accountName,
+    });
+  }
+
+  events.sort((a, b) => a.eventDate.localeCompare(b.eventDate));
+  return events;
+}
+
+async function loadMasterListVendorDayEvents(): Promise<NotionVendorDayEvent[]> {
+  const databaseId = optionalEnv('NOTION_MASTER_LIST_DATABASE_ID');
+  if (!databaseId) {
+    return [];
+  }
+
+  const rows: NotionQueryResult[] = [];
+  let cursor: string | undefined;
+
+  while (true) {
+    const payload = await notionRequest<NotionQueryResponse>(`/databases/${normalizePageId(databaseId)}/query`, {
+      method: 'POST',
+      body: JSON.stringify({
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {}),
+      }),
+    });
+
+    rows.push(...(payload.results ?? []));
+    if (!payload.has_more || !payload.next_cursor) {
+      break;
+    }
+    cursor = payload.next_cursor;
+  }
+
+  const events: NotionVendorDayEvent[] = [];
+
+  for (const row of rows) {
+    const properties = row.properties ?? {};
+    const eventDate = propertyToString(
+      propertyByCandidates(properties, ['Vendor Day', 'Vendor Day Date', 'Vendor Day Scheduled', 'Next Vendor Day', 'VD Date']),
+    );
+    if (!eventDate) {
+      continue;
+    }
+
+    const accountName =
+      propertyToString(propertyByCandidates(properties, ['Dispensary Name', 'Account', 'Store', 'Store Name'])) ||
+      propertyToString(propertyByCandidates(properties, ['Name', 'Title'])) ||
+      'Vendor Day Event';
+
+    const repName = propertyToString(
+      propertyByCandidates(properties, ['Vendor Day Rep', 'Vendor Day Sales Rep', 'Sales Rep', 'Rep', 'PICC Rep']),
+    );
+    const ambassadorName = propertyToString(
+      propertyByCandidates(properties, ['Vendor Day Ambassador', 'Brand Ambassador', 'Ambassador', 'BA']),
+    );
+    const notes = propertyToString(propertyByCandidates(properties, ['Vendor Day Notes', 'Vendor Day Summary', 'Notes', 'Comments']));
 
     events.push({
       id: row.id,

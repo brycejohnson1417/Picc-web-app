@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui';
-import { MapCanvas } from '@/components/territory/map-canvas';
+import { MapRenderBoundary } from '@/components/mobile/map-render-boundary';
+import { GoogleTerritoryMap } from '@/components/territory/google-territory-map';
 import { RouteSheet } from '@/components/territory/route-sheet';
 import { TerritoryFilterBar } from '@/components/territory/filter-bar';
 import { applyOptimizedOrder, clearRouteStops, initialTerritoryRouteState, removeRouteStop, resetOptimizedOrder, toggleRouteStop } from '@/lib/territory/route-store';
@@ -22,6 +23,7 @@ export function TerritoryClient() {
   const [optimizing, setOptimizing] = useState(false);
   const [optimizedRoute, setOptimizedRoute] = useState<TerritoryOptimizedRouteResponse | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [routePlannerOpen, setRoutePlannerOpen] = useState(false);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -148,7 +150,11 @@ export function TerritoryClient() {
       const routePayload = payload as TerritoryOptimizedRouteResponse;
       setOptimizedRoute(routePayload);
       setRouteState((current) => applyOptimizedOrder(current, routePayload.orderedStopIds));
-      toast.success('Route optimized.');
+      if (routePayload.warning) {
+        toast.warning(routePayload.warning);
+      } else {
+        toast.success('Route optimized.');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Route optimization failed';
       toast.error(message);
@@ -207,8 +213,8 @@ export function TerritoryClient() {
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
-      <div className="relative h-[calc(100dvh-9rem)] min-h-[640px] w-full">
+    <div className="relative h-[calc(100dvh-64px)] w-full overflow-hidden bg-white dark:bg-slate-950">
+      <div className="relative h-full w-full">
         <div className="absolute left-2 right-2 top-2 z-[1000] md:left-4 md:right-4 md:top-4">
           <TerritoryFilterBar
             search={search}
@@ -255,14 +261,21 @@ export function TerritoryClient() {
           </Button>
         </div>
 
-        <MapCanvas
-          stores={stores}
-          selectedStopIds={routeState.selectedStopIds}
-          orderedStopIds={orderedStopIds}
-          routeCoordinates={routeCoordinates}
-          focusedStoreId={focusedStoreId}
-          onSelectStore={(storeId) => setFocusedStoreId(storeId)}
-        />
+        <MapRenderBoundary>
+          <GoogleTerritoryMap
+            stores={stores}
+            selectedStopIds={routeState.selectedStopIds}
+            orderedStopIds={orderedStopIds}
+            routeCoordinates={routeCoordinates}
+            focusedStoreId={focusedStoreId}
+            pinColorMode="status"
+            cameraMode="manual-focus"
+            fitPadding={32}
+            maxFitZoom={11}
+            defaultZoom={6}
+            onSelectStore={(storeId) => setFocusedStoreId(storeId)}
+          />
+        </MapRenderBoundary>
 
         {stores.length === 0 ? (
           <div className="absolute left-2 right-2 top-1/2 z-[1000] -translate-y-1/2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-center text-sm text-amber-900 md:left-1/2 md:right-auto md:w-[520px] md:-translate-x-1/2">
@@ -279,6 +292,9 @@ export function TerritoryClient() {
                 <p className="truncate text-sm font-semibold">{focusedStore.name}</p>
                 <p className="text-xs text-slate-500">{focusedStore.status}</p>
                 <p className="mt-1 truncate text-xs text-slate-500">{focusedStore.locationAddress ?? focusedStore.locationLabel ?? 'No address'}</p>
+                {focusedStore.isApproximate ? (
+                  <p className="mt-1 text-xs font-medium text-amber-700">Approximate pin ({focusedStore.locationPrecision})</p>
+                ) : null}
               </div>
               <Button
                 size="sm"
@@ -292,40 +308,54 @@ export function TerritoryClient() {
         ) : null}
 
         <div className="absolute bottom-0 left-0 right-0 z-[1000]">
-          <RouteSheet
-            selectedStops={selectedStops}
-            orderedStops={orderedStops}
-            mode={routeMode}
-            optimizing={optimizing}
-            totalDurationSeconds={totalDurationSeconds}
-            totalDistanceMeters={totalDistanceMeters}
-            onSetMode={(mode) => {
-              setRouteMode(mode);
-              resetRouteOptimization();
-            }}
-            onOptimize={handleOptimizeRoute}
-            onLaunchDirections={handleLaunchDirections}
-            onRemoveStop={(storeId) => {
-              setRouteState((current) => removeRouteStop(current, storeId));
-              resetRouteOptimization();
-            }}
-            onClearStops={() => {
-              setRouteState((current) => clearRouteStops(current));
-              resetRouteOptimization();
-            }}
-          />
+          {routePlannerOpen ? (
+            <>
+              <div className="mb-2 flex justify-center">
+                <Button size="sm" variant="secondary" onClick={() => setRoutePlannerOpen(false)}>
+                  Collapse Route Planner
+                </Button>
+              </div>
+              <RouteSheet
+                selectedStops={selectedStops}
+                orderedStops={orderedStops}
+                mode={routeMode}
+                optimizing={optimizing}
+                totalDurationSeconds={totalDurationSeconds}
+                totalDistanceMeters={totalDistanceMeters}
+                onSetMode={(mode) => {
+                  setRouteMode(mode);
+                  resetRouteOptimization();
+                }}
+                onOptimize={handleOptimizeRoute}
+                onLaunchDirections={handleLaunchDirections}
+                onRemoveStop={(storeId) => {
+                  setRouteState((current) => removeRouteStop(current, storeId));
+                  resetRouteOptimization();
+                }}
+                onClearStops={() => {
+                  setRouteState((current) => clearRouteStops(current));
+                  resetRouteOptimization();
+                }}
+              />
+            </>
+          ) : (
+            <div className="px-3 pb-3">
+              <Button className="w-full" onClick={() => setRoutePlannerOpen(true)}>
+                Open Route Planner ({selectedStops.length} stops)
+              </Button>
+            </div>
+          )}
         </div>
-      </div>
 
-      <div className="border-t border-slate-200 px-4 py-2 text-xs text-slate-500 dark:border-slate-700">
-        <p>
-          Source: live Notion cache ({storesQuery.data?.meta.recordsRead ?? 0} rows read, unresolved locations: {storesQuery.data?.meta.unresolvedLocationCount ?? 0}, synced:{' '}
-          {storesQuery.data?.meta.syncedAt ? new Date(storesQuery.data.meta.syncedAt).toLocaleString() : 'n/a'}, last edit:{' '}
-          {storesQuery.data?.meta.lastEditedMax ? new Date(storesQuery.data.meta.lastEditedMax).toLocaleString() : 'n/a'})
-        </p>
-        {storesQuery.data?.meta.syncing ? <p className="text-slate-600">Refreshing live Notion data in background.</p> : null}
-        {storesQuery.data?.meta.stale ? <p className="text-amber-600">Showing stale cache while Notion sync recovers.</p> : null}
-        {storesQuery.data?.meta.syncError ? <p className="text-amber-600">{storesQuery.data.meta.syncError}</p> : null}
+        <div className="absolute bottom-[68px] left-3 right-3 z-[1000] rounded-md bg-black/65 px-3 py-2 text-[11px] text-white md:right-auto md:max-w-[640px]">
+          <p>
+            Source: live Notion cache ({storesQuery.data?.meta.recordsRead ?? 0} rows, unavailable locations: {storesQuery.data?.meta.unresolvedLocationCount ?? 0}, synced:{' '}
+            {storesQuery.data?.meta.syncedAt ? new Date(storesQuery.data.meta.syncedAt).toLocaleString() : 'n/a'})
+          </p>
+          {storesQuery.data?.meta.syncing ? <p className="text-white/80">Refreshing live Notion data in background.</p> : null}
+          {storesQuery.data?.meta.stale ? <p className="text-amber-300">Showing stale cache while Notion sync recovers.</p> : null}
+          {storesQuery.data?.meta.syncError ? <p className="text-amber-300">{storesQuery.data.meta.syncError}</p> : null}
+        </div>
       </div>
     </div>
   );

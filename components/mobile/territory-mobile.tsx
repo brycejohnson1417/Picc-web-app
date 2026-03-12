@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Filter, ListFilter, MapPinned, MessageCircleMore, Navigation, Plus, RefreshCw, Search } from 'lucide-react';
+import { AlertTriangle, Filter, ListFilter, Loader2, MapPinned, MessageCircleMore, Navigation, Plus, RefreshCw, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -31,9 +31,9 @@ type SavedFiltersPayload = {
   search: string;
   selectedStatuses: string[];
   selectedReps: string[];
+  locationAvailability: 'all' | 'available' | 'unavailable';
   showRouteOnly: boolean;
   pinColorMode: PinColorMode;
-  layerMode: 'pins' | 'heatmap' | 'hex';
   savedAt: string;
 };
 
@@ -65,10 +65,15 @@ export function TerritoryMobile() {
   const [showRouteOnly, setShowRouteOnly] = useState(false);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
+  const [locationAvailability, setLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [pinColorMode, setPinColorMode] = useState<PinColorMode>('status');
-  const [layerMode, setLayerMode] = useState<'pins' | 'heatmap' | 'hex'>('pins');
+  const [draftStatuses, setDraftStatuses] = useState<string[]>([]);
+  const [draftReps, setDraftReps] = useState<string[]>([]);
+  const [draftLocationAvailability, setDraftLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [draftPinColorMode, setDraftPinColorMode] = useState<PinColorMode>('status');
   const [savedFiltersAt, setSavedFiltersAt] = useState<string | null>(null);
+  const [focusRequestToken, setFocusRequestToken] = useState(0);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
@@ -89,9 +94,9 @@ export function TerritoryMobile() {
       setDebouncedSearch(typeof parsed.search === 'string' ? parsed.search.trim() : '');
       setSelectedStatuses(Array.isArray(parsed.selectedStatuses) ? parsed.selectedStatuses.filter((value): value is string => typeof value === 'string') : []);
       setSelectedReps(Array.isArray(parsed.selectedReps) ? parsed.selectedReps.filter((value): value is string => typeof value === 'string') : []);
+      setLocationAvailability(parsed.locationAvailability === 'available' || parsed.locationAvailability === 'unavailable' ? parsed.locationAvailability : 'all');
       setShowRouteOnly(Boolean(parsed.showRouteOnly));
       setPinColorMode(parsed.pinColorMode === 'rep' ? 'rep' : 'status');
-      setLayerMode(parsed.layerMode === 'heatmap' || parsed.layerMode === 'hex' ? parsed.layerMode : 'pins');
       setSavedFiltersAt(typeof parsed.savedAt === 'string' ? parsed.savedAt : null);
       toast.success('Loaded saved territory filters');
     } catch {
@@ -100,12 +105,13 @@ export function TerritoryMobile() {
   }, []);
 
   const storesQuery = useQuery({
-    queryKey: ['territory-mobile', debouncedSearch, selectedStatuses.join('|'), selectedReps.join('|'), refreshNonce],
+    queryKey: ['territory-mobile', debouncedSearch, selectedStatuses.join('|'), selectedReps.join('|'), locationAvailability, refreshNonce],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set('q', debouncedSearch);
       for (const status of selectedStatuses) params.append('status', status);
       for (const rep of selectedReps) params.append('rep', rep);
+      if (locationAvailability !== 'all') params.set('locationStatus', locationAvailability);
       if (refreshNonce > 0) params.set('refresh', '1');
       const response = await fetch(`/api/territory/stores?${params.toString()}`);
       if (!response.ok) {
@@ -115,6 +121,9 @@ export function TerritoryMobile() {
       return (await response.json()) as TerritoryStoresResponse;
     },
     staleTime: 30000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 15000,
+    retry: 1,
     placeholderData: (previousData) => previousData,
   });
 
@@ -130,15 +139,6 @@ export function TerritoryMobile() {
       setShowRouteOnly(false);
     }
   }, [showRouteOnly, routePlan.selectedStopIds.length]);
-
-  useEffect(() => {
-    if (selectedReps.length > 0 && pinColorMode !== 'rep') {
-      setPinColorMode('rep');
-    }
-    if (selectedReps.length === 0 && selectedStatuses.length > 0 && pinColorMode !== 'status') {
-      setPinColorMode('status');
-    }
-  }, [selectedReps.length, selectedStatuses.length, pinColorMode]);
 
   useEffect(() => {
     if (!focusedId) return;
@@ -159,8 +159,8 @@ export function TerritoryMobile() {
     return ids.map((id) => storeById.get(id)).filter((store): store is TerritoryStorePin => Boolean(store));
   }, [routePlan.orderedStopIds, routePlan.selectedStopIds, storeById]);
 
-  const routeCoordinates = routePlan.optimizedRoute?.geometry?.coordinates ?? orderedStops.map((stop) => [stop.lng, stop.lat] as [number, number]);
-  const hasRoadRouteGeometry = Boolean(routePlan.optimizedRoute?.geometry?.coordinates?.length);
+  const routeCoordinates = showRouteOnly ? routePlan.optimizedRoute?.geometry?.coordinates ?? orderedStops.map((stop) => [stop.lng, stop.lat] as [number, number]) : [];
+  const hasRoadRouteGeometry = showRouteOnly && Boolean(routePlan.optimizedRoute?.geometry?.coordinates?.length);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, TerritoryStorePin[]>();
@@ -189,16 +189,33 @@ export function TerritoryMobile() {
   }, [displayedStores, pinColorMode]);
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
-  const activeFiltersCount = selectedStatuses.length + selectedReps.length;
+  const activeFiltersCount = selectedStatuses.length + selectedReps.length + (locationAvailability === 'all' ? 0 : 1);
+  const canVisualizeRoute = routePlan.selectedStopIds.length >= 2;
+
+  function openFiltersSheet() {
+    setDraftStatuses(selectedStatuses);
+    setDraftReps(selectedReps);
+    setDraftLocationAvailability(locationAvailability);
+    setDraftPinColorMode(pinColorMode);
+    setShowFilters(true);
+  }
+
+  function applyDraftFilters() {
+    setSelectedStatuses(draftStatuses);
+    setSelectedReps(draftReps);
+    setLocationAvailability(draftLocationAvailability);
+    setPinColorMode(draftPinColorMode);
+    setShowFilters(false);
+  }
 
   function persistCurrentFilters() {
     const payload: SavedFiltersPayload = {
       search: search.trim(),
       selectedStatuses,
       selectedReps,
+      locationAvailability,
       showRouteOnly,
       pinColorMode,
-      layerMode,
       savedAt: new Date().toISOString(),
     };
     window.localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(payload));
@@ -211,9 +228,13 @@ export function TerritoryMobile() {
     setDebouncedSearch('');
     setSelectedStatuses([]);
     setSelectedReps([]);
+    setLocationAvailability('all');
     setShowRouteOnly(false);
     setPinColorMode('status');
-    setLayerMode('pins');
+    setDraftStatuses([]);
+    setDraftReps([]);
+    setDraftLocationAvailability('all');
+    setDraftPinColorMode('status');
     setSavedFiltersAt(null);
     window.localStorage.removeItem(FILTER_STORAGE_KEY);
     toast.success('Filters cleared');
@@ -225,6 +246,21 @@ export function TerritoryMobile() {
       return;
     }
     setShowRouteOnly((value) => !value);
+  }
+
+  function toggleRouteVisualization() {
+    if (!showRouteOnly && !canVisualizeRoute) {
+      toast.message('Add at least 2 route stops first.');
+      return;
+    }
+
+    setView('map');
+    setShowRouteOnly((value) => !value);
+
+    if (!showRouteOnly && orderedStops[0]) {
+      setFocusedId(orderedStops[0].id);
+      setFocusRequestToken((current) => current + 1);
+    }
   }
 
   function messageRep(store: TerritoryStorePin | null) {
@@ -241,76 +277,94 @@ export function TerritoryMobile() {
     window.open(`mailto:${email}?subject=${subject}`, '_blank', 'noopener,noreferrer');
   }
 
+  if (storesQuery.isLoading && !storesQuery.data) {
+    return (
+      <div className="flex min-h-[calc(100dvh-76px)] items-center justify-center bg-[#e6e6e9]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#5f636d]" />
+      </div>
+    );
+  }
+
+  if (storesQuery.isError && !storesQuery.data) {
+    return (
+      <div className="min-h-[calc(100dvh-76px)] bg-[#e6e6e9] px-5 py-8">
+        <div className="rounded-xl border border-[#e0b4ab] bg-[#fbe8e4] p-4 text-[#8f2410]">
+          <div className="mb-2 flex items-center gap-2 text-[18px] font-semibold">
+            <AlertTriangle className="h-5 w-5" />
+            Territory failed to load
+          </div>
+          <p className="text-[14px]">
+            {storesQuery.error instanceof Error
+              ? storesQuery.error.message
+              : 'Unable to fetch live territory data.'}
+          </p>
+          <button
+            type="button"
+            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[#ce6f5c] bg-white px-3 py-2 text-[14px] font-medium text-[#8f2410]"
+            onClick={() => {
+              void storesQuery.refetch();
+            }}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative min-h-[calc(100vh-92px)] bg-[#e6e6e9]">
+    <div className="relative min-h-[calc(100dvh-76px)] bg-[#e6e6e9]">
       <MobileHeader
         className="z-[2600]"
-        left={<span className="text-[20px]">Visualize</span>}
-        right={<span className="text-[20px]">Places</span>}
+        left={<span />}
+        right={null}
       >
-        <SegmentedControl
-          value={view}
-          onChange={(value) => setView(value as 'map' | 'list')}
-          options={[
-            { value: 'map', label: 'Map' },
-            { value: 'list', label: 'List' },
-          ]}
-          className="mx-auto max-w-[360px]"
-        />
+        <div className="mx-auto flex w-full max-w-[560px] items-center gap-2">
+          <SegmentedControl
+            value={view}
+            onChange={(value) => setView(value as 'map' | 'list')}
+            options={[
+              { value: 'map', label: 'Map' },
+              { value: 'list', label: 'List' },
+            ]}
+            className="flex-1 [&_button]:py-1 [&_button]:text-[13px]"
+          />
+        </div>
       </MobileHeader>
 
       {view === 'map' ? (
-        <div className="relative h-[calc(100vh-260px)] min-h-[520px]">
+        <div className="relative h-[calc(100dvh-168px)] min-h-[360px] lg:h-[calc(100dvh-192px)]">
           <MapRenderBoundary onReset={() => setRefreshNonce((value) => value + 1)}>
             <TerritoryMapMobile
               stores={displayedStores}
               selectedStopIds={routePlan.selectedStopIds}
               orderedStopIds={routePlan.orderedStopIds}
               focusedStoreId={focusedStore?.id ?? null}
+              focusRequestToken={focusRequestToken}
               routeCoordinates={routeCoordinates}
               pinColorMode={pinColorMode}
-              layerMode={layerMode}
               onSelectStore={setFocusedId}
             />
           </MapRenderBoundary>
 
-          <div className="absolute left-1/2 top-6 z-[1550] -translate-x-1/2 rounded-xl bg-white/92 p-1 shadow">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className={cn(
-                  'rounded-lg px-2.5 py-1 text-[12px] font-semibold',
-                  layerMode === 'pins' ? 'bg-[#cd3814] text-white' : 'text-[#4b4e55]',
-                )}
-                onClick={() => setLayerMode('pins')}
-              >
-                Pins
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'rounded-lg px-2.5 py-1 text-[12px] font-semibold',
-                  layerMode === 'heatmap' ? 'bg-[#cd3814] text-white' : 'text-[#4b4e55]',
-                )}
-                onClick={() => setLayerMode('heatmap')}
-              >
-                Heat
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'rounded-lg px-2.5 py-1 text-[12px] font-semibold',
-                  layerMode === 'hex' ? 'bg-[#cd3814] text-white' : 'text-[#4b4e55]',
-                )}
-                onClick={() => setLayerMode('hex')}
-              >
-                Grid
-              </button>
-            </div>
+          <div className="absolute left-1/2 top-3 z-[1500] -translate-x-1/2">
+            <button
+              type="button"
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow',
+                showRouteOnly
+                  ? 'border-[#39a9ff] bg-[#12344b]/90 text-[#8fd5ff]'
+                  : 'border-white/70 bg-white/92 text-[#25313d]',
+              )}
+              onClick={toggleRouteVisualization}
+            >
+              {showRouteOnly ? 'Hide Route' : 'Visualize Route'}
+            </button>
           </div>
 
-          {routePlan.selectedStopIds.length >= 2 ? (
-            <div className="absolute bottom-4 left-3 z-[1500] rounded-xl bg-black/70 px-3 py-2 text-[13px] text-white">
+          {showRouteOnly && routePlan.selectedStopIds.length >= 2 ? (
+            <div className={cn('absolute left-3 z-[1500] rounded-xl bg-black/70 px-2.5 py-1.5 text-[11px] text-white', focusedStore ? 'bottom-[108px]' : 'bottom-3')}>
               {hasRoadRouteGeometry
                 ? `${routePlan.optimizedRoute?.mode === 'transit' ? 'Transit' : routePlan.optimizedRoute?.mode === 'bike' ? 'Bike' : 'Driving'} route on roads`
                 : 'Add 2+ stops and tap Optimize in Route view'}
@@ -318,7 +372,7 @@ export function TerritoryMobile() {
           ) : null}
 
           {pinColorMode === 'rep' && repLegend.length > 0 ? (
-            <div className="absolute bottom-20 left-3 z-[1500] max-w-[240px] rounded-xl bg-black/70 px-3 py-2 text-white">
+            <div className={cn('absolute left-3 z-[1500] max-w-[220px] rounded-xl bg-black/70 px-2.5 py-2 text-white', focusedStore ? 'bottom-[148px]' : 'bottom-12')}>
               <p className="mb-1 text-[11px] uppercase tracking-wide text-white/70">Rep Colors</p>
               <div className="space-y-1">
                 {repLegend.map((entry) => (
@@ -334,11 +388,11 @@ export function TerritoryMobile() {
             </div>
           ) : null}
 
-          <div className="absolute left-3 top-6 z-[1500] flex flex-col gap-3">
+          <div className="absolute left-2 top-3 z-[1500] flex flex-col gap-2">
             <button
               type="button"
               aria-label="Open focused account details"
-              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
               onClick={() => {
                 if (!focusedStore) {
                   toast.message('Select a location first.');
@@ -347,46 +401,51 @@ export function TerritoryMobile() {
                 setDetailStoreId(focusedStore.id);
               }}
             >
-              <MapPinned className="h-6 w-6 text-[#7f828a]" />
+              <MapPinned className="h-5 w-5 text-[#7f828a]" />
             </button>
             <button
               type="button"
               aria-label="Refresh territory data"
-              className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow"
+              className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
               onClick={() => setRefreshNonce((value) => value + 1)}
             >
-              <RefreshCw className="h-6 w-6 text-[#7f828a]" />
+              <RefreshCw className="h-5 w-5 text-[#7f828a]" />
             </button>
           </div>
 
-          <div className="absolute right-3 top-6 z-[1500] flex flex-col gap-3">
-            <button type="button" aria-label="Switch to list view" className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => setView('list')}>
-              <Search className="h-6 w-6 text-[#7f828a]" />
+          <div className="absolute right-2 top-3 z-[1500] flex flex-col gap-2">
+            <button type="button" aria-label="Switch to list view" className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow" onClick={() => setView('list')}>
+              <Search className="h-5 w-5 text-[#7f828a]" />
             </button>
             <button
               type="button"
               aria-label="Open filters"
-              className={cn('relative grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow', activeFiltersCount > 0 ? 'ring-2 ring-[#cd3814]' : '')}
-              onClick={() => setShowFilters(true)}
+              className={cn('relative grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', activeFiltersCount > 0 ? 'ring-2 ring-[#cd3814]' : '')}
+              onClick={openFiltersSheet}
             >
-              <Filter className={cn('h-6 w-6', activeFiltersCount > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
+              <Filter className={cn('h-5 w-5', activeFiltersCount > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
               {activeFiltersCount > 0 ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#cd3814] px-1 text-[11px] font-semibold text-white">{activeFiltersCount}</span> : null}
             </button>
-            <button type="button" aria-label="Toggle route filter" className={cn('grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow', showRouteOnly ? 'ring-2 ring-[#4f8edf]' : '')} onClick={toggleRouteOnly}>
-              <ListFilter className={cn('h-6 w-6', showRouteOnly ? 'text-[#4f8edf]' : 'text-[#7f828a]')} />
+            <button type="button" aria-label="Toggle route filter" className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showRouteOnly ? 'ring-2 ring-[#4f8edf]' : '')} onClick={toggleRouteOnly}>
+              <ListFilter className={cn('h-5 w-5', showRouteOnly ? 'text-[#4f8edf]' : 'text-[#7f828a]')} />
             </button>
-            <button type="button" aria-label="Message account rep" className="grid h-12 w-12 place-items-center rounded-xl bg-white/90 shadow" onClick={() => messageRep(focusedStore)}>
-              <MessageCircleMore className="h-6 w-6 text-[#d25a3f]" />
+            <button type="button" aria-label="Message account rep" className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow" onClick={() => messageRep(focusedStore)}>
+              <MessageCircleMore className="h-5 w-5 text-[#d25a3f]" />
             </button>
           </div>
         </div>
       ) : (
         <div className="px-4 pb-28 pt-3">
+          {storesQuery.isError ? (
+            <div className="mb-3 rounded-lg border border-[#e6b3a7] bg-[#fdebe7] px-3 py-2 text-[13px] text-[#8f2410]">
+              Live sync warning: {storesQuery.error instanceof Error ? storesQuery.error.message : 'Failed to refresh territory'}
+            </div>
+          ) : null}
           <div className="flex items-center gap-2">
             <MobileSearch value={search} onChange={setSearch} placeholder="Search Locations" className="flex-1" />
             <button
               type="button"
-              onClick={() => setShowFilters(true)}
+              onClick={openFiltersSheet}
               className={cn('relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border bg-white', activeFiltersCount > 0 ? 'border-[#cd3814]' : 'border-[#c8c9cf]')}
             >
               <Filter className={cn('h-5 w-5', activeFiltersCount > 0 ? 'text-[#cd3814]' : 'text-[#6c7078]')} />
@@ -432,19 +491,34 @@ export function TerritoryMobile() {
       )}
 
       {view === 'map' && focusedStore ? (
-        <div className="fixed bottom-[92px] left-0 right-0 z-[2500]">
-          <div className="mx-auto max-w-[480px] bg-[#1d1f24] text-white shadow-[0_-2px_8px_rgba(0,0,0,0.35)]">
-            <button type="button" onClick={() => setDetailStoreId(focusedStore.id)} className="w-full border-b border-[#30333b] px-4 py-3 text-left">
-              <p className="truncate text-[22px] font-semibold">{focusedStore.name}</p>
-              <p className="truncate text-[17px] text-[#b6bac3]">{focusedStore.locationAddress ?? focusedStore.locationLabel ?? 'No address'}</p>
+        <div className="fixed bottom-[86px] left-0 right-0 z-[2500]">
+          <div className="mx-auto max-w-[720px] bg-[#1d1f24]/95 text-white shadow-[0_-2px_8px_rgba(0,0,0,0.35)] backdrop-blur-sm">
+            <button type="button" onClick={() => setDetailStoreId(focusedStore.id)} className="w-full border-b border-[#30333b] px-3 py-2 text-left">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[18px] font-semibold leading-tight">{focusedStore.name}</p>
+                  <p className="truncate text-[13px] text-[#b6bac3]">{focusedStore.locationAddress ?? focusedStore.locationLabel ?? 'No address'}</p>
+                  {focusedStore.isApproximate ? (
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#f1cc78]">Approximate ({focusedStore.locationPrecision})</p>
+                  ) : null}
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
+                    {focusedStore.pinKind === 'lead' ? 'Lead Status' : 'Status'}
+                  </p>
+                  <span className="mt-1 inline-flex max-w-[132px] truncate rounded-full border border-[#39a9ff]/45 bg-[#0f3654] px-2.5 py-1 text-[11px] font-semibold text-[#8fd5ff]">
+                    {focusedStore.status}
+                  </span>
+                </div>
+              </div>
             </button>
-            <div className="grid grid-cols-[1fr_72px_72px] border-b border-[#30333b]">
-              <button type="button" className="flex items-center gap-2 px-4 py-2 text-[17px] text-[#d5d9e1]" onClick={() => messageRep(focusedStore)}>
-                <span className="inline-block h-4 w-4 rounded-full" style={{ backgroundColor: pinColorForStore(focusedStore, pinColorMode) }} />
+            <div className="grid grid-cols-[1fr_56px_56px] border-b border-[#30333b]">
+              <button type="button" className="flex items-center gap-2 px-3 py-2 text-[14px] text-[#d5d9e1]" onClick={() => messageRep(focusedStore)}>
+                <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: pinColorForStore(focusedStore, pinColorMode) }} />
                 {focusedStore.repNames[0] ?? 'Unassigned'}
               </button>
               <button type="button" onClick={() => routePlan.toggleStop(focusedStore.id)} className="grid place-items-center border-l border-[#30333b]">
-                <Plus className={cn('h-8 w-8', selectedOnCard ? 'text-[#4fb649]' : 'text-[#d8dde6]')} />
+                <Plus className={cn('h-6 w-6', selectedOnCard ? 'text-[#4fb649]' : 'text-[#d8dde6]')} />
               </button>
               <a
                 href={`https://www.google.com/maps/dir/?api=1&destination=${focusedStore.lat},${focusedStore.lng}`}
@@ -452,7 +526,7 @@ export function TerritoryMobile() {
                 rel="noreferrer"
                 className="grid place-items-center border-l border-[#30333b]"
               >
-                <Navigation className="h-7 w-7 text-[#d8dde6]" />
+                <Navigation className="h-5 w-5 text-[#d8dde6]" />
               </a>
             </div>
           </div>
@@ -464,12 +538,16 @@ export function TerritoryMobile() {
         onClose={() => setShowFilters(false)}
         statuses={storesQuery.data?.filters.statuses ?? []}
         reps={storesQuery.data?.filters.reps ?? []}
-        selectedStatuses={selectedStatuses}
-        selectedReps={selectedReps}
-        onToggleStatus={(value) => setSelectedStatuses((current) => toggleListValue(current, value))}
-        onToggleRep={(value) => setSelectedReps((current) => toggleListValue(current, value))}
-        pinColorMode={pinColorMode}
-        onSetPinColorMode={setPinColorMode}
+        locationAvailabilityOptions={storesQuery.data?.filters.locationAvailability ?? []}
+        selectedStatuses={draftStatuses}
+        selectedReps={draftReps}
+        locationAvailability={draftLocationAvailability}
+        onToggleStatus={(value) => setDraftStatuses((current) => toggleListValue(current, value))}
+        onToggleRep={(value) => setDraftReps((current) => toggleListValue(current, value))}
+        onSetLocationAvailability={setDraftLocationAvailability}
+        pinColorMode={draftPinColorMode}
+        onSetPinColorMode={setDraftPinColorMode}
+        onApply={applyDraftFilters}
         onSaveSelection={persistCurrentFilters}
         onClearAll={clearAllFilters}
         savedFiltersLabel={formatSavedTimestamp(savedFiltersAt)}
@@ -483,6 +561,7 @@ export function TerritoryMobile() {
         onCenterStore={(store) => {
           setFocusedId(store.id);
           setView('map');
+          setFocusRequestToken((current) => current + 1);
         }}
       />
     </div>

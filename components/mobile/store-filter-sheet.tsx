@@ -10,12 +10,16 @@ interface StoreFilterSheetProps {
   onClose: () => void;
   statuses: TerritoryFilterCount[];
   reps: TerritoryFilterCount[];
+  locationAvailabilityOptions: TerritoryFilterCount[];
   selectedStatuses: string[];
   selectedReps: string[];
+  locationAvailability: 'all' | 'available' | 'unavailable';
   onToggleStatus: (value: string) => void;
   onToggleRep: (value: string) => void;
+  onSetLocationAvailability: (value: 'all' | 'available' | 'unavailable') => void;
   pinColorMode: PinColorMode;
   onSetPinColorMode: (mode: PinColorMode) => void;
+  onApply: () => void;
   onSaveSelection: () => void;
   onClearAll: () => void;
   savedFiltersLabel?: string | null;
@@ -26,12 +30,16 @@ export function StoreFilterSheet({
   onClose,
   statuses,
   reps,
+  locationAvailabilityOptions,
   selectedStatuses,
   selectedReps,
+  locationAvailability,
   onToggleStatus,
   onToggleRep,
+  onSetLocationAvailability,
   pinColorMode,
   onSetPinColorMode,
+  onApply,
   onSaveSelection,
   onClearAll,
   savedFiltersLabel = null,
@@ -40,12 +48,12 @@ export function StoreFilterSheet({
     return null;
   }
 
-  const activeFilters = selectedStatuses.length + selectedReps.length;
+  const activeFilters = selectedStatuses.length + selectedReps.length + (locationAvailability === 'all' ? 0 : 1);
   const hasActiveFilters = activeFilters > 0;
 
   return (
     <div className="fixed inset-0 z-[5400] bg-black/35">
-      <div className="mx-auto flex h-full max-w-[480px] flex-col bg-[#e6e6e9]">
+      <div className="mx-auto flex h-full max-w-[var(--app-shell-max)] flex-col bg-[#e6e6e9]">
         <div className="flex items-center justify-between border-b border-[#c8c9cf] bg-[#c93412] px-4 py-3 text-white">
           <h2 className="text-[17px] font-semibold">Filters & Visualization</h2>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-black/10" aria-label="Close filters">
@@ -93,6 +101,33 @@ export function StoreFilterSheet({
             selected={selectedReps}
             onToggle={onToggleRep}
           />
+
+          <section className="mb-4">
+            <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Location Availability</h3>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'All locations' },
+                { value: 'available', label: 'Available location' },
+                { value: 'unavailable', label: 'Unavailable location' },
+              ].map((option) => {
+                const count = locationAvailabilityOptions.find((item) => item.value.toLowerCase() === option.label.toLowerCase())?.count ?? 0;
+                const active = locationAvailability === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => onSetLocationAvailability(option.value as 'all' | 'available' | 'unavailable')}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-[13px] font-medium',
+                      active ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                    )}
+                  >
+                    {option.label} <span className={cn(active ? 'text-white/80' : 'text-[#7f828b]')}>({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         </div>
 
         <div className="border-t border-[#c8c9cf] bg-[#f2f2f5] px-4 py-3">
@@ -111,7 +146,7 @@ export function StoreFilterSheet({
             >
               Save Filters
             </button>
-            <button type="button" onClick={onClose} className="rounded-lg bg-[#cd3814] px-2 py-2 text-[13px] font-semibold text-white">
+            <button type="button" onClick={onApply} className="rounded-lg bg-[#cd3814] px-2 py-2 text-[13px] font-semibold text-white">
               {hasActiveFilters ? `Apply (${activeFilters})` : 'Apply'}
             </button>
           </div>
