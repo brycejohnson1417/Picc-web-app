@@ -32,6 +32,12 @@ function normalizeKey(value: string) {
   return value.trim().toLowerCase();
 }
 
+function sameNullableNumber(left: number | null | undefined, right: number | null | undefined) {
+  if (left == null && right == null) return true;
+  if (left == null || right == null) return false;
+  return Math.abs(left - right) < 0.000001;
+}
+
 function isWithinTerritoryBounds(store: TerritoryStorePin) {
   const bounds = TERRITORY_BOUNDS_BY_STATE[TERRITORY_HOME_STATE];
   if (!bounds) {
@@ -417,37 +423,74 @@ export async function syncTerritoryStoresReadModel(stores: TerritoryStorePin[], 
     });
   }
 
-  for (const row of dedupedRows) {
-    const account = row.licenseNumber
-      ? await prisma.account.findFirst({
-          where: {
-            orgId,
-            OR: [{ licenseNumber: row.licenseNumber }, { name: row.name }],
-          },
-          select: { id: true },
-          orderBy: { updatedAt: 'desc' },
-        })
-      : await prisma.account.findFirst({
-          where: {
-            orgId,
-            name: row.name,
-          },
-          select: { id: true },
-          orderBy: { updatedAt: 'desc' },
-        });
+  const candidateLicenseNumbers = [...new Set(dedupedRows.map((row) => row.licenseNumber).filter((value): value is string => Boolean(value?.trim())))];
+  const candidateNames = [...new Set(dedupedRows.map((row) => row.name.trim()).filter(Boolean))];
 
-    if (!account) {
-      continue;
+  if (candidateLicenseNumbers.length > 0 || candidateNames.length > 0) {
+    const candidateAccounts = await prisma.account.findMany({
+      where: {
+        orgId,
+        OR: [
+          candidateLicenseNumbers.length > 0 ? { licenseNumber: { in: candidateLicenseNumbers } } : undefined,
+          candidateNames.length > 0 ? { name: { in: candidateNames } } : undefined,
+        ].filter(Boolean) as Prisma.AccountWhereInput[],
+      },
+      select: {
+        id: true,
+        name: true,
+        licenseNumber: true,
+        notionPageId: true,
+        geoLat: true,
+        geoLng: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const accountByLicense = new Map<string, (typeof candidateAccounts)[number]>();
+    const accountByName = new Map<string, (typeof candidateAccounts)[number]>();
+
+    for (const account of candidateAccounts) {
+      if (account.licenseNumber?.trim() && !accountByLicense.has(account.licenseNumber)) {
+        accountByLicense.set(account.licenseNumber, account);
+      }
+      if (account.name.trim() && !accountByName.has(account.name)) {
+        accountByName.set(account.name, account);
+      }
     }
 
-    await prisma.account.update({
-      where: { id: account.id },
-      data: {
-        notionPageId: row.notionPageId,
-        geoLat: row.lat,
-        geoLng: row.lng,
-      },
+    const accountUpdates = dedupedRows.flatMap((row) => {
+      const matchedAccount =
+        (row.licenseNumber ? accountByLicense.get(row.licenseNumber) : undefined) ??
+        accountByName.get(row.name);
+
+      if (!matchedAccount) {
+        return [];
+      }
+
+      if (
+        matchedAccount.notionPageId === row.notionPageId &&
+        sameNullableNumber(matchedAccount.geoLat, row.lat) &&
+        sameNullableNumber(matchedAccount.geoLng, row.lng)
+      ) {
+        return [];
+      }
+
+      return [
+        prisma.account.update({
+          where: { id: matchedAccount.id },
+          data: {
+            notionPageId: row.notionPageId,
+            geoLat: row.lat,
+            geoLng: row.lng,
+          },
+        }),
+      ];
     });
+
+    if (accountUpdates.length > 0) {
+      await prisma.$transaction(accountUpdates);
+    }
   }
 
   await prisma.$executeRawUnsafe(
