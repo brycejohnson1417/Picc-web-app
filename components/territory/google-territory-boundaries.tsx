@@ -40,6 +40,14 @@ function readDraftPath(path: google.maps.MVCArray<google.maps.LatLng>): Territor
   return next;
 }
 
+function updateCoordinateAtIndex(
+  coordinates: TerritoryBoundaryCoordinates,
+  index: number,
+  nextPoint: [number, number],
+): TerritoryBoundaryCoordinates {
+  return coordinates.map((point, pointIndex) => (pointIndex === index ? nextPoint : point));
+}
+
 function BoundaryDisplayLayer({
   boundaries,
   hiddenBoundaryIds,
@@ -110,6 +118,7 @@ function BoundaryDraftLayer({
             fillColor: draftBoundary.color,
             fillOpacity: 0.2,
             editable: true,
+            draggable: true,
             zIndex: 3,
             map,
           })
@@ -122,39 +131,73 @@ function BoundaryDraftLayer({
             strokeColor: draftBoundary.color,
             strokeOpacity: 1,
             strokeWeight: draftBoundary.borderWidth,
+            editable: true,
             zIndex: 3,
             map,
           })
         : null;
 
-    const pointMarkers = draftBoundary.coordinates.map(([lng, lat], index) =>
-      new google.maps.Marker({
-        position: { lng, lat },
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: index === 0 ? 5.5 : 4.5,
-          fillColor: draftBoundary.color,
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 2,
-        },
-        zIndex: 4,
-        map,
-      }),
-    );
-
     const listeners: google.maps.MapsEventListener[] = [];
-    if (polygon && onDraftCoordinatesChange) {
-      const draftPath = polygon.getPath();
+    const pointMarkers =
+      path.length < 3
+        ? draftBoundary.coordinates.map(([lng, lat], index) =>
+            new google.maps.Marker({
+              position: { lng, lat },
+              draggable: true,
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: index === 0 ? 5.5 : 4.5,
+                fillColor: draftBoundary.color,
+                fillOpacity: 1,
+                strokeColor: '#ffffff',
+                strokeWeight: 2,
+              },
+              zIndex: 4,
+              map,
+            }),
+          )
+        : [];
+
+    const attachEditablePathListeners = (editablePath: google.maps.MVCArray<google.maps.LatLng>) => {
+      if (!onDraftCoordinatesChange) {
+        return;
+      }
       const emit = () => {
-        onDraftCoordinatesChange(readDraftPath(draftPath));
+        onDraftCoordinatesChange(readDraftPath(editablePath));
       };
-      listeners.push(draftPath.addListener('insert_at', emit));
-      listeners.push(draftPath.addListener('remove_at', emit));
-      listeners.push(draftPath.addListener('set_at', emit));
+      listeners.push(editablePath.addListener('insert_at', emit));
+      listeners.push(editablePath.addListener('remove_at', emit));
+      listeners.push(editablePath.addListener('set_at', emit));
+    };
+
+    if (polygon) {
+      attachEditablePathListeners(polygon.getPath());
+      if (onDraftCoordinatesChange) {
+        listeners.push(
+          polygon.addListener('dragend', () => {
+            onDraftCoordinatesChange(readDraftPath(polygon.getPath()));
+          }),
+        );
+      }
     }
-    if (onDraftCoordinatesChange) {
+
+    if (polyline) {
+      attachEditablePathListeners(polyline.getPath());
+    }
+
+    if (onDraftCoordinatesChange && pointMarkers.length > 0) {
       pointMarkers.forEach((marker, index) => {
+        listeners.push(
+          marker.addListener('dragend', (event: google.maps.MapMouseEvent) => {
+            const latLng = event.latLng;
+            if (!latLng) {
+              return;
+            }
+            onDraftCoordinatesChange(
+              updateCoordinateAtIndex(draftBoundary.coordinates, index, [latLng.lng(), latLng.lat()]),
+            );
+          }),
+        );
         listeners.push(
           marker.addListener('click', () => {
             const next = draftBoundary.coordinates.filter((_, candidateIndex) => candidateIndex !== index);

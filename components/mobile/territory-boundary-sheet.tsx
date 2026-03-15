@@ -187,7 +187,9 @@ export function TerritoryBoundaryEditor({
           <div>
             <p className="text-[16px] font-semibold text-[#23262d]">{isNewBoundary ? 'Draw Territory Boundary' : 'Edit Territory Boundary'}</p>
             <p className="mt-1 text-[12px] text-[#7a5e56]">
-              {drawingMode ? 'Tap the map to add points. Drag polygon handles to fine-tune the shape.' : 'You can resume drawing or drag existing polygon handles on the map.'}
+              {drawingMode
+                ? 'Tap the map to add points. Drag corners, edge handles, or the whole shape to refine it.'
+                : 'Resume drawing or drag corners, edge handles, or the whole shape directly on the map.'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg text-[#7a5e56] hover:bg-[#f6e3de]" aria-label="Close territory editor">
