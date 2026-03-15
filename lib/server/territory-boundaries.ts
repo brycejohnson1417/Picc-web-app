@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import type { TerritoryBoundary, TerritoryBoundaryCoordinates } from '@/lib/territory/types';
 
@@ -73,6 +75,14 @@ function toGeoJsonPolygon(coordinates: TerritoryBoundaryCoordinates): GeoJsonPol
     type: 'Polygon',
     coordinates: [ring],
   };
+}
+
+function toGeoJsonString(coordinates: TerritoryBoundaryCoordinates) {
+  return JSON.stringify(toGeoJsonPolygon(coordinates));
+}
+
+function geometryFromCoordinates(coordinates: TerritoryBoundaryCoordinates) {
+  return Prisma.sql`ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(${toGeoJsonString(coordinates)}), 4326))`;
 }
 
 function readCoordinatesFromGeoJson(value: unknown): TerritoryBoundaryCoordinates {
@@ -162,18 +172,51 @@ export async function createTerritoryBoundary(input: {
   }
 
   const coordinates = normalizeCoordinates(input.coordinates);
-  const row = await prisma.territory.create({
-    data: {
-      orgId: input.orgId,
-      name,
-      description: input.description?.trim() || null,
-      color: normalizeColor(input.color),
-      borderWidth: normalizeBorderWidth(input.borderWidth),
-      isVisibleByDefault: input.isVisibleByDefault ?? true,
-      geojson: toGeoJsonPolygon(coordinates),
-      createdByEmail: input.actorEmail?.trim().toLowerCase() || null,
-      updatedByEmail: input.actorEmail?.trim().toLowerCase() || null,
-    },
+  const id = randomUUID();
+  const description = input.description?.trim() || null;
+  const color = normalizeColor(input.color);
+  const borderWidth = normalizeBorderWidth(input.borderWidth);
+  const isVisibleByDefault = input.isVisibleByDefault ?? true;
+  const actorEmail = input.actorEmail?.trim().toLowerCase() || null;
+  const geojson = toGeoJsonString(coordinates);
+
+  await prisma.$executeRaw(
+    Prisma.sql`
+      INSERT INTO "Territory" (
+        "id",
+        "orgId",
+        "name",
+        "description",
+        "geometry",
+        "color",
+        "borderWidth",
+        "isVisibleByDefault",
+        "geojson",
+        "createdByEmail",
+        "updatedByEmail",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        ${id},
+        ${input.orgId},
+        ${name},
+        ${description},
+        ${geometryFromCoordinates(coordinates)},
+        ${color},
+        ${borderWidth},
+        ${isVisibleByDefault},
+        ${geojson}::jsonb,
+        ${actorEmail},
+        ${actorEmail},
+        NOW(),
+        NOW()
+      )
+    `,
+  );
+
+  const row = await prisma.territory.findFirst({
+    where: { id, orgId: input.orgId },
     select: {
       id: true,
       name: true,
@@ -188,6 +231,10 @@ export async function createTerritoryBoundary(input: {
       updatedAt: true,
     },
   });
+
+  if (!row) {
+    throw new Error('Created boundary is missing');
+  }
 
   const mapped = mapBoundary(row);
   if (!mapped) {
@@ -208,6 +255,7 @@ export async function updateTerritoryBoundary(input: {
   actorEmail?: string | null;
 }) {
   const updateData: Record<string, unknown> = {};
+  let coordinatesForGeometry: TerritoryBoundaryCoordinates | null = null;
 
   if (typeof input.name === 'string') {
     const name = input.name.trim();
@@ -232,6 +280,7 @@ export async function updateTerritoryBoundary(input: {
   if (input.coordinates !== undefined) {
     const coordinates = normalizeCoordinates(input.coordinates);
     updateData.geojson = toGeoJsonPolygon(coordinates);
+    coordinatesForGeometry = coordinates;
   }
 
   if (input.isVisibleByDefault !== undefined) {
@@ -240,16 +289,54 @@ export async function updateTerritoryBoundary(input: {
 
   updateData.updatedByEmail = input.actorEmail?.trim().toLowerCase() || null;
 
-  const row = await prisma.territory.updateMany({
-    where: {
-      id: input.boundaryId,
-      orgId: input.orgId,
-    },
-    data: updateData,
-  });
+  if (coordinatesForGeometry) {
+    const setClauses: Prisma.Sql[] = [
+      Prisma.sql`"geojson" = ${toGeoJsonString(coordinatesForGeometry)}::jsonb`,
+      Prisma.sql`"geometry" = ${geometryFromCoordinates(coordinatesForGeometry)}`,
+      Prisma.sql`"updatedByEmail" = ${updateData.updatedByEmail as string | null}`,
+      Prisma.sql`"updatedAt" = NOW()`,
+    ];
 
-  if (row.count === 0) {
-    throw new Error('Boundary not found');
+    if (typeof updateData.name === 'string') {
+      setClauses.unshift(Prisma.sql`"name" = ${updateData.name}`);
+    }
+    if (input.description !== undefined) {
+      setClauses.unshift(Prisma.sql`"description" = ${updateData.description as string | null}`);
+    }
+    if (typeof updateData.color === 'string') {
+      setClauses.unshift(Prisma.sql`"color" = ${updateData.color}`);
+    }
+    if (typeof updateData.borderWidth === 'number') {
+      setClauses.unshift(Prisma.sql`"borderWidth" = ${updateData.borderWidth}`);
+    }
+    if (typeof updateData.isVisibleByDefault === 'boolean') {
+      setClauses.unshift(Prisma.sql`"isVisibleByDefault" = ${updateData.isVisibleByDefault}`);
+    }
+
+    const result = await prisma.$executeRaw(
+      Prisma.sql`
+        UPDATE "Territory"
+        SET ${Prisma.join(setClauses, ', ')}
+        WHERE "id" = ${input.boundaryId}
+          AND "orgId" = ${input.orgId}
+      `,
+    );
+
+    if (result === 0) {
+      throw new Error('Boundary not found');
+    }
+  } else {
+    const row = await prisma.territory.updateMany({
+      where: {
+        id: input.boundaryId,
+        orgId: input.orgId,
+      },
+      data: updateData,
+    });
+
+    if (row.count === 0) {
+      throw new Error('Boundary not found');
+    }
   }
 
   const found = await prisma.territory.findFirst({
