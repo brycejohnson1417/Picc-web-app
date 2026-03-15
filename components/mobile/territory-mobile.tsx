@@ -528,7 +528,7 @@ export function TerritoryMobile() {
       </MobileHeader>
 
       {view === 'map' ? (
-        <div className="relative h-[calc(100dvh-168px)] min-h-[360px] lg:h-[calc(100dvh-192px)]">
+        <div className="relative h-[calc(100dvh-162px)] min-h-[360px] md:h-[calc(100dvh-146px)] lg:h-[calc(100dvh-138px)]">
           <MapRenderBoundary onReset={() => setRefreshNonce((value) => value + 1)}>
             <TerritoryMapMobile
               stores={displayedStores}

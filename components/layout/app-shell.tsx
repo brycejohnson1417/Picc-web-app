@@ -38,6 +38,7 @@ export function AppShell({
   access: AppAccessState;
 }) {
   const pathname = usePathname();
+  const isTerritoryRoute = pathname === '/territory' || pathname.startsWith('/territory/');
   const routePlan = useRoutePlan();
   const { signOut } = useClerk();
   const [commandMounted, setCommandMounted] = useState(false);
@@ -58,9 +59,23 @@ export function AppShell({
 
   return (
     <AppAccessProvider value={access}>
-      <div className="min-h-[100dvh] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_34%),linear-gradient(180deg,#d7d8dc_0%,#c9cacf_100%)] px-0 md:px-3 lg:px-5">
+      <div
+        className={cn(
+          'min-h-[100dvh] px-0',
+          isTerritoryRoute
+            ? 'bg-[#e6e6e9]'
+            : 'bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_34%),linear-gradient(180deg,#d7d8dc_0%,#c9cacf_100%)] md:px-3 lg:px-5',
+        )}
+      >
         {commandMounted ? <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} /> : null}
-        <div className="mx-auto min-h-[100dvh] max-w-[var(--app-shell-max)] bg-[#e6e6e9] shadow-[0_0_0_1px_rgba(0,0,0,0.12)] md:min-h-[calc(100dvh-24px)] md:overflow-hidden md:rounded-[28px] md:shadow-[0_20px_60px_rgba(31,35,43,0.18)]">
+        <div
+          className={cn(
+            'mx-auto min-h-[100dvh] bg-[#e6e6e9] shadow-[0_0_0_1px_rgba(0,0,0,0.12)]',
+            isTerritoryRoute
+              ? 'max-w-none md:min-h-[100dvh] md:overflow-hidden md:rounded-none md:shadow-none'
+              : 'max-w-[var(--app-shell-max)] md:min-h-[calc(100dvh-24px)] md:overflow-hidden md:rounded-[28px] md:shadow-[0_20px_60px_rgba(31,35,43,0.18)]',
+          )}
+        >
           <header className="flex items-center justify-between border-b border-[#c8c9ce] bg-[#f0f1f4] px-3 py-1.5 text-[#1f232b]">
             <div className="flex items-center gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.08em]">piccnewyork.org</p>
@@ -87,11 +102,18 @@ export function AppShell({
               Sign Out
             </button>
           </header>
-          <main className="pb-[84px]">{children}</main>
+          <main className={cn(isTerritoryRoute ? 'pb-[84px] md:pb-[92px]' : 'pb-[84px]')}>{children}</main>
         </div>
 
         <nav className="fixed bottom-0 left-0 right-0 z-[4000] text-white" aria-label="Primary navigation">
-          <div className="mx-auto grid h-[84px] max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#2f3540] bg-[#1f232b] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5 md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]">
+          <div
+            className={cn(
+              'mx-auto grid h-[84px] grid-cols-5 border-t border-[#2f3540] bg-[#1f232b] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5',
+              isTerritoryRoute
+                ? 'max-w-none md:mb-0 md:rounded-none md:border-l-0 md:border-r-0 md:shadow-none'
+                : 'max-w-[var(--app-shell-max)] md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]',
+            )}
+          >
             {tabs.map((item) => {
               const active = isActive(pathname, item.href);
               const Icon = item.icon;

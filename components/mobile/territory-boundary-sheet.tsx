@@ -181,8 +181,8 @@ export function TerritoryBoundaryEditor({
   const isNewBoundary = !boundary.id;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[96px] z-[5300] px-3">
-      <div className="pointer-events-auto mx-auto max-w-[720px] rounded-2xl border border-[#d8b0a5] bg-[#fffaf8] shadow-[0_8px_28px_rgba(0,0,0,0.18)]">
+    <div className="pointer-events-none fixed inset-x-0 top-[96px] z-[5300] px-3 md:inset-x-auto md:right-4 md:top-[106px] md:w-[380px] md:max-w-[calc(100vw-32px)] md:px-0 lg:w-[420px]">
+      <div className="pointer-events-auto mx-auto flex max-h-[calc(100dvh-112px)] max-w-[720px] flex-col rounded-2xl border border-[#d8b0a5] bg-[#fffaf8] shadow-[0_8px_28px_rgba(0,0,0,0.18)] md:max-h-[calc(100dvh-126px)]">
         <div className="flex items-center justify-between border-b border-[#f0d6ce] px-4 py-3">
           <div>
             <p className="text-[16px] font-semibold text-[#23262d]">{isNewBoundary ? 'Draw Territory Boundary' : 'Edit Territory Boundary'}</p>
@@ -195,8 +195,9 @@ export function TerritoryBoundaryEditor({
           </button>
         </div>
 
-        <div className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_140px]">
-          <label className="block">
+        <div className="overflow-y-auto">
+          <div className="grid gap-3 px-4 py-4 md:grid-cols-1">
+            <label className="block">
             <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Name</span>
             <input
               value={boundary.name}
@@ -204,42 +205,43 @@ export function TerritoryBoundaryEditor({
               placeholder="Queens East"
               className="w-full rounded-xl border border-[#c8c9cf] bg-white px-3 py-2 text-[14px] text-[#1f232a] outline-none focus:border-[#cd3814]"
             />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Color</span>
-            <input
-              type="color"
-              value={boundary.color}
-              onChange={(event) => onChange({ color: event.target.value })}
-              className="h-[44px] w-full rounded-xl border border-[#c8c9cf] bg-white px-2 py-1"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Border Width</span>
-            <input
-              type="range"
-              min={1}
-              max={12}
-              step={1}
-              value={boundary.borderWidth}
-              onChange={(event) => onChange({ borderWidth: Number(event.target.value) })}
-              className="h-[44px] w-full"
-            />
-            <p className="mt-1 text-[12px] text-[#7b7e87]">{boundary.borderWidth}px</p>
-          </label>
-          <label className="block md:col-span-2">
-            <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Description</span>
-            <input
-              value={boundary.description}
-              onChange={(event) => onChange({ description: event.target.value })}
-              placeholder="Optional note about this sales territory"
-              className="w-full rounded-xl border border-[#c8c9cf] bg-white px-3 py-2 text-[14px] text-[#1f232a] outline-none focus:border-[#cd3814]"
-            />
-          </label>
-        </div>
+            </label>
+            <div className="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)]">
+              <label className="block">
+                <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Color</span>
+                <input
+                  type="color"
+                  value={boundary.color}
+                  onChange={(event) => onChange({ color: event.target.value })}
+                  className="h-[44px] w-full rounded-xl border border-[#c8c9cf] bg-white px-2 py-1"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Border Width</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={12}
+                  step={1}
+                  value={boundary.borderWidth}
+                  onChange={(event) => onChange({ borderWidth: Number(event.target.value) })}
+                  className="h-[44px] w-full"
+                />
+                <p className="mt-1 text-[12px] text-[#7b7e87]">{boundary.borderWidth}px</p>
+              </label>
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Description</span>
+              <input
+                value={boundary.description}
+                onChange={(event) => onChange({ description: event.target.value })}
+                placeholder="Optional note about this sales territory"
+                className="w-full rounded-xl border border-[#c8c9cf] bg-white px-3 py-2 text-[14px] text-[#1f232a] outline-none focus:border-[#cd3814]"
+              />
+            </label>
 
-        <div className="border-t border-[#f0d6ce] px-4 py-3">
-          <div className="mb-3 flex flex-wrap gap-2">
+            <div className="border-t border-[#f0d6ce] pt-3">
+              <div className="mb-3 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => onSetDrawingMode(!drawingMode)}
@@ -267,34 +269,38 @@ export function TerritoryBoundaryEditor({
               <Trash2 className="h-4 w-4" />
               Clear
             </button>
-          </div>
-
-          {boundary.coordinates.length > 0 ? (
-            <div className="mb-3 rounded-xl border border-[#f0d6ce] bg-white px-3 py-3">
-              <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Points</p>
-              <div className="grid gap-2 md:grid-cols-2">
-                {boundary.coordinates.map((point, index) => (
-                  <div key={`${point[0]}-${point[1]}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-[#ece7e4] px-2 py-2">
-                    <div className="min-w-0">
-                      <p className="text-[12px] font-semibold text-[#23262d]">Point {index + 1}</p>
-                      <p className="truncate text-[11px] text-[#7b7e87]">
-                        {point[1].toFixed(5)}, {point[0].toFixed(5)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onDeletePoint(index)}
-                      className="inline-flex items-center gap-1 rounded-md border border-[#e2b4ab] bg-[#fff4f1] px-2 py-1 text-[11px] font-medium text-[#b43819]"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </div>
-                ))}
               </div>
-            </div>
-          ) : null}
 
+              {boundary.coordinates.length > 0 ? (
+                <div className="mb-3 rounded-xl border border-[#f0d6ce] bg-white px-3 py-3">
+                  <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Points</p>
+                  <div className="grid gap-2">
+                    {boundary.coordinates.map((point, index) => (
+                      <div key={`${point[0]}-${point[1]}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-[#ece7e4] px-2 py-2">
+                        <div className="min-w-0">
+                          <p className="text-[12px] font-semibold text-[#23262d]">Point {index + 1}</p>
+                          <p className="truncate text-[11px] text-[#7b7e87]">
+                            {point[1].toFixed(5)}, {point[0].toFixed(5)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onDeletePoint(index)}
+                          className="inline-flex items-center gap-1 rounded-md border border-[#e2b4ab] bg-[#fff4f1] px-2 py-1 text-[11px] font-medium text-[#b43819]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-[#f0d6ce] px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[12px] text-[#7b7e87]">{boundary.coordinates.length} point{boundary.coordinates.length === 1 ? '' : 's'} captured</p>
             <button
