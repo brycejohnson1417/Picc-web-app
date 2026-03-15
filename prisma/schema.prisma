@@ -134,8 +134,8 @@ model OrganizationWorkspace {
   syncRuns        SyncRun[]
   importJobs      ImportJob[]
   exportJobs      ExportJob[]
-  territories     Territory[]
   salesRoutes     SalesRoute[]
+  territories     Territory[]
   checkIns        CheckIn[]
   territoryCheckInMirrors TerritoryCheckInMirror[]
   territoryStores TerritoryStoreReadModel[]
@@ -856,7 +856,11 @@ model Territory {
   org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
   name          String
   description   String?
-  geometry      Unsupported("geometry(MultiPolygon,4326)")
+  color         String                @default("#ef4444")
+  isVisibleByDefault Boolean          @default(true)
+  geojson       Json?
+  createdByEmail String?
+  updatedByEmail String?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 

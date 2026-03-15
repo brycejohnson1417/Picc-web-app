@@ -1,0 +1,6 @@
+ALTER TABLE "Territory"
+ADD COLUMN "color" TEXT NOT NULL DEFAULT '#ef4444',
+ADD COLUMN "isVisibleByDefault" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "geojson" JSONB,
+ADD COLUMN "createdByEmail" TEXT,
+ADD COLUMN "updatedByEmail" TEXT;

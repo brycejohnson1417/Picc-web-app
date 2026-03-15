@@ -18,10 +18,11 @@ import {
   syncTerritoryStoresReadModel,
 } from '@/lib/server/territory-read-model';
 import { createTerritoryCheckInService } from '@/lib/server/notion-territory-checkins';
-import { loadNotionVendorDayEvents } from '@/lib/server/notion-vendor-days';
+import { createTerritoryStoreDetailService } from '@/lib/server/notion-territory-store-detail';
+import { loadStoreVendorDaySummary } from '@/lib/server/notion-territory-vendor-days';
 import { resolveAccountIdentity } from '@/lib/server/account-identity';
 import { checkGoogleBudgetCap, estimateGoogleUsageCostUsd, recordGoogleUsage } from '@/lib/server/google-usage';
-import { colorForStatus, normalizeStatus, pinKindForStatus, type TerritoryStoreContact, type TerritoryStorePin, type TerritoryStoresResponse, type TerritoryVendorDaySummary } from '@/lib/territory/types';
+import { colorForStatus, normalizeStatus, pinKindForStatus, type TerritoryStoreContact, type TerritoryStorePin, type TerritoryStoresResponse } from '@/lib/territory/types';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
@@ -1168,67 +1169,18 @@ const territoryCheckIns = createTerritoryCheckInService({
 export const syncTerritoryCheckInMirrorForStore = territoryCheckIns.syncTerritoryCheckInMirrorForStore;
 export const syncTerritoryCheckInMirrorByPageId = territoryCheckIns.syncTerritoryCheckInMirrorByPageId;
 
-async function loadStoreVendorDaySummary(store: TerritoryStorePin): Promise<TerritoryVendorDaySummary> {
-  const normalizedStoreName = store.name.trim().toLowerCase();
-  const now = Date.now();
-
-  const accounts = await prisma.account
-    .findMany({
-      where: {
-        OR: [
-          { notionPageId: store.notionPageId },
-          ...(store.licenseNumber ? [{ licenseNumber: store.licenseNumber }] : []),
-          { name: store.name },
-        ],
-      },
-      select: { id: true },
-      take: 5,
-    })
-    .catch(() => []);
-
-  const accountIds = accounts.map((account) => account.id);
-  const localRows = accountIds.length
-    ? await prisma.vendorDayEvent
-        .findMany({
-          where: { accountId: { in: accountIds } },
-          orderBy: { eventDate: 'desc' },
-          take: 50,
-        })
-        .catch(() => [])
-    : [];
-
-  const notionRows = await loadNotionVendorDayEvents().catch(() => []);
-  const matchingNotionRows = notionRows.filter((row) => row.accountName.trim().toLowerCase() === normalizedStoreName);
-
-  const localSummary = localRows.map((row) => ({
-    id: row.id,
-    eventDate: row.eventDate.toISOString(),
-    status: row.status,
-    repName: row.repName,
-    ambassadorName: row.ambassadorName,
-    notes: row.notes,
-  }));
-
-  const bridgedNotionSummary = matchingNotionRows
-    .filter((row) => !localSummary.some((local) => local.eventDate.slice(0, 10) === row.eventDate.slice(0, 10)))
-    .map((row) => ({
-      id: row.id,
-      eventDate: row.eventDate,
-      status: 'SUBMITTED',
-      repName: row.repName,
-      ambassadorName: row.ambassadorName,
-      notes: row.notes,
-    }));
-
-  const all = [...localSummary, ...bridgedNotionSummary].sort((a, b) => new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime());
-  const upcomingCount = all.filter((item) => new Date(item.eventDate).getTime() >= now).length;
-
-  return {
-    total: all.length,
-    upcomingCount,
-    recent: all.slice(0, 10),
-  };
-}
+const territoryStoreDetailService = createTerritoryStoreDetailService({
+  getTerritorySnapshot,
+  loadTerritoryStoreFromReadModel,
+  resolveStoreByIdentifier,
+  loadStoreCheckIns: territoryCheckIns.loadStoreCheckIns,
+  loadStoreVendorDaySummary,
+  notionRequest,
+  readNotionCacheSnapshot,
+  contactsSnapshotKey: CONTACTS_SNAPSHOT_KEY,
+  normalizeCachedContacts,
+  normalizePageId,
+});
 
 export async function loadTerritoryStoreCheckIns(storeId: string) {
   const snapshot = await getTerritorySnapshot();
@@ -1240,208 +1192,7 @@ export async function loadTerritoryStoreCheckIns(storeId: string) {
   return territoryCheckIns.loadStoreCheckIns(store);
 }
 
-type NotionPageResponse = {
-  properties?: Record<string, NotionPropertyValue>;
-};
-
-function propertyValueByCandidates(properties: Record<string, NotionPropertyValue>, candidates: string[]) {
-  const candidateSet = new Set(candidates.map(normalizePropertyName));
-  for (const [name, value] of Object.entries(properties)) {
-    if (candidateSet.has(normalizePropertyName(name))) {
-      return value;
-    }
-  }
-  return undefined;
-}
-
-function toIsoDate(value: string) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
-}
-
-async function loadStoreCrmFields(store: TerritoryStorePin, contacts: CachedContactRow[]) {
-  const page = await notionRequest<NotionPageResponse>(`/pages/${store.notionPageId}`);
-  const properties = page.properties ?? {};
-  const firstContact = contacts[0];
-
-  const contactText = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Contact']));
-  const contactEmail = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Contact Email', 'Email']));
-  const contactPhone = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Contact Phone', 'Phone']));
-  const primaryContactName = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact Name', 'Primary Contact']));
-  const primaryContactBuyer = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact / Buyer', 'Primary Contact Buyer', 'Buyer']));
-  const primaryContactEmail = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact Email', 'Buyer Email', 'Contact Email']));
-  const primaryContactPhone = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact Phone', 'Buyer Phone', 'Contact Phone']));
-  const rep = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Rep', 'PICC Rep', 'Sales Rep']));
-  const accountManager = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Account Manager', 'Manager']));
-  const piccCreditStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['PICC Credit Status', 'Credit Status']));
-  const accountStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Account Status']));
-  const lastOrderAmount = readNumberProperty(propertyValueByCandidates(properties, ['Last Order Amount', 'Latest Order Amount', 'Order Amount']));
-  const lastContacted = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Last Contacted', 'Last Contact Date']));
-  const lastDeliveryDate = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Last Delivery Date', 'Most Recent Delivery Date']));
-  const lastSampleOrderDate = readTextFromAnyProperty(
-    propertyValueByCandidates(properties, ['Last Sample Order Date', 'Sample Order Date', 'Last Sample Date']),
-  );
-  const lastOrderDate = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Last Order Date', 'Most Recent Order Date']));
-  const referralSource = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Referral Source', 'Lead Source', 'Source']));
-  const customerSince = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Customer Since', 'Customer Since Date', 'Start Date']));
-  const pennyBundlePromoStatus = readTextFromAnyProperty(
-    propertyValueByCandidates(properties, ['Penny Bundle Promo Status', 'Penny Bundle Status', 'Penny Bundle']),
-  );
-  const pppStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['PPP Status']));
-  const headsetConnectionStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Headset Connection Status', 'Headset Status']));
-  const productTracking = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Product Tracking']));
-  const displayTracking = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Display Tracking']));
-
-  const contactFallback = contacts.slice(0, 3).map((contact) => contact.name).filter(Boolean).join(', ');
-
-  return {
-    contact: contactText || contactFallback || null,
-    contactEmail: contactEmail || primaryContactEmail || firstContact?.email || null,
-    contactPhone: contactPhone || primaryContactPhone || firstContact?.phone || null,
-    primaryContactName: primaryContactName || firstContact?.name || null,
-    primaryContactBuyer: primaryContactBuyer || null,
-    primaryContactEmail: primaryContactEmail || firstContact?.email || null,
-    primaryContactPhone: primaryContactPhone || firstContact?.phone || null,
-    rep: rep || store.repNames[0] || null,
-    accountManager: accountManager || null,
-    piccCreditStatus: piccCreditStatus || null,
-    accountStatus: accountStatus || store.status || null,
-    lastOrderAmount,
-    lastContacted: toIsoDate(lastContacted) ?? null,
-    lastDeliveryDate: toIsoDate(lastDeliveryDate) ?? null,
-    lastSampleOrderDate: toIsoDate(lastSampleOrderDate) ?? null,
-    lastOrderDate: toIsoDate(lastOrderDate) ?? null,
-    referralSource: referralSource || null,
-    customerSince: toIsoDate(customerSince) ?? customerSince ?? null,
-    pennyBundlePromoStatus: pennyBundlePromoStatus || null,
-    pppStatus: pppStatus || null,
-    headsetConnectionStatus: headsetConnectionStatus || null,
-    productTracking: productTracking || null,
-    displayTracking: displayTracking || null,
-  };
-}
-
-async function loadStoreMonthlyAnalytics(store: TerritoryStorePin) {
-  const orFilters: Array<{ licensedLocationId?: string; licensedLocationName?: string }> = [];
-  if (store.licenseNumber?.trim()) {
-    orFilters.push({ licensedLocationId: store.licenseNumber.trim() });
-  }
-  orFilters.push({ licensedLocationName: store.name });
-
-  const rows = await prisma.nabisOrder.findMany({
-    where: {
-      OR: orFilters,
-    },
-    select: {
-      deliveryDate: true,
-      createdAt: true,
-      orderTotal: true,
-    },
-    orderBy: {
-      deliveryDate: 'asc',
-    },
-  });
-
-  const now = new Date();
-  const monthStarts = Array.from({ length: 6 }, (_, index) => {
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (5 - index), 1));
-    return start;
-  });
-
-  const buckets = new Map(
-    monthStarts.map((start) => {
-      const key = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`;
-      return [key, { month: key, orderCount: 0, orderTotal: 0, revenue: 0 }];
-    }),
-  );
-
-  for (const row of rows) {
-    const date = row.deliveryDate ?? row.createdAt;
-    const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-    const bucket = buckets.get(key);
-    if (!bucket) {
-      continue;
-    }
-
-    const orderTotal = row.orderTotal ? Number(row.orderTotal) : 0;
-    bucket.orderCount += 1;
-    bucket.orderTotal += orderTotal;
-    bucket.revenue += orderTotal;
-  }
-
-  return [...buckets.values()];
-}
-
-export async function loadTerritoryStoreDetail(storeId: string) {
-  const snapshot = await getTerritorySnapshot();
-  const foundStore = (await loadTerritoryStoreFromReadModel(storeId)) ?? (await resolveStoreByIdentifier(snapshot.stores, storeId));
-  if (!foundStore) {
-    throw new Error('Store not found');
-  }
-  const snapshotStore = await resolveStoreByIdentifier(snapshot.stores, foundStore.id).catch(() => null);
-  const store: TerritoryStorePin = {
-    ...foundStore,
-    followUpNeeded: snapshotStore?.followUpNeeded ?? foundStore.followUpNeeded ?? null,
-    followUpReason: snapshotStore?.followUpReason ?? foundStore.followUpReason ?? null,
-  };
-
-  const contactsSnapshot = await readNotionCacheSnapshot<CachedContactRow[]>(CONTACTS_SNAPSHOT_KEY);
-  const contacts = normalizeCachedContacts(contactsSnapshot?.payload).filter((contact) =>
-    contact.accountPageIds.some((pageId) => normalizePageId(pageId) === normalizePageId(store.notionPageId)),
-  );
-
-  contacts.sort((a, b) => a.name.localeCompare(b.name));
-
-  const [checkIns, vendorDays, crm, analytics] = await Promise.all([
-    territoryCheckIns.loadStoreCheckIns(store),
-    loadStoreVendorDaySummary(store),
-    loadStoreCrmFields(store, contacts).catch(() => ({
-      contact: contacts.slice(0, 3).map((contact) => contact.name).filter(Boolean).join(', ') || null,
-      contactEmail: contacts[0]?.email ?? null,
-      contactPhone: contacts[0]?.phone ?? null,
-      primaryContactName: contacts[0]?.name ?? null,
-      primaryContactBuyer: null,
-      primaryContactEmail: contacts[0]?.email ?? null,
-      primaryContactPhone: contacts[0]?.phone ?? null,
-      rep: store.repNames[0] ?? null,
-      accountManager: null,
-      piccCreditStatus: null,
-      accountStatus: store.status ?? null,
-      lastOrderAmount: null,
-      lastContacted: null,
-      lastDeliveryDate: null,
-      lastSampleOrderDate: null,
-      lastOrderDate: null,
-      referralSource: null,
-      customerSince: null,
-      pennyBundlePromoStatus: null,
-      pppStatus: null,
-      headsetConnectionStatus: null,
-      productTracking: null,
-      displayTracking: null,
-    })),
-    loadStoreMonthlyAnalytics(store).then((monthly) => ({ monthly })).catch(() => ({ monthly: [] as Array<{ month: string; orderCount: number; orderTotal: number; revenue: number }> })),
-  ]);
-
-  return {
-    store,
-    contacts: contacts.map((contact) => ({
-      id: contact.id,
-      name: contact.name,
-      roleTitle: contact.roleTitle,
-      email: contact.email,
-      phone: contact.phone,
-      status: contact.status,
-      linkedWork: contact.linkedWork,
-    })),
-    checkIns,
-    vendorDays,
-    crm,
-    analytics,
-  };
-}
+export const loadTerritoryStoreDetail = territoryStoreDetailService.loadTerritoryStoreDetail;
 
 export async function updateTerritoryStoreFields(storeId: string, payload: { notes?: string; followUpDate?: string | null; followUpNeeded?: boolean | null; followUpReason?: string | null }) {
   const snapshot = await getTerritorySnapshot();

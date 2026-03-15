@@ -1,5 +1,20 @@
 export type RouteMode = 'car' | 'bike' | 'transit';
 
+export type TerritoryBoundaryCoordinates = [number, number][];
+
+export interface TerritoryBoundary {
+  id: string;
+  name: string;
+  description?: string | null;
+  color: string;
+  isVisibleByDefault: boolean;
+  coordinates: TerritoryBoundaryCoordinates;
+  createdByEmail?: string | null;
+  updatedByEmail?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TerritoryStorePin {
   id: string;
   notionPageId: string;
@@ -145,6 +160,10 @@ export interface TerritoryStoresResponse {
     syncing: boolean;
     syncError: string | null;
   };
+}
+
+export interface TerritoryBoundaryListResponse {
+  boundaries: TerritoryBoundary[];
 }
 
 export interface TerritoryRouteStop {

@@ -1,19 +1,21 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { AlertTriangle, Filter, ListFilter, Loader2, MapPinned, MessageCircleMore, Navigation, Plus, RefreshCw, Search } from 'lucide-react';
+import { AlertTriangle, Filter, Layers3, ListFilter, Loader2, MapPinned, MessageCircleMore, Navigation, Plus, RefreshCw, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useAppAccess } from '@/components/auth/app-access-provider';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
 import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
+import { TerritoryBoundaryEditor, TerritoryBoundarySheet, type TerritoryBoundaryEditorState } from '@/components/mobile/territory-boundary-sheet';
 import { StoreFilterSheet } from '@/components/mobile/store-filter-sheet';
 import { MapRenderBoundary } from '@/components/mobile/map-render-boundary';
 import { pinColorForStore, repColorForLabel, type PinColorMode } from '@/lib/territory/pin-colors';
-import type { TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
+import type { TerritoryBoundaryListResponse, TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +28,7 @@ const TerritoryMapMobile = dynamic(
 );
 
 const FILTER_STORAGE_KEY = 'territory-mobile-filters-v1';
+const BOUNDARY_VISIBILITY_STORAGE_KEY = 'territory-boundary-visibility-v1';
 
 type SavedFiltersPayload = {
   search: string;
@@ -55,6 +58,8 @@ function formatSavedTimestamp(value: string | null) {
 }
 
 export function TerritoryMobile() {
+  const appAccess = useAppAccess();
+  const queryClient = useQueryClient();
   const routePlan = useRoutePlan();
   const [view, setView] = useState<'map' | 'list'>('map');
   const [search, setSearch] = useState('');
@@ -74,6 +79,13 @@ export function TerritoryMobile() {
   const [draftPinColorMode, setDraftPinColorMode] = useState<PinColorMode>('status');
   const [savedFiltersAt, setSavedFiltersAt] = useState<string | null>(null);
   const [focusRequestToken, setFocusRequestToken] = useState(0);
+  const [showBoundaries, setShowBoundaries] = useState(true);
+  const [hiddenBoundaryIds, setHiddenBoundaryIds] = useState<string[]>([]);
+  const [showBoundarySheet, setShowBoundarySheet] = useState(false);
+  const [boundaryPrefsReady, setBoundaryPrefsReady] = useState(false);
+  const [boundaryEditor, setBoundaryEditor] = useState<TerritoryBoundaryEditorState | null>(null);
+  const [drawingBoundaryMode, setDrawingBoundaryMode] = useState(false);
+  const [savingBoundary, setSavingBoundary] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
@@ -127,7 +139,24 @@ export function TerritoryMobile() {
     placeholderData: (previousData) => previousData,
   });
 
+  const boundariesQuery = useQuery({
+    queryKey: ['territory-boundaries'],
+    queryFn: async () => {
+      const response = await fetch('/api/territory/boundaries', { cache: 'no-store' });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error ?? 'Failed to load territory boundaries');
+      }
+      return (await response.json()) as TerritoryBoundaryListResponse;
+    },
+    staleTime: 60000,
+    refetchOnWindowFocus: true,
+    retry: 1,
+    placeholderData: (previousData) => previousData,
+  });
+
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
+  const boundaries = useMemo(() => boundariesQuery.data?.boundaries ?? [], [boundariesQuery.data?.boundaries]);
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
   const displayedStores = useMemo(() => {
     if (!showRouteOnly) return stores;
@@ -145,6 +174,57 @@ export function TerritoryMobile() {
     if (displayedStores.some((store) => store.id === focusedId)) return;
     setFocusedId(null);
   }, [focusedId, displayedStores]);
+
+  useEffect(() => {
+    if (boundaryPrefsReady || boundariesQuery.isLoading) {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(BOUNDARY_VISIBILITY_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          showBoundaries?: boolean;
+          hiddenBoundaryIds?: string[];
+        };
+        setShowBoundaries(parsed.showBoundaries !== false);
+        setHiddenBoundaryIds(
+          Array.isArray(parsed.hiddenBoundaryIds)
+            ? parsed.hiddenBoundaryIds.filter((value): value is string => typeof value === 'string')
+            : [],
+        );
+      } else {
+        setShowBoundaries(true);
+        setHiddenBoundaryIds(boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id));
+      }
+    } catch {
+      setShowBoundaries(true);
+      setHiddenBoundaryIds(boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id));
+    } finally {
+      setBoundaryPrefsReady(true);
+    }
+  }, [boundaries, boundariesQuery.isLoading, boundaryPrefsReady]);
+
+  useEffect(() => {
+    if (!boundaryPrefsReady) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      BOUNDARY_VISIBILITY_STORAGE_KEY,
+      JSON.stringify({
+        showBoundaries,
+        hiddenBoundaryIds,
+      }),
+    );
+  }, [boundaryPrefsReady, hiddenBoundaryIds, showBoundaries]);
+
+  useEffect(() => {
+    if (boundaries.length === 0) {
+      return;
+    }
+    setHiddenBoundaryIds((current) => current.filter((boundaryId) => boundaries.some((boundary) => boundary.id === boundaryId)));
+  }, [boundaries]);
 
   const focusedStore = useMemo(() => {
     if (!focusedId) return null;
@@ -263,6 +343,115 @@ export function TerritoryMobile() {
     }
   }
 
+  function toggleBoundaryVisibility(boundaryId: string) {
+    setHiddenBoundaryIds((current) => (current.includes(boundaryId) ? current.filter((value) => value !== boundaryId) : [...current, boundaryId]));
+  }
+
+  function toggleAllBoundaries() {
+    setShowBoundaries((current) => !current);
+  }
+
+  function closeBoundaryEditor() {
+    setBoundaryEditor(null);
+    setDrawingBoundaryMode(false);
+  }
+
+  function startCreatingBoundary() {
+    setShowBoundarySheet(false);
+    setBoundaryEditor({
+      id: null,
+      name: '',
+      description: '',
+      color: '#ef4444',
+      coordinates: [],
+    });
+    setDrawingBoundaryMode(true);
+    setView('map');
+  }
+
+  function startEditingBoundary(boundary: TerritoryBoundaryListResponse['boundaries'][number]) {
+    setShowBoundarySheet(false);
+    setBoundaryEditor({
+      id: boundary.id,
+      name: boundary.name,
+      description: boundary.description ?? '',
+      color: boundary.color,
+      coordinates: boundary.coordinates,
+    });
+    setDrawingBoundaryMode(false);
+    setView('map');
+  }
+
+  async function deleteBoundary(boundary: TerritoryBoundaryListResponse['boundaries'][number]) {
+    if (!window.confirm(`Delete the "${boundary.name}" territory boundary?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/territory/boundaries/${boundary.id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error ?? 'Unable to delete territory boundary');
+      }
+
+      setHiddenBoundaryIds((current) => current.filter((value) => value !== boundary.id));
+      await queryClient.invalidateQueries({ queryKey: ['territory-boundaries'] });
+      toast.success('Territory boundary deleted');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to delete territory boundary');
+    }
+  }
+
+  async function saveBoundary() {
+    if (!boundaryEditor) {
+      return;
+    }
+
+    if (!boundaryEditor.name.trim()) {
+      toast.error('Boundary name is required.');
+      return;
+    }
+
+    if (boundaryEditor.coordinates.length < 3) {
+      toast.error('Add at least 3 points to save a territory.');
+      return;
+    }
+
+    setSavingBoundary(true);
+    try {
+      const response = await fetch(
+        boundaryEditor.id ? `/api/territory/boundaries/${boundaryEditor.id}` : '/api/territory/boundaries',
+        {
+          method: boundaryEditor.id ? 'PATCH' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: boundaryEditor.name,
+            description: boundaryEditor.description || null,
+            color: boundaryEditor.color,
+            coordinates: boundaryEditor.coordinates,
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'Unable to save territory boundary');
+      }
+
+      closeBoundaryEditor();
+      setShowBoundaries(true);
+      await queryClient.invalidateQueries({ queryKey: ['territory-boundaries'] });
+      toast.success(boundaryEditor.id ? 'Territory boundary updated' : 'Territory boundary saved');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save territory boundary');
+    } finally {
+      setSavingBoundary(false);
+    }
+  }
+
   function messageRep(store: TerritoryStorePin | null) {
     if (!store) {
       toast.error('Select a location first.');
@@ -338,6 +527,11 @@ export function TerritoryMobile() {
           <MapRenderBoundary onReset={() => setRefreshNonce((value) => value + 1)}>
             <TerritoryMapMobile
               stores={displayedStores}
+              boundaries={boundaries}
+              showBoundaries={showBoundaries}
+              hiddenBoundaryIds={hiddenBoundaryIds}
+              draftBoundary={boundaryEditor ? { ...boundaryEditor } : null}
+              drawingBoundaryMode={drawingBoundaryMode}
               selectedStopIds={routePlan.selectedStopIds}
               orderedStopIds={routePlan.orderedStopIds}
               focusedStoreId={focusedStore?.id ?? null}
@@ -345,6 +539,9 @@ export function TerritoryMobile() {
               routeCoordinates={routeCoordinates}
               pinColorMode={pinColorMode}
               onSelectStore={setFocusedId}
+              onDraftBoundaryChange={(coordinates) =>
+                setBoundaryEditor((current) => (current ? { ...current, coordinates } : current))
+              }
             />
           </MapRenderBoundary>
 
@@ -416,6 +613,14 @@ export function TerritoryMobile() {
           <div className="absolute right-2 top-3 z-[1500] flex flex-col gap-2">
             <button type="button" aria-label="Switch to list view" className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow" onClick={() => setView('list')}>
               <Search className="h-5 w-5 text-[#7f828a]" />
+            </button>
+            <button
+              type="button"
+              aria-label="Open territory layers"
+              className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showBoundaries ? 'ring-2 ring-[#cd3814]' : '')}
+              onClick={() => setShowBoundarySheet(true)}
+            >
+              <Layers3 className={cn('h-5 w-5', showBoundaries ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
             </button>
             <button
               type="button"
@@ -551,6 +756,49 @@ export function TerritoryMobile() {
         onSaveSelection={persistCurrentFilters}
         onClearAll={clearAllFilters}
         savedFiltersLabel={formatSavedTimestamp(savedFiltersAt)}
+      />
+      <TerritoryBoundarySheet
+        open={showBoundarySheet}
+        onClose={() => setShowBoundarySheet(false)}
+        boundaries={boundaries}
+        showBoundaries={showBoundaries}
+        hiddenBoundaryIds={hiddenBoundaryIds}
+        onToggleAll={toggleAllBoundaries}
+        onToggleBoundary={toggleBoundaryVisibility}
+        isAdmin={appAccess.isAdmin}
+        onCreateBoundary={startCreatingBoundary}
+        onEditBoundary={startEditingBoundary}
+        onDeleteBoundary={deleteBoundary}
+      />
+      <TerritoryBoundaryEditor
+        open={Boolean(boundaryEditor)}
+        boundary={boundaryEditor}
+        drawingMode={drawingBoundaryMode}
+        saving={savingBoundary}
+        onClose={closeBoundaryEditor}
+        onChange={(patch) => setBoundaryEditor((current) => (current ? { ...current, ...patch } : current))}
+        onSetDrawingMode={setDrawingBoundaryMode}
+        onUndoLastPoint={() =>
+          setBoundaryEditor((current) =>
+            current
+              ? {
+                  ...current,
+                  coordinates: current.coordinates.slice(0, -1),
+                }
+              : current,
+          )
+        }
+        onClearPoints={() =>
+          setBoundaryEditor((current) =>
+            current
+              ? {
+                  ...current,
+                  coordinates: [],
+                }
+              : current,
+          )
+        }
+        onSave={saveBoundary}
       />
 
       <AccountDetailSheet

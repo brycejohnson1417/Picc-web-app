@@ -2,20 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdvancedMarker, APIProvider, Map as GoogleMap, Marker, Pin, useMap } from '@vis.gl/react-google-maps';
+import { GoogleTerritoryBoundaries, type TerritoryBoundaryDraft } from '@/components/territory/google-territory-boundaries';
 import { pinColorForStore, type PinColorMode } from '@/lib/territory/pin-colors';
-import type { TerritoryStorePin } from '@/lib/territory/types';
+import type { TerritoryBoundary, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
 export type MapCameraMode = 'follow-selection' | 'manual-focus';
 
 interface GoogleTerritoryMapProps {
   stores: TerritoryStorePin[];
+  boundaries?: TerritoryBoundary[];
+  showBoundaries?: boolean;
+  hiddenBoundaryIds?: string[];
+  draftBoundary?: TerritoryBoundaryDraft | null;
+  drawingBoundaryMode?: boolean;
   selectedStopIds: string[];
   orderedStopIds: string[];
   focusedStoreId: string | null;
   routeCoordinates: [number, number][];
   pinColorMode?: PinColorMode;
   onSelectStore: (storeId: string | null) => void;
+  onDraftBoundaryChange?: (coordinates: [number, number][]) => void;
   className?: string;
   fitPadding?: number;
   maxFitZoom?: number;
@@ -48,9 +55,7 @@ type GoogleMapsApi = {
     strokeOpacity: number;
     strokeWeight: number;
   }) => GooglePolyline;
-  LatLngBounds: new () => {
-    extend: (point: RoutePoint) => void;
-  };
+  LatLngBounds: typeof google.maps.LatLngBounds;
 };
 
 type WindowWithGoogleAuthFailure = Window & {
@@ -288,12 +293,18 @@ function fallbackMarkerIcon(fillColor: string, approximate: boolean) {
 
 export function GoogleTerritoryMap({
   stores,
+  boundaries = [],
+  showBoundaries = true,
+  hiddenBoundaryIds = [],
+  draftBoundary = null,
+  drawingBoundaryMode = false,
   selectedStopIds,
   orderedStopIds,
   focusedStoreId,
   routeCoordinates,
   pinColorMode = 'status',
   onSelectStore,
+  onDraftBoundaryChange,
   className,
   fitPadding = 36,
   maxFitZoom = 12,
@@ -451,7 +462,11 @@ export function GoogleTerritoryMap({
           rotateControl={false}
           clickableIcons={false}
           className="h-full w-full"
-          onClick={() => onSelectStore(null)}
+          onClick={() => {
+            if (!drawingBoundaryMode) {
+              onSelectStore(null);
+            }
+          }}
         >
           <FitController
             stores={safeStores}
@@ -463,6 +478,14 @@ export function GoogleTerritoryMap({
             focusRequestToken={focusRequestToken}
           />
           <RouteLine routeCoordinates={routeCoordinates} />
+          <GoogleTerritoryBoundaries
+            boundaries={boundaries}
+            showBoundaries={showBoundaries}
+            hiddenBoundaryIds={hiddenBoundaryIds}
+            draftBoundary={draftBoundary}
+            drawingMode={drawingBoundaryMode}
+            onDraftCoordinatesChange={onDraftBoundaryChange}
+          />
 
           {safeStores.map((store) => {
             const focused = focusedStoreId === store.id;
