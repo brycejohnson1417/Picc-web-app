@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, EyeOff, Layers3, Pencil, Plus, Save, Trash2, Undo2, X } from 'lucide-react';
+import { Check, Eye, EyeOff, Layers3, Pencil, Plus, Save, Trash2, Undo2, X } from 'lucide-react';
 import type { TerritoryBoundary } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
@@ -9,6 +9,7 @@ export interface TerritoryBoundaryEditorState {
   name: string;
   description: string;
   color: string;
+  borderWidth: number;
   coordinates: [number, number][];
 }
 
@@ -107,7 +108,7 @@ export function TerritoryBoundarySheet({
                           <p className="truncate text-[15px] font-semibold text-[#23262d]">{boundary.name}</p>
                         </div>
                         {boundary.description ? <p className="mt-1 text-[13px] text-[#6a6e77]">{boundary.description}</p> : null}
-                        <p className="mt-1 text-[12px] text-[#8a8d95]">{boundary.coordinates.length} points</p>
+                        <p className="mt-1 text-[12px] text-[#8a8d95]">{boundary.coordinates.length} points • {boundary.borderWidth}px border</p>
                       </div>
                       <button
                         type="button"
@@ -153,7 +154,9 @@ interface TerritoryBoundaryEditorProps {
   onChange: (patch: Partial<TerritoryBoundaryEditorState>) => void;
   onSetDrawingMode: (value: boolean) => void;
   onUndoLastPoint: () => void;
+  onDeletePoint: (index: number) => void;
   onClearPoints: () => void;
+  onFinishDrawing: () => void;
   onSave: () => void;
 }
 
@@ -166,7 +169,9 @@ export function TerritoryBoundaryEditor({
   onChange,
   onSetDrawingMode,
   onUndoLastPoint,
+  onDeletePoint,
   onClearPoints,
+  onFinishDrawing,
   onSave,
 }: TerritoryBoundaryEditorProps) {
   if (!open || !boundary) {
@@ -209,6 +214,19 @@ export function TerritoryBoundaryEditor({
               className="h-[44px] w-full rounded-xl border border-[#c8c9cf] bg-white px-2 py-1"
             />
           </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Border Width</span>
+            <input
+              type="range"
+              min={1}
+              max={12}
+              step={1}
+              value={boundary.borderWidth}
+              onChange={(event) => onChange({ borderWidth: Number(event.target.value) })}
+              className="h-[44px] w-full"
+            />
+            <p className="mt-1 text-[12px] text-[#7b7e87]">{boundary.borderWidth}px</p>
+          </label>
           <label className="block md:col-span-2">
             <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Description</span>
             <input
@@ -236,11 +254,46 @@ export function TerritoryBoundaryEditor({
               <Undo2 className="h-4 w-4" />
               Undo Point
             </button>
+            <button
+              type="button"
+              onClick={onFinishDrawing}
+              disabled={boundary.coordinates.length < 3}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#9fd3aa] bg-[#effaf1] px-3 py-2 text-[13px] font-medium text-[#24703a] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" />
+              Finish Shape
+            </button>
             <button type="button" onClick={onClearPoints} className="inline-flex items-center gap-1 rounded-lg border border-[#e2b4ab] bg-[#fff4f1] px-3 py-2 text-[13px] font-medium text-[#b43819]">
               <Trash2 className="h-4 w-4" />
               Clear
             </button>
           </div>
+
+          {boundary.coordinates.length > 0 ? (
+            <div className="mb-3 rounded-xl border border-[#f0d6ce] bg-white px-3 py-3">
+              <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Points</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                {boundary.coordinates.map((point, index) => (
+                  <div key={`${point[0]}-${point[1]}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-[#ece7e4] px-2 py-2">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-semibold text-[#23262d]">Point {index + 1}</p>
+                      <p className="truncate text-[11px] text-[#7b7e87]">
+                        {point[1].toFixed(5)}, {point[0].toFixed(5)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onDeletePoint(index)}
+                      className="inline-flex items-center gap-1 rounded-md border border-[#e2b4ab] bg-[#fff4f1] px-2 py-1 text-[11px] font-medium text-[#b43819]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="flex items-center justify-between gap-3">
             <p className="text-[12px] text-[#7b7e87]">{boundary.coordinates.length} point{boundary.coordinates.length === 1 ? '' : 's'} captured</p>

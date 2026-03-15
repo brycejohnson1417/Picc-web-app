@@ -1,0 +1,2 @@
+ALTER TABLE "Territory"
+ADD COLUMN "borderWidth" INTEGER NOT NULL DEFAULT 2;

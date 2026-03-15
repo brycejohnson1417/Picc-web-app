@@ -10,6 +10,7 @@ export interface TerritoryBoundaryDraft {
   id: string | null;
   name: string;
   color: string;
+  borderWidth: number;
   coordinates: TerritoryBoundaryCoordinates;
 }
 
@@ -64,7 +65,7 @@ function BoundaryDisplayLayer({
           paths: toLatLngPath(boundary.coordinates),
           strokeColor: boundary.color,
           strokeOpacity: 0.95,
-          strokeWeight: 2,
+          strokeWeight: boundary.borderWidth,
           fillColor: boundary.color,
           fillOpacity: 0.18,
           clickable: false,
@@ -105,7 +106,7 @@ function BoundaryDraftLayer({
             paths: path,
             strokeColor: draftBoundary.color,
             strokeOpacity: 1,
-            strokeWeight: 2.5,
+            strokeWeight: draftBoundary.borderWidth,
             fillColor: draftBoundary.color,
             fillOpacity: 0.2,
             editable: true,
@@ -120,11 +121,27 @@ function BoundaryDraftLayer({
             path,
             strokeColor: draftBoundary.color,
             strokeOpacity: 1,
-            strokeWeight: 2.5,
+            strokeWeight: draftBoundary.borderWidth,
             zIndex: 3,
             map,
           })
         : null;
+
+    const pointMarkers = draftBoundary.coordinates.map(([lng, lat], index) =>
+      new google.maps.Marker({
+        position: { lng, lat },
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: index === 0 ? 5.5 : 4.5,
+          fillColor: draftBoundary.color,
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+        },
+        zIndex: 4,
+        map,
+      }),
+    );
 
     const listeners: google.maps.MapsEventListener[] = [];
     if (polygon && onDraftCoordinatesChange) {
@@ -136,6 +153,16 @@ function BoundaryDraftLayer({
       listeners.push(draftPath.addListener('remove_at', emit));
       listeners.push(draftPath.addListener('set_at', emit));
     }
+    if (onDraftCoordinatesChange) {
+      pointMarkers.forEach((marker, index) => {
+        listeners.push(
+          marker.addListener('click', () => {
+            const next = draftBoundary.coordinates.filter((_, candidateIndex) => candidateIndex !== index);
+            onDraftCoordinatesChange(next);
+          }),
+        );
+      });
+    }
 
     return () => {
       for (const listener of listeners) {
@@ -143,8 +170,9 @@ function BoundaryDraftLayer({
       }
       polygon?.setMap(null);
       polyline?.setMap(null);
+      pointMarkers.forEach((marker) => marker.setMap(null));
     };
-  }, [draftBoundary.color, draftBoundary.coordinates, map, onDraftCoordinatesChange]);
+  }, [draftBoundary.borderWidth, draftBoundary.color, draftBoundary.coordinates, map, onDraftCoordinatesChange]);
 
   return null;
 }
@@ -165,6 +193,10 @@ function BoundaryDrawingController({
       return;
     }
 
+    map.setOptions({
+      draggableCursor: 'crosshair',
+    });
+
     const listener = map.addListener('click', (event: google.maps.MapMouseEvent) => {
       const latLng = event.latLng;
       if (!latLng) {
@@ -182,6 +214,9 @@ function BoundaryDrawingController({
 
     return () => {
       listener.remove();
+      map.setOptions({
+        draggableCursor: null,
+      });
     };
   }, [draftBoundary, enabled, map, onDraftCoordinatesChange]);
 

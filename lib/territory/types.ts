@@ -7,6 +7,7 @@ export interface TerritoryBoundary {
   name: string;
   description?: string | null;
   color: string;
+  borderWidth: number;
   isVisibleByDefault: boolean;
   coordinates: TerritoryBoundaryCoordinates;
   createdByEmail?: string | null;

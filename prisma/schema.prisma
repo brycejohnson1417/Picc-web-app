@@ -857,6 +857,7 @@ model Territory {
   name          String
   description   String?
   color         String                @default("#ef4444")
+  borderWidth   Int                   @default(2)
   isVisibleByDefault Boolean          @default(true)
   geojson       Json?
   createdByEmail String?

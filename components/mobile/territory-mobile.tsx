@@ -142,15 +142,17 @@ export function TerritoryMobile() {
   const boundariesQuery = useQuery({
     queryKey: ['territory-boundaries'],
     queryFn: async () => {
-      const response = await fetch('/api/territory/boundaries', { cache: 'no-store' });
+      const response = await fetch('/api/territory/boundaries');
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.error ?? 'Failed to load territory boundaries');
       }
       return (await response.json()) as TerritoryBoundaryListResponse;
     },
-    staleTime: 60000,
-    refetchOnWindowFocus: true,
+    staleTime: 300000,
+    gcTime: 900000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 1,
     placeholderData: (previousData) => previousData,
   });
@@ -363,6 +365,7 @@ export function TerritoryMobile() {
       name: '',
       description: '',
       color: '#ef4444',
+      borderWidth: 2,
       coordinates: [],
     });
     setDrawingBoundaryMode(true);
@@ -376,6 +379,7 @@ export function TerritoryMobile() {
       name: boundary.name,
       description: boundary.description ?? '',
       color: boundary.color,
+      borderWidth: boundary.borderWidth,
       coordinates: boundary.coordinates,
     });
     setDrawingBoundaryMode(false);
@@ -432,6 +436,7 @@ export function TerritoryMobile() {
             name: boundaryEditor.name,
             description: boundaryEditor.description || null,
             color: boundaryEditor.color,
+            borderWidth: boundaryEditor.borderWidth,
             coordinates: boundaryEditor.coordinates,
           }),
         },
@@ -788,6 +793,16 @@ export function TerritoryMobile() {
               : current,
           )
         }
+        onDeletePoint={(index) =>
+          setBoundaryEditor((current) =>
+            current
+              ? {
+                  ...current,
+                  coordinates: current.coordinates.filter((_, candidateIndex) => candidateIndex !== index),
+                }
+              : current,
+          )
+        }
         onClearPoints={() =>
           setBoundaryEditor((current) =>
             current
@@ -798,6 +813,7 @@ export function TerritoryMobile() {
               : current,
           )
         }
+        onFinishDrawing={() => setDrawingBoundaryMode(false)}
         onSave={saveBoundary}
       />
 

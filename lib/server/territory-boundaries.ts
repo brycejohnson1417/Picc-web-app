@@ -16,6 +16,13 @@ function normalizeColor(value: string | null | undefined) {
   return '#ef4444';
 }
 
+function normalizeBorderWidth(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(1, Math.min(12, Math.round(value)));
+  }
+  return 2;
+}
+
 function isFiniteLngLatPair(value: unknown): value is [number, number] {
   return (
     Array.isArray(value) &&
@@ -89,6 +96,7 @@ function mapBoundary(row: {
   name: string;
   description: string | null;
   color: string;
+  borderWidth: number;
   isVisibleByDefault: boolean;
   geojson: unknown;
   createdByEmail: string | null;
@@ -106,6 +114,7 @@ function mapBoundary(row: {
     name: row.name,
     description: row.description,
     color: normalizeColor(row.color),
+    borderWidth: normalizeBorderWidth(row.borderWidth),
     isVisibleByDefault: row.isVisibleByDefault,
     coordinates,
     createdByEmail: row.createdByEmail,
@@ -124,6 +133,7 @@ export async function listTerritoryBoundaries(orgId: string) {
       name: true,
       description: true,
       color: true,
+      borderWidth: true,
       isVisibleByDefault: true,
       geojson: true,
       createdByEmail: true,
@@ -141,6 +151,7 @@ export async function createTerritoryBoundary(input: {
   name: string;
   description?: string | null;
   color?: string | null;
+  borderWidth?: number | null;
   coordinates: unknown;
   isVisibleByDefault?: boolean;
   actorEmail?: string | null;
@@ -157,6 +168,7 @@ export async function createTerritoryBoundary(input: {
       name,
       description: input.description?.trim() || null,
       color: normalizeColor(input.color),
+      borderWidth: normalizeBorderWidth(input.borderWidth),
       isVisibleByDefault: input.isVisibleByDefault ?? true,
       geojson: toGeoJsonPolygon(coordinates),
       createdByEmail: input.actorEmail?.trim().toLowerCase() || null,
@@ -167,6 +179,7 @@ export async function createTerritoryBoundary(input: {
       name: true,
       description: true,
       color: true,
+      borderWidth: true,
       isVisibleByDefault: true,
       geojson: true,
       createdByEmail: true,
@@ -189,6 +202,7 @@ export async function updateTerritoryBoundary(input: {
   name?: string;
   description?: string | null;
   color?: string | null;
+  borderWidth?: number | null;
   coordinates?: unknown;
   isVisibleByDefault?: boolean;
   actorEmail?: string | null;
@@ -209,6 +223,10 @@ export async function updateTerritoryBoundary(input: {
 
   if (input.color !== undefined) {
     updateData.color = normalizeColor(input.color);
+  }
+
+  if (input.borderWidth !== undefined) {
+    updateData.borderWidth = normalizeBorderWidth(input.borderWidth);
   }
 
   if (input.coordinates !== undefined) {
@@ -244,6 +262,7 @@ export async function updateTerritoryBoundary(input: {
       name: true,
       description: true,
       color: true,
+      borderWidth: true,
       isVisibleByDefault: true,
       geojson: true,
       createdByEmail: true,

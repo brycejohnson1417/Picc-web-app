@@ -12,6 +12,7 @@ const createBoundarySchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).optional().nullable(),
   color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional().nullable(),
+  borderWidth: z.number().int().min(1).max(12).optional().nullable(),
   isVisibleByDefault: z.boolean().optional(),
   coordinates: z.array(coordinateSchema).min(3),
 });
@@ -22,7 +23,14 @@ export async function GET() {
 
   try {
     const boundaries = await listTerritoryBoundaries(ctx.orgId);
-    return NextResponse.json({ boundaries });
+    return NextResponse.json(
+      { boundaries },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
+        },
+      },
+    );
   } catch (error) {
     return routeErrorResponse(error, {
       fallbackMessage: 'Failed to load territory boundaries',

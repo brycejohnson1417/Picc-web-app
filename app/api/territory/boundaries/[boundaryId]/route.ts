@@ -12,6 +12,7 @@ const updateBoundarySchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   description: z.string().trim().max(500).optional().nullable(),
   color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional().nullable(),
+  borderWidth: z.number().int().min(1).max(12).optional().nullable(),
   isVisibleByDefault: z.boolean().optional(),
   coordinates: z.array(coordinateSchema).min(3).optional(),
 });
