@@ -15,6 +15,7 @@ import {
   loadTerritoryStoresFromReadModel,
   patchTerritoryStoreReadModel,
   recordTerritoryCheckInEvent,
+  syncTerritoryStoreToReadModel,
   syncTerritoryStoresReadModel,
 } from '@/lib/server/territory-read-model';
 import { createTerritoryCheckInService } from '@/lib/server/notion-territory-checkins';
@@ -29,7 +30,7 @@ const NOTION_VERSION = '2022-06-28';
 const GOOGLE_GEOCODING_BASE = 'https://maps.googleapis.com/maps/api/geocode/json';
 const GEOCODE_THROTTLE_MS = 110;
 const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v1';
-const DEFAULT_SYNC_TTL_MINUTES = 20;
+const DEFAULT_SYNC_TTL_MINUTES = 5;
 const DEFAULT_STALE_SYNC_GEOCODE_LOOKUPS = 12;
 const DEFAULT_FORCE_SYNC_GEOCODE_LOOKUPS = 80;
 
@@ -50,12 +51,18 @@ type NotionDatabaseResponse = {
   properties?: Record<string, NotionPropertySchema>;
 };
 
+type NotionPageResponse = {
+  id: string;
+  last_edited_time: string;
+  parent?: {
+    type?: string;
+    database_id?: string;
+  } | null;
+  properties?: Record<string, NotionPropertyValue>;
+};
+
 type NotionQueryResponse = {
-  results?: Array<{
-    id: string;
-    last_edited_time: string;
-    properties: Record<string, NotionPropertyValue>;
-  }>;
+  results?: NotionPageResponse[];
   has_more?: boolean;
   next_cursor?: string | null;
 };
@@ -140,6 +147,7 @@ interface CachedContactRow extends TerritoryStoreContact {
 let lastGeocodeLookupAt = 0;
 const memoryGeocodeCache = new Map<string, GeocodeResult>();
 let territorySyncInFlight: Promise<void> | null = null;
+let territoryQueueSyncInFlight: Promise<void> | null = null;
 let territoryLastSyncError: string | null = null;
 const CONTACTS_SNAPSHOT_KEY = 'crm-contacts-v1';
 
@@ -735,6 +743,193 @@ async function queryAllStorePages(databaseId: string) {
   return allRows;
 }
 
+async function queryUpdatedStorePages(databaseId: string, after: string) {
+  const allRows: NotionPageResponse[] = [];
+  let startCursor: string | undefined;
+
+  while (true) {
+    const result = await notionRequest<NotionQueryResponse>(`/databases/${databaseId}/query`, {
+      method: 'POST',
+      body: JSON.stringify({
+        page_size: 100,
+        filter: {
+          timestamp: 'last_edited_time',
+          last_edited_time: {
+            after,
+          },
+        },
+        ...(startCursor ? { start_cursor: startCursor } : {}),
+      }),
+    });
+
+    allRows.push(...(result.results ?? []));
+    if (!result.has_more || !result.next_cursor) {
+      break;
+    }
+    startCursor = result.next_cursor;
+  }
+
+  return allRows;
+}
+
+async function queryStorePage(pageId: string) {
+  try {
+    const page = await notionRequest<NotionPageResponse>(`/pages/${pageId}`);
+    const parentDatabaseId = page.parent?.type === 'database_id' ? page.parent.database_id?.trim() ?? '' : '';
+    const expectedDatabaseId = requiredEnv('NOTION_MASTER_LIST_DATABASE_ID').replace(/-/g, '').toLowerCase();
+    if (!parentDatabaseId || parentDatabaseId.replace(/-/g, '').toLowerCase() !== expectedDatabaseId) {
+      return null;
+    }
+    return page;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    if (message.includes('(404)')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function mapNotionPageToTerritoryStore(
+  row: NotionPageResponse,
+  budget: GeoBudget,
+): Promise<TerritoryStorePin | null> {
+  const properties = row.properties ?? {};
+  const propertyByCandidates = (...candidates: string[]) => {
+    const normalizedCandidates = new Set(candidates.map(normalizePropertyName));
+    for (const [name, value] of Object.entries(properties)) {
+      if (normalizedCandidates.has(normalizePropertyName(name))) {
+        return value;
+      }
+    }
+    return undefined;
+  };
+
+  const name = textFromTitleProperty(properties['Dispensary Name']) || 'Untitled Store';
+  const statusName = properties['Account Status']?.status?.name ?? 'Unspecified';
+  const statusKey = normalizeStatus(statusName);
+  const repPeople = Array.isArray(properties['Rep']?.people) ? properties['Rep'].people : [];
+  const repNames = repPeople.map((person) => person?.name).filter((value: unknown): value is string => Boolean(value));
+  const repEmails = repPeople
+    .map((person) => person?.person?.email)
+    .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
+
+  const place = properties['Map Location']?.place;
+  const notionLat = typeof place?.lat === 'number' ? place.lat : null;
+  const notionLng = typeof place?.lon === 'number' ? place.lon : null;
+  const hasPlaceCoords = notionLat !== null && notionLng !== null;
+
+  const placeName = typeof place?.name === 'string' ? place.name.trim() : '';
+  const placeAddress = typeof place?.address === 'string' ? place.address.trim() : '';
+
+  const fullAddress = textFromRichTextProperty((propertyByCandidates('full address', 'address') as NotionPropertyValue | undefined) ?? properties['Full Address']);
+  const address1 = textFromRichTextProperty((propertyByCandidates('address 1', 'street address') as NotionPropertyValue | undefined) ?? properties['Address 1']);
+  const city = textFromRichTextProperty((propertyByCandidates('city') as NotionPropertyValue | undefined) ?? properties['City']);
+  const stateField = textFromRichTextProperty((propertyByCandidates('state') as NotionPropertyValue | undefined) ?? properties.State);
+  const zipcode = textFromRichTextProperty((propertyByCandidates('zipcode', 'zip code') as NotionPropertyValue | undefined) ?? properties['Zipcode']);
+  const licenseNumber = textFromRichTextProperty((propertyByCandidates('license number', 'license') as NotionPropertyValue | undefined) ?? properties['License Number']);
+  const daysOverdue = readFormulaNumber((propertyByCandidates('days overdue') as NotionPropertyValue | undefined) ?? properties['Days Overdue']);
+  const phoneNumber = readPhoneNumberProperty((propertyByCandidates('phone number', 'phone') as NotionPropertyValue | undefined) ?? properties['Phone Number']) || null;
+  const email = readEmailProperty((propertyByCandidates('email', 'email address') as NotionPropertyValue | undefined) ?? properties.Email) || null;
+  const followUpDate = readDateStartProperty((propertyByCandidates('follow-up date', 'follow up date') as NotionPropertyValue | undefined) ?? properties['Follow-up Date']) || null;
+  const followUpNeeded = readBooleanProperty((propertyByCandidates('follow-up needed', 'follow up needed') as NotionPropertyValue | undefined) ?? properties['Follow-up Needed']);
+  const followUpReason = readTextFromAnyProperty((propertyByCandidates('follow-up reason', 'follow up reason') as NotionPropertyValue | undefined) ?? properties['Follow-up Reason']) || null;
+  const notes = textFromRichTextProperty((propertyByCandidates('notes', 'account notes', 'store notes') as NotionPropertyValue | undefined) ?? properties.Notes) || null;
+  const lastCheckIn = readDateStartProperty((propertyByCandidates('last check-in', 'last check in', 'last visit') as NotionPropertyValue | undefined) ?? properties['Last Check-in']) || null;
+
+  const fallbackAddress = firstNonEmpty([fullAddress, placeAddress, [address1, city, stateField, zipcode].filter(Boolean).join(', '), placeName]);
+  const inferredCity = firstNonEmpty([city, parseCityFromAddress(fallbackAddress)]);
+  const inferredState = firstNonEmpty([
+    normalizeStateCode(stateField),
+    parseStateFromAddress(fallbackAddress),
+    inferStateFromZip(parseZipCode(zipcode)),
+  ]);
+  const cityStateQuery = firstNonEmpty([[inferredCity, inferredState].filter(Boolean).join(', '), inferredCity, inferredState]);
+
+  let lat: number | null = hasPlaceCoords ? notionLat : null;
+  let lng: number | null = hasPlaceCoords ? notionLng : null;
+  let locationSource: TerritoryStorePin['locationSource'] = hasPlaceCoords ? 'notion-place' : 'google-address-cache';
+  let locationPrecision: TerritoryStorePin['locationPrecision'] = hasPlaceCoords ? 'exact' : 'address';
+  let resolvedAddress = firstNonEmpty([placeAddress, fullAddress, placeName]);
+  let isApproximate = !hasPlaceCoords;
+
+  if (!hasPlaceCoords && fallbackAddress) {
+    const addressGeocode = await geocodeAddressWithCache(
+      fallbackAddress,
+      budget,
+      budget.remaining > 0,
+      'address',
+      inferredState,
+    );
+    if (addressGeocode) {
+      lat = addressGeocode.lat;
+      lng = addressGeocode.lng;
+      resolvedAddress = addressGeocode.formattedAddress;
+      locationSource = addressGeocode.source;
+      locationPrecision = 'address';
+      isApproximate = false;
+    }
+  }
+
+  if ((lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) && cityStateQuery) {
+    const cityGeocode = await geocodeAddressWithCache(
+      cityStateQuery,
+      budget,
+      budget.remaining > 0,
+      'city',
+      inferredState,
+    );
+    if (cityGeocode) {
+      lat = cityGeocode.lat;
+      lng = cityGeocode.lng;
+      resolvedAddress = resolvedAddress ?? cityGeocode.formattedAddress;
+      locationSource = cityGeocode.source;
+      locationPrecision = 'city';
+      isApproximate = true;
+    }
+  }
+
+  if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    lat = 0;
+    lng = 0;
+    locationSource = 'unavailable';
+    locationPrecision = 'unavailable';
+    isApproximate = true;
+    resolvedAddress = resolvedAddress ?? firstNonEmpty([fallbackAddress, cityStateQuery, inferredCity, inferredState, 'Location unavailable']);
+  }
+
+  return {
+    id: row.id,
+    notionPageId: row.id,
+    name,
+    status: statusName,
+    statusKey,
+    statusColor: colorForStatus(statusName),
+    pinKind: pinKindForStatus(statusName),
+    repNames,
+    repEmails,
+    lat,
+    lng,
+    locationLabel: firstNonEmpty([placeName, fallbackAddress]),
+    locationAddress: resolvedAddress,
+    locationSource,
+    locationPrecision,
+    isApproximate,
+    lastEditedTime: row.last_edited_time,
+    licenseNumber: licenseNumber || null,
+    city: inferredCity ?? null,
+    state: inferredState ?? parseStateFromAddress(firstNonEmpty([resolvedAddress, fullAddress, fallbackAddress])) ?? null,
+    daysOverdue,
+    phoneNumber,
+    email,
+    followUpDate,
+    followUpNeeded,
+    followUpReason,
+    notes,
+    lastCheckIn,
+  };
+}
+
 function normalizeSnapshotPayload(payload: unknown): TerritoryStorePin[] {
   if (!Array.isArray(payload)) {
     return [];
@@ -816,145 +1011,14 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
   let unresolvedLocationCount = 0;
 
   for (const row of rows) {
-    const properties = row.properties ?? {};
-    const propertyByCandidates = (...candidates: string[]) => {
-      const normalizedCandidates = new Set(candidates.map(normalizePropertyName));
-      for (const [name, value] of Object.entries(properties)) {
-        if (normalizedCandidates.has(normalizePropertyName(name))) {
-          return value;
-        }
-      }
-      return undefined;
-    };
-
-    const name = textFromTitleProperty(properties['Dispensary Name']) || 'Untitled Store';
-    const statusName = properties['Account Status']?.status?.name ?? 'Unspecified';
-    const statusKey = normalizeStatus(statusName);
-
-    const repPeople = Array.isArray(properties['Rep']?.people) ? properties['Rep'].people : [];
-    const repNames = repPeople.map((person) => person?.name).filter((value: unknown): value is string => Boolean(value));
-    const repEmails = repPeople
-      .map((person) => person?.person?.email)
-      .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
-
-    const place = properties['Map Location']?.place;
-    const notionLat = typeof place?.lat === 'number' ? place.lat : null;
-    const notionLng = typeof place?.lon === 'number' ? place.lon : null;
-    const hasPlaceCoords = notionLat !== null && notionLng !== null;
-
-    const placeName = typeof place?.name === 'string' ? place.name.trim() : '';
-    const placeAddress = typeof place?.address === 'string' ? place.address.trim() : '';
-
-    const fullAddress = textFromRichTextProperty((propertyByCandidates('full address', 'address') as NotionPropertyValue | undefined) ?? properties['Full Address']);
-    const address1 = textFromRichTextProperty((propertyByCandidates('address 1', 'street address') as NotionPropertyValue | undefined) ?? properties['Address 1']);
-    const city = textFromRichTextProperty((propertyByCandidates('city') as NotionPropertyValue | undefined) ?? properties['City']);
-    const stateField = textFromRichTextProperty((propertyByCandidates('state') as NotionPropertyValue | undefined) ?? properties.State);
-    const zipcode = textFromRichTextProperty((propertyByCandidates('zipcode', 'zip code') as NotionPropertyValue | undefined) ?? properties['Zipcode']);
-    const licenseNumber = textFromRichTextProperty((propertyByCandidates('license number', 'license') as NotionPropertyValue | undefined) ?? properties['License Number']);
-    const daysOverdue = readFormulaNumber((propertyByCandidates('days overdue') as NotionPropertyValue | undefined) ?? properties['Days Overdue']);
-    const phoneNumber = readPhoneNumberProperty((propertyByCandidates('phone number', 'phone') as NotionPropertyValue | undefined) ?? properties['Phone Number']) || null;
-    const email = readEmailProperty((propertyByCandidates('email', 'email address') as NotionPropertyValue | undefined) ?? properties.Email) || null;
-    const followUpDate = readDateStartProperty((propertyByCandidates('follow-up date', 'follow up date') as NotionPropertyValue | undefined) ?? properties['Follow-up Date']) || null;
-    const followUpNeeded = readBooleanProperty((propertyByCandidates('follow-up needed', 'follow up needed') as NotionPropertyValue | undefined) ?? properties['Follow-up Needed']);
-    const followUpReason = readTextFromAnyProperty((propertyByCandidates('follow-up reason', 'follow up reason') as NotionPropertyValue | undefined) ?? properties['Follow-up Reason']) || null;
-    const notes = textFromRichTextProperty((propertyByCandidates('notes', 'account notes', 'store notes') as NotionPropertyValue | undefined) ?? properties.Notes) || null;
-    const lastCheckIn = readDateStartProperty((propertyByCandidates('last check-in', 'last check in', 'last visit') as NotionPropertyValue | undefined) ?? properties['Last Check-in']) || null;
-
-    const fallbackAddress = firstNonEmpty([fullAddress, placeAddress, [address1, city, stateField, zipcode].filter(Boolean).join(', '), placeName]);
-    const inferredCity = firstNonEmpty([city, parseCityFromAddress(fallbackAddress)]);
-    const inferredState = firstNonEmpty([
-      normalizeStateCode(stateField),
-      parseStateFromAddress(fallbackAddress),
-      inferStateFromZip(parseZipCode(zipcode)),
-    ]);
-    const cityStateQuery = firstNonEmpty([[inferredCity, inferredState].filter(Boolean).join(', '), inferredCity, inferredState]);
-
-    let lat: number | null = hasPlaceCoords ? notionLat : null;
-    let lng: number | null = hasPlaceCoords ? notionLng : null;
-    let locationSource: TerritoryStorePin['locationSource'] = hasPlaceCoords ? 'notion-place' : 'google-address-cache';
-    let locationPrecision: TerritoryStorePin['locationPrecision'] = hasPlaceCoords ? 'exact' : 'address';
-    let resolvedAddress = firstNonEmpty([placeAddress, fullAddress, placeName]);
-    let isApproximate = !hasPlaceCoords;
-
-    if (!hasPlaceCoords && fallbackAddress) {
-      const addressGeocode = await geocodeAddressWithCache(
-        fallbackAddress,
-        geocodeBudget,
-        geocodeBudget.remaining > 0,
-        'address',
-        inferredState,
-      );
-      if (addressGeocode) {
-        lat = addressGeocode.lat;
-        lng = addressGeocode.lng;
-        resolvedAddress = addressGeocode.formattedAddress;
-        locationSource = addressGeocode.source;
-        locationPrecision = 'address';
-        isApproximate = false;
-      }
+    const pin = await mapNotionPageToTerritoryStore(row, geocodeBudget);
+    if (!pin) {
+      continue;
     }
 
-    if ((lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) && cityStateQuery) {
-      const cityGeocode = await geocodeAddressWithCache(
-        cityStateQuery,
-        geocodeBudget,
-        geocodeBudget.remaining > 0,
-        'city',
-        inferredState,
-      );
-      if (cityGeocode) {
-        lat = cityGeocode.lat;
-        lng = cityGeocode.lng;
-        resolvedAddress = resolvedAddress ?? cityGeocode.formattedAddress;
-        locationSource = cityGeocode.source;
-        locationPrecision = 'city';
-        isApproximate = true;
-      }
-    }
-
-    if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    if (pin.locationPrecision === 'unavailable') {
       unresolvedLocationCount += 1;
-      lat = 0;
-      lng = 0;
-      locationSource = 'unavailable';
-      locationPrecision = 'unavailable';
-      isApproximate = true;
-      resolvedAddress = resolvedAddress ?? firstNonEmpty([fallbackAddress, cityStateQuery, inferredCity, inferredState, 'Location unavailable']);
     }
-
-    const resolvedLat: number = lat!;
-    const resolvedLng: number = lng!;
-
-    const pin: TerritoryStorePin = {
-      id: row.id,
-      notionPageId: row.id,
-      name,
-      status: statusName,
-      statusKey,
-      statusColor: colorForStatus(statusName),
-      pinKind: pinKindForStatus(statusName),
-      repNames,
-      repEmails,
-      lat: resolvedLat,
-      lng: resolvedLng,
-      locationLabel: firstNonEmpty([placeName, fallbackAddress]),
-      locationAddress: resolvedAddress,
-      locationSource,
-      locationPrecision,
-      isApproximate,
-      lastEditedTime: row.last_edited_time,
-      licenseNumber: licenseNumber || null,
-      city: inferredCity ?? null,
-      state: inferredState ?? parseStateFromAddress(firstNonEmpty([resolvedAddress, fullAddress, fallbackAddress])) ?? null,
-      daysOverdue,
-      phoneNumber,
-      email,
-      followUpDate,
-      followUpNeeded,
-      followUpReason,
-      notes,
-      lastCheckIn,
-    };
 
     if (!lastEditedMax || row.last_edited_time > lastEditedMax) {
       lastEditedMax = row.last_edited_time;
@@ -986,6 +1050,70 @@ async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?:
   return {
     snapshot,
     geocodedThisSync: geocodeBudget.lookedUp,
+  };
+}
+
+async function syncTerritorySnapshotIncrementalFromNotion(input: {
+  after: string;
+  maxLiveGeocodeLookups?: number;
+}) {
+  const existingSnapshot = await readNotionCacheSnapshot<TerritoryStorePin[]>(TERRITORY_SNAPSHOT_KEY);
+  if (!existingSnapshot) {
+    return syncTerritorySnapshotFromNotion(input);
+  }
+
+  const schema = await fetchAndValidateDatabaseSchema();
+  if (schema.missingFields.length > 0) {
+    throw new Error(`Notion schema missing required fields: ${schema.missingFields.join(', ')}`);
+  }
+
+  const rows = await queryUpdatedStorePages(schema.databaseId, input.after);
+  const geocodeBudget: GeoBudget = {
+    remaining: Math.max(0, input.maxLiveGeocodeLookups ?? 0),
+    lookedUp: 0,
+  };
+
+  const payloadById = new Map(
+    normalizeSnapshotPayload(existingSnapshot.payload).map((store) => [normalizePageId(store.id), store]),
+  );
+  let lastEditedMax = existingSnapshot.lastEditedMax;
+  const changedStores: TerritoryStorePin[] = [];
+
+  for (const row of rows) {
+    const store = await mapNotionPageToTerritoryStore(row, geocodeBudget);
+    if (!store) {
+      continue;
+    }
+    payloadById.set(normalizePageId(store.id), store);
+    changedStores.push(store);
+    lastEditedMax = maxIsoDate(lastEditedMax, store.lastEditedTime);
+  }
+
+  const nextPayload = [...payloadById.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  await writeNotionCacheSnapshot<TerritoryStorePin[]>({
+    key: TERRITORY_SNAPSHOT_KEY,
+    payload: nextPayload,
+    recordsRead: Math.max(existingSnapshot.recordsRead, nextPayload.length),
+    unresolvedLocationCount: nextPayload.filter((store) => store.locationPrecision === 'unavailable').length,
+    lastEditedMax,
+  });
+
+  for (const store of changedStores) {
+    await syncTerritoryStoreToReadModel(store);
+  }
+
+  return {
+    snapshot: {
+      key: TERRITORY_SNAPSHOT_KEY,
+      payload: nextPayload,
+      recordsRead: Math.max(existingSnapshot.recordsRead, nextPayload.length),
+      unresolvedLocationCount: nextPayload.filter((store) => store.locationPrecision === 'unavailable').length,
+      lastEditedMax,
+      syncedAt: new Date().toISOString(),
+    } satisfies NotionCacheSnapshot<TerritoryStorePin[]>,
+    geocodedThisSync: geocodeBudget.lookedUp,
+    changedCount: changedStores.length,
   };
 }
 
@@ -1053,11 +1181,26 @@ async function getTerritorySnapshot(input?: {
         stale = true;
       }
     } else {
-      stale = true;
-      startTerritoryBackgroundSync({
-        maxLiveGeocodeLookups: input?.maxLiveGeocodeLookups ?? defaultGeocodeBudget,
-      });
-      syncing = true;
+      try {
+        const synced = cached.lastEditedMax
+          ? await syncTerritorySnapshotIncrementalFromNotion({
+              after: cached.lastEditedMax,
+              maxLiveGeocodeLookups: input?.maxLiveGeocodeLookups ?? defaultGeocodeBudget,
+            })
+          : await syncTerritorySnapshotFromNotion({
+              maxLiveGeocodeLookups: input?.maxLiveGeocodeLookups ?? defaultGeocodeBudget,
+            });
+        cached = synced.snapshot;
+        geocodedThisRequest = synced.geocodedThisSync;
+        syncError = null;
+      } catch (error) {
+        stale = true;
+        syncError = error instanceof Error ? error.message : 'Territory sync failed';
+        startTerritoryBackgroundSync({
+          maxLiveGeocodeLookups: input?.maxLiveGeocodeLookups ?? defaultGeocodeBudget,
+        });
+        syncing = true;
+      }
     }
   }
 
@@ -1154,6 +1297,187 @@ async function patchStoreInSnapshot(storeId: string, updater: (store: TerritoryS
   });
 }
 
+function maxIsoDate(left: string | null | undefined, right: string | null | undefined) {
+  if (!left) return right ?? null;
+  if (!right) return left;
+  return left >= right ? left : right;
+}
+
+async function upsertStoreInSnapshot(store: TerritoryStorePin) {
+  const snapshot = await readNotionCacheSnapshot<TerritoryStorePin[]>(TERRITORY_SNAPSHOT_KEY);
+  const payload = normalizeSnapshotPayload(snapshot?.payload);
+  const normalizedStoreId = normalizePageId(store.id);
+  const nextPayload = payload.filter(
+    (entry) => normalizePageId(entry.id) !== normalizedStoreId && normalizePageId(entry.notionPageId) !== normalizedStoreId,
+  );
+  nextPayload.push(store);
+  nextPayload.sort((a, b) => a.name.localeCompare(b.name));
+
+  await writeNotionCacheSnapshot({
+    key: TERRITORY_SNAPSHOT_KEY,
+    payload: nextPayload,
+    recordsRead: Math.max(snapshot?.recordsRead ?? 0, nextPayload.length),
+    unresolvedLocationCount: nextPayload.filter((entry) => entry.locationPrecision === 'unavailable').length,
+    lastEditedMax: maxIsoDate(snapshot?.lastEditedMax, store.lastEditedTime),
+  });
+}
+
+async function enqueueTerritoryStoreSync(pageId: string, input?: { reason?: string }) {
+  const orgId = territoryOrgId();
+  const notionPageId = pageId.trim();
+  if (!notionPageId) {
+    return;
+  }
+
+  await prisma.territoryStoreSyncJob.upsert({
+    where: {
+      orgId_notionPageId: {
+        orgId,
+        notionPageId,
+      },
+    },
+    create: {
+      orgId,
+      notionPageId,
+      reason: input?.reason ?? 'webhook',
+      status: 'pending',
+    },
+    update: {
+      reason: input?.reason ?? 'webhook',
+      status: 'pending',
+      completedAt: null,
+      lastError: null,
+    },
+  });
+}
+
+async function syncTerritoryStoreByPageId(
+  pageId: string,
+  input?: { maxLiveGeocodeLookups?: number },
+) {
+  const page = await queryStorePage(pageId);
+  if (!page) {
+    return {
+      ok: true as const,
+      ignored: 'not-master-list-page',
+    };
+  }
+
+  const geocodeBudget: GeoBudget = {
+    remaining: Math.max(0, input?.maxLiveGeocodeLookups ?? 0),
+    lookedUp: 0,
+  };
+  const store = await mapNotionPageToTerritoryStore(page, geocodeBudget);
+  if (!store) {
+    return {
+      ok: true as const,
+      ignored: 'not-parseable-store',
+    };
+  }
+
+  await Promise.all([upsertStoreInSnapshot(store), syncTerritoryStoreToReadModel(store)]);
+
+  return {
+    ok: true as const,
+    storeId: store.id,
+    notionPageId: store.notionPageId,
+    geocoded: geocodeBudget.lookedUp,
+  };
+}
+
+export async function processPendingTerritoryStoreSyncQueue(input?: {
+  limit?: number;
+  maxLiveGeocodeLookups?: number;
+}) {
+  if (territoryQueueSyncInFlight) {
+    await territoryQueueSyncInFlight;
+    return { processed: 0, queued: 0 };
+  }
+
+  const orgId = territoryOrgId();
+  const limit = Math.max(1, Math.min(input?.limit ?? 12, 50));
+
+  territoryQueueSyncInFlight = (async () => {
+    const jobs = await prisma.territoryStoreSyncJob.findMany({
+      where: {
+        orgId,
+        status: {
+          in: ['pending', 'error'],
+        },
+        attemptCount: {
+          lt: 5,
+        },
+      },
+      orderBy: [{ queuedAt: 'asc' }, { updatedAt: 'asc' }],
+      take: limit,
+    });
+
+    for (const job of jobs) {
+      await prisma.territoryStoreSyncJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'processing',
+          attemptCount: {
+            increment: 1,
+          },
+          lastAttemptedAt: new Date(),
+        },
+      });
+
+      try {
+        const result = await syncTerritoryStoreByPageId(job.notionPageId, {
+          maxLiveGeocodeLookups: input?.maxLiveGeocodeLookups ?? 0,
+        });
+
+        await prisma.territoryStoreSyncJob.update({
+          where: { id: job.id },
+          data: {
+            status: 'completed',
+            completedAt: new Date(),
+            lastError: result.ok && 'ignored' in result ? result.ignored : null,
+          },
+        });
+      } catch (error) {
+        await prisma.territoryStoreSyncJob.update({
+          where: { id: job.id },
+          data: {
+            status: 'error',
+            lastError: error instanceof Error ? error.message : 'Territory store sync failed',
+          },
+        });
+      }
+    }
+  })();
+
+  try {
+    await territoryQueueSyncInFlight;
+  } finally {
+    territoryQueueSyncInFlight = null;
+  }
+
+  const [processed, queued] = await Promise.all([
+    prisma.territoryStoreSyncJob.count({
+      where: {
+        orgId,
+        status: 'completed',
+        completedAt: {
+          gte: new Date(Date.now() - 5 * 60_000),
+        },
+      },
+    }),
+    prisma.territoryStoreSyncJob.count({
+      where: {
+        orgId,
+        status: {
+          in: ['pending', 'error', 'processing'],
+        },
+      },
+    }),
+  ]);
+
+  return { processed, queued };
+}
+
 const territoryCheckIns = createTerritoryCheckInService({
   notionRequest,
   getTerritorySnapshot,
@@ -1168,6 +1492,7 @@ const territoryCheckIns = createTerritoryCheckInService({
 
 export const syncTerritoryCheckInMirrorForStore = territoryCheckIns.syncTerritoryCheckInMirrorForStore;
 export const syncTerritoryCheckInMirrorByPageId = territoryCheckIns.syncTerritoryCheckInMirrorByPageId;
+export { enqueueTerritoryStoreSync };
 
 const territoryStoreDetailService = createTerritoryStoreDetailService({
   getTerritorySnapshot,
@@ -1401,8 +1726,11 @@ export async function loadTerritoryStores(input?: {
   let sourceEngine: TerritoryStoresResponse['meta']['sourceEngine'] | undefined;
 
   try {
-    await syncTerritoryStoresReadModel(snapshot.stores);
-    const readModel = await loadTerritoryStoresFromReadModel(selection);
+    let readModel = await loadTerritoryStoresFromReadModel(selection);
+    if (readModel.recordsRead === 0 && snapshot.stores.length > 0) {
+      await syncTerritoryStoresReadModel(snapshot.stores);
+      readModel = await loadTerritoryStoresFromReadModel(selection);
+    }
     stores = readModel.stores.map((store) => {
       const snapshotStore = snapshotById.get(store.id);
       return {

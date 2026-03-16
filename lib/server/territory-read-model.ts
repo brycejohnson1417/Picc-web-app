@@ -240,6 +240,92 @@ function isMissingColumnError(error: unknown) {
   return message.includes('does not exist');
 }
 
+function buildTerritoryReadModelRow(
+  store: TerritoryStorePin,
+  orgId: string,
+  input: {
+    checkInCount: number;
+    purchaseScore: number;
+  },
+) {
+  const metrics = metricForStore(store, input.checkInCount, input.purchaseScore);
+
+  return {
+    id: store.id,
+    orgId,
+    notionPageId: store.notionPageId,
+    name: store.name,
+    status: store.status,
+    statusKey: store.statusKey,
+    statusColor: store.statusColor,
+    pinKind: store.pinKind,
+    repNames: store.repNames,
+    repEmails: store.repEmails,
+    lat: store.lat,
+    lng: store.lng,
+    locationLabel: store.locationLabel,
+    locationAddress: store.locationAddress,
+    locationSource: store.locationSource,
+    locationPrecision: store.locationPrecision,
+    isApproximate: store.isApproximate,
+    lastEditedTime: new Date(store.lastEditedTime),
+    licenseNumber: store.licenseNumber ?? null,
+    city: store.city ?? null,
+    state: store.state ?? null,
+    daysOverdue: typeof store.daysOverdue === 'number' ? Math.trunc(store.daysOverdue) : null,
+    phoneNumber: store.phoneNumber ?? null,
+    email: store.email ?? null,
+    followUpDate: store.followUpDate ? new Date(store.followUpDate) : null,
+    notes: store.notes ?? null,
+    lastCheckIn: store.lastCheckIn ? new Date(store.lastCheckIn) : null,
+    interactionsScore: metrics.interactionsScore,
+    purchasesScore: metrics.purchasesScore,
+    followUpUrgencyScore: metrics.followUpUrgencyScore,
+  };
+}
+
+async function syncMatchedAccountForStoreRow(
+  row: ReturnType<typeof buildTerritoryReadModelRow>,
+  orgId: string,
+) {
+  const matchedAccount = await prisma.account.findFirst({
+    where: {
+      orgId,
+      OR: [
+        row.licenseNumber?.trim() ? { licenseNumber: row.licenseNumber } : undefined,
+        row.name.trim() ? { name: row.name } : undefined,
+      ].filter(Boolean) as Prisma.AccountWhereInput[],
+    },
+    select: {
+      id: true,
+      notionPageId: true,
+      geoLat: true,
+      geoLng: true,
+    },
+  });
+
+  if (!matchedAccount) {
+    return;
+  }
+
+  if (
+    matchedAccount.notionPageId === row.notionPageId &&
+    sameNullableNumber(matchedAccount.geoLat, row.lat) &&
+    sameNullableNumber(matchedAccount.geoLng, row.lng)
+  ) {
+    return;
+  }
+
+  await prisma.account.update({
+    where: { id: matchedAccount.id },
+    data: {
+      notionPageId: row.notionPageId,
+      geoLat: row.lat,
+      geoLng: row.lng,
+    },
+  });
+}
+
 export function filterTerritoryPins(
   pins: TerritoryStorePin[],
   input: {
@@ -341,48 +427,15 @@ export async function syncTerritoryStoresReadModel(stores: TerritoryStorePin[], 
     checkInCountByStore.set(row.storeId, row._count.storeId);
   }
 
-  const rows = stores.map((store) => {
-    const checkInCount = checkInCountByStore.get(store.id) ?? 0;
-    const purchaseScore =
-      purchaseScoreByKey.get(normalizeKey(store.licenseNumber ?? '')) ??
-      purchaseScoreByKey.get(normalizeKey(store.name)) ??
-      0;
-
-    const metrics = metricForStore(store, checkInCount, purchaseScore);
-
-    return {
-      id: store.id,
-      orgId,
-      notionPageId: store.notionPageId,
-      name: store.name,
-      status: store.status,
-      statusKey: store.statusKey,
-      statusColor: store.statusColor,
-      pinKind: store.pinKind,
-      repNames: store.repNames,
-      repEmails: store.repEmails,
-      lat: store.lat,
-      lng: store.lng,
-      locationLabel: store.locationLabel,
-      locationAddress: store.locationAddress,
-      locationSource: store.locationSource,
-      locationPrecision: store.locationPrecision,
-      isApproximate: store.isApproximate,
-      lastEditedTime: new Date(store.lastEditedTime),
-      licenseNumber: store.licenseNumber ?? null,
-      city: store.city ?? null,
-      state: store.state ?? null,
-      daysOverdue: typeof store.daysOverdue === 'number' ? Math.trunc(store.daysOverdue) : null,
-      phoneNumber: store.phoneNumber ?? null,
-      email: store.email ?? null,
-      followUpDate: store.followUpDate ? new Date(store.followUpDate) : null,
-      notes: store.notes ?? null,
-      lastCheckIn: store.lastCheckIn ? new Date(store.lastCheckIn) : null,
-      interactionsScore: metrics.interactionsScore,
-      purchasesScore: metrics.purchasesScore,
-      followUpUrgencyScore: metrics.followUpUrgencyScore,
-    };
-  });
+  const rows = stores.map((store) =>
+    buildTerritoryReadModelRow(store, orgId, {
+      checkInCount: checkInCountByStore.get(store.id) ?? 0,
+      purchaseScore:
+        purchaseScoreByKey.get(normalizeKey(store.licenseNumber ?? '')) ??
+        purchaseScoreByKey.get(normalizeKey(store.name)) ??
+        0,
+    }),
+  );
 
   const dedupedRows = [...new Map(rows.map((row) => [row.id, row])).values()];
 
@@ -500,6 +553,82 @@ export async function syncTerritoryStoresReadModel(stores: TerritoryStorePin[], 
 
   return {
     count: dedupedRows.length,
+    orgId,
+  };
+}
+
+export async function syncTerritoryStoreToReadModel(store: TerritoryStorePin, input?: { orgId?: string }) {
+  const orgId = orgIdOrDefault(input?.orgId);
+  const [purchaseScoreByKey, checkInCount] = await Promise.all([
+    getPurchaseScoreByKey(orgId),
+    prisma.checkIn.count({
+      where: {
+        orgId,
+        storeId: store.id,
+      },
+    }),
+  ]);
+
+  const row = buildTerritoryReadModelRow(store, orgId, {
+    checkInCount,
+    purchaseScore:
+      purchaseScoreByKey.get(normalizeKey(store.licenseNumber ?? '')) ??
+      purchaseScoreByKey.get(normalizeKey(store.name)) ??
+      0,
+  });
+
+  try {
+    await prisma.territoryStoreReadModel.upsert({
+      where: { id: row.id },
+      create: row,
+      update: {
+        ...row,
+        orgId: undefined,
+        id: undefined,
+      },
+    });
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    const legacyRow = {
+      ...row,
+      locationPrecision: undefined,
+      isApproximate: undefined,
+    };
+
+    await prisma.territoryStoreReadModel.upsert({
+      where: { id: legacyRow.id },
+      create: legacyRow,
+      update: {
+        ...legacyRow,
+        orgId: undefined,
+        id: undefined,
+      },
+    });
+  }
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `UPDATE "TerritoryStoreReadModel" SET "geoPoint" = ST_SetSRID(ST_MakePoint("lng", "lat"), 4326) WHERE "id" = $1`,
+      row.id,
+    );
+  } catch (error) {
+    console.warn('territory_read_model_single_geo_update_failed', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  await syncMatchedAccountForStoreRow(row, orgId);
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE "Account" SET "geoPoint" = ST_SetSRID(ST_MakePoint("geoLng", "geoLat"), 4326) WHERE "orgId" = $1 AND "geoLat" IS NOT NULL AND "geoLng" IS NOT NULL`,
+    orgId,
+  );
+
+  return {
+    id: row.id,
     orgId,
   };
 }

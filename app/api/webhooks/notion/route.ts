@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Webhook } from 'standardwebhooks';
-import { syncTerritoryCheckInMirrorByPageId } from '@/lib/server/notion-territory';
+import { enqueueTerritoryStoreSync, syncTerritoryCheckInMirrorByPageId } from '@/lib/server/notion-territory';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,8 +43,12 @@ function resolvePageId(payload: NotionWebhookPayload) {
   return null;
 }
 
-function shouldHandleEvent(type: string | undefined) {
+function isCommentEvent(type: string | undefined) {
   return type === 'comment.created' || type === 'comment.updated';
+}
+
+function isPageEvent(type: string | undefined) {
+  return typeof type === 'string' && type.startsWith('page.');
 }
 
 export async function POST(request: Request) {
@@ -82,13 +86,27 @@ export async function POST(request: Request) {
     }
   }
 
-  if (!shouldHandleEvent(parsedPayload.type)) {
+  if (!isCommentEvent(parsedPayload.type) && !isPageEvent(parsedPayload.type)) {
     return NextResponse.json({ ok: true, ignored: parsedPayload.type ?? 'unknown' });
   }
 
   const pageId = resolvePageId(parsedPayload);
   if (!pageId) {
     return NextResponse.json({ ok: true, ignored: 'missing-page-id' });
+  }
+
+  if (isPageEvent(parsedPayload.type)) {
+    await enqueueTerritoryStoreSync(pageId, {
+      reason: parsedPayload.type,
+    }).catch((error) => ({
+      error: error instanceof Error ? error.message : 'Failed to queue territory page sync',
+    }));
+
+    return NextResponse.json({
+      ok: true,
+      type: parsedPayload.type,
+      queuedPageId: pageId,
+    });
   }
 
   const result = await syncTerritoryCheckInMirrorByPageId(pageId, {

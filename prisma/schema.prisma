@@ -138,6 +138,7 @@ model OrganizationWorkspace {
   territories     Territory[]
   checkIns        CheckIn[]
   territoryCheckInMirrors TerritoryCheckInMirror[]
+  territorySyncJobs TerritoryStoreSyncJob[]
   territoryStores TerritoryStoreReadModel[]
   territoryFilterPresets TerritoryFilterPreset[]
   appSessionAudits AppSessionAudit[]
@@ -927,6 +928,25 @@ model TerritoryCheckInMirror {
 
   @@index([orgId, storeId, happenedAt])
   @@index([notionPageId, happenedAt])
+}
+
+model TerritoryStoreSyncJob {
+  id             String                @id @default(cuid())
+  orgId          String
+  org            OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  notionPageId   String
+  status         String                @default("pending")
+  reason         String                @default("webhook")
+  attemptCount   Int                   @default(0)
+  queuedAt       DateTime              @default(now())
+  lastAttemptedAt DateTime?
+  completedAt    DateTime?
+  lastError      String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([orgId, notionPageId])
+  @@index([orgId, status, queuedAt])
 }
 
 model AppSessionAudit {

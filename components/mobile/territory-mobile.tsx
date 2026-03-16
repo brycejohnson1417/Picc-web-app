@@ -147,7 +147,7 @@ export function TerritoryMobile() {
     },
     staleTime: 30000,
     refetchOnWindowFocus: true,
-    refetchInterval: 15000,
+    refetchInterval: 45000,
     retry: 1,
     placeholderData: (previousData) => previousData,
   });

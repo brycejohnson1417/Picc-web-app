@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
-import { loadTerritoryStores } from '@/lib/server/notion-territory';
+import { loadTerritoryStores, processPendingTerritoryStoreSyncQueue } from '@/lib/server/notion-territory';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +30,11 @@ export async function GET(request: Request) {
   const refresh = searchParams.get('refresh') === '1';
 
   try {
+    await processPendingTerritoryStoreSyncQueue({
+      limit: refresh ? 24 : 8,
+      maxLiveGeocodeLookups: 0,
+    }).catch(() => null);
+
     const payload = await loadTerritoryStores({
       statuses,
       reps,
