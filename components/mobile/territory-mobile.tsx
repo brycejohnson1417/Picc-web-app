@@ -91,6 +91,7 @@ export function TerritoryMobile() {
   const [boundaryEditor, setBoundaryEditor] = useState<TerritoryBoundaryEditorState | null>(null);
   const [drawingBoundaryMode, setDrawingBoundaryMode] = useState(false);
   const [savingBoundary, setSavingBoundary] = useState(false);
+  const [showRepLegend, setShowRepLegend] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
@@ -287,6 +288,12 @@ export function TerritoryMobile() {
         return a.label.localeCompare(b.label);
       });
   }, [displayedStores, pinColorMode]);
+
+  useEffect(() => {
+    if (pinColorMode !== 'rep') {
+      setShowRepLegend(false);
+    }
+  }, [pinColorMode]);
 
   const highlightedSearchStore = useMemo(() => {
     const query = debouncedMapSearch.trim().toLowerCase();
@@ -704,19 +711,30 @@ export function TerritoryMobile() {
           ) : null}
 
           {pinColorMode === 'rep' && repLegend.length > 0 ? (
-            <div className={cn('absolute left-3 z-[1500] max-h-[40vh] max-w-[240px] overflow-y-auto rounded-xl bg-black/70 px-2.5 py-2 text-white', focusedStore ? 'bottom-[148px]' : 'bottom-12')}>
-              <p className="mb-1 text-[11px] uppercase tracking-wide text-white/70">Rep Colors</p>
-              <div className="space-y-1">
-                {repLegend.map((entry) => (
-                  <div key={entry.label} className="flex items-center justify-between gap-3 text-[12px]">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                      <span className="truncate">{entry.label}</span>
-                    </span>
-                    <span className="text-white/70">{entry.count}</span>
+            <div className={cn('absolute left-3 z-[1500]', focusedStore ? 'bottom-[148px]' : 'bottom-12')}>
+              <button
+                type="button"
+                className="rounded-full bg-black/70 px-3 py-2 text-[12px] font-semibold text-white shadow"
+                onClick={() => setShowRepLegend((current) => !current)}
+              >
+                {showRepLegend ? 'Hide rep colors' : `Rep colors (${repLegend.length})`}
+              </button>
+              {showRepLegend ? (
+                <div className="mt-2 max-h-[40vh] max-w-[240px] overflow-y-auto rounded-xl bg-black/70 px-2.5 py-2 text-white">
+                  <p className="mb-1 text-[11px] uppercase tracking-wide text-white/70">Rep Colors</p>
+                  <div className="space-y-1">
+                    {repLegend.map((entry) => (
+                      <div key={entry.label} className="flex items-center justify-between gap-3 text-[12px]">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                          <span className="truncate">{entry.label}</span>
+                        </span>
+                        <span className="text-white/70">{entry.count}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
