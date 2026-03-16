@@ -11,6 +11,7 @@ export type MapCameraMode = 'follow-selection' | 'manual-focus';
 
 interface GoogleTerritoryMapProps {
   stores: TerritoryStorePin[];
+  repColorMap?: Map<string, string>;
   boundaries?: TerritoryBoundary[];
   showBoundaries?: boolean;
   hiddenBoundaryIds?: string[];
@@ -332,6 +333,7 @@ function fallbackMarkerIcon(fillColor: string, approximate: boolean, scale = 1) 
 
 export function GoogleTerritoryMap({
   stores,
+  repColorMap,
   boundaries = [],
   showBoundaries = true,
   hiddenBoundaryIds = [],
@@ -544,10 +546,10 @@ export function GoogleTerritoryMap({
                   key={store.id}
                   position={{ lat: store.lat, lng: store.lng }}
                   onClick={() => onSelectStore(store.id)}
-                  title={store.name}
+                    title={store.name}
                 >
                   <Pin
-                    background={pinColorForStore(store, pinColorMode)}
+                    background={pinColorForStore(store, pinColorMode, repColorMap)}
                     borderColor={approximate ? '#111827' : '#ffffff'}
                     glyphColor="#ffffff"
                     scale={scale}
@@ -565,7 +567,7 @@ export function GoogleTerritoryMap({
                 title={store.name}
                 opacity={approximate ? 0.78 : 1}
                 icon={{
-                  url: fallbackMarkerIcon(pinColorForStore(store, pinColorMode), approximate, scale),
+                  url: fallbackMarkerIcon(pinColorForStore(store, pinColorMode, repColorMap), approximate, scale),
                 }}
               />
             );

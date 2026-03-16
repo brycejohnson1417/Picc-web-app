@@ -14,7 +14,7 @@ import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
 import { TerritoryBoundaryEditor, TerritoryBoundarySheet, type TerritoryBoundaryEditorState } from '@/components/mobile/territory-boundary-sheet';
 import { StoreFilterSheet } from '@/components/mobile/store-filter-sheet';
 import { MapRenderBoundary } from '@/components/mobile/map-render-boundary';
-import { pinColorForStore, repColorForLabel, type PinColorMode } from '@/lib/territory/pin-colors';
+import { createRepColorMap, pinColorForStore, type PinColorMode } from '@/lib/territory/pin-colors';
 import type { TerritoryBoundaryListResponse, TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import { cn } from '@/lib/utils';
@@ -278,8 +278,9 @@ export function TerritoryMobile() {
       const label = store.repNames.find((name) => name.trim().length > 0) ?? 'Unassigned';
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
+    const colorMap = createRepColorMap([...counts.keys()]);
     return [...counts.entries()]
-      .map(([label, count]) => ({ label, count, color: repColorForLabel(label) }))
+      .map(([label, count]) => ({ label, count, color: colorMap.get(label) ?? '#64748b' }))
       .sort((a, b) => {
         const countDiff = b.count - a.count;
         if (countDiff !== 0) {
@@ -288,6 +289,8 @@ export function TerritoryMobile() {
         return a.label.localeCompare(b.label);
       });
   }, [displayedStores, pinColorMode]);
+
+  const repColorMap = useMemo(() => createRepColorMap(repLegend.map((entry) => entry.label)), [repLegend]);
 
   useEffect(() => {
     if (pinColorMode !== 'rep') {
@@ -645,6 +648,7 @@ export function TerritoryMobile() {
               focusRequestToken={focusRequestToken}
               routeCoordinates={routeCoordinates}
               pinColorMode={pinColorMode}
+              repColorMap={repColorMap}
               onSelectStore={setFocusedId}
               onDraftBoundaryChange={(coordinates) =>
                 setBoundaryEditor((current) => (current ? { ...current, coordinates } : current))
@@ -819,7 +823,7 @@ export function TerritoryMobile() {
               <div className="border-b border-[#c6c7cb] px-1 py-2 text-[38px] text-[#8a8d95]">{letter}</div>
               {list.map((store) => {
                 const selected = routePlan.selectedStopIds.includes(store.id);
-                const pinColor = pinColorForStore(store, pinColorMode);
+                const pinColor = pinColorForStore(store, pinColorMode, repColorMap);
                 return (
                   <button
                     key={store.id}
@@ -870,7 +874,7 @@ export function TerritoryMobile() {
             </button>
             <div className="grid grid-cols-[1fr_56px_56px] border-b border-[#30333b]">
               <button type="button" className="flex items-center gap-2 px-3 py-2 text-[14px] text-[#d5d9e1]" onClick={() => messageRep(focusedStore)}>
-                <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: pinColorForStore(focusedStore, pinColorMode) }} />
+                <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: pinColorForStore(focusedStore, pinColorMode, repColorMap) }} />
                 {focusedStore.repNames[0] ?? 'Unassigned'}
               </button>
               <button type="button" onClick={() => routePlan.toggleStop(focusedStore.id)} className="grid place-items-center border-l border-[#30333b]">

@@ -7,6 +7,7 @@ import { GoogleTerritoryMap } from '@/components/territory/google-territory-map'
 
 interface TerritoryMapMobileProps {
   stores: TerritoryStorePin[];
+  repColorMap?: Map<string, string>;
   boundaries: TerritoryBoundary[];
   showBoundaries: boolean;
   hiddenBoundaryIds: string[];
@@ -27,6 +28,7 @@ interface TerritoryMapMobileProps {
 
 export function TerritoryMapMobile({
   stores,
+  repColorMap,
   boundaries,
   showBoundaries,
   hiddenBoundaryIds,
@@ -47,6 +49,7 @@ export function TerritoryMapMobile({
   return (
     <GoogleTerritoryMap
       stores={stores}
+      repColorMap={repColorMap}
       boundaries={boundaries}
       showBoundaries={showBoundaries}
       hiddenBoundaryIds={hiddenBoundaryIds}
