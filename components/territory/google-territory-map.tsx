@@ -19,6 +19,7 @@ interface GoogleTerritoryMapProps {
   selectedStopIds: string[];
   orderedStopIds: string[];
   focusedStoreId: string | null;
+  highlightedStoreId?: string | null;
   routeCoordinates: [number, number][];
   pinColorMode?: PinColorMode;
   onSelectStore: (storeId: string | null) => void;
@@ -175,7 +176,7 @@ function FitController({
   focusRequestToken?: number;
 }) {
   const map = useMap();
-  const lastStoreSignatureRef = useRef('');
+  const hasInitializedRef = useRef(false);
   const lastFocusRequestRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -212,17 +213,9 @@ function FitController({
     }
 
     if (stores.length === 0) {
-      if (lastStoreSignatureRef.current === '__empty__') {
-        return;
-      }
-      map.setCenter(FALLBACK_CENTER);
-      map.setZoom(Math.max(3, Math.min(defaultZoom, 5)));
-      lastStoreSignatureRef.current = '__empty__';
       return;
     }
-
-    const signature = stores.map((store) => `${store.id}:${store.lat.toFixed(5)}:${store.lng.toFixed(5)}`).join('|');
-    if (signature === lastStoreSignatureRef.current) {
+    if (hasInitializedRef.current) {
       return;
     }
 
@@ -236,7 +229,7 @@ function FitController({
     if (typeof zoom === 'number' && zoom > maxFitZoom) {
       map.setZoom(maxFitZoom);
     }
-    lastStoreSignatureRef.current = signature;
+    hasInitializedRef.current = true;
   }, [cameraMode, defaultZoom, fitPadding, focusedStoreId, map, maxFitZoom, stores]);
 
   useEffect(() => {
@@ -265,8 +258,19 @@ function FitController({
   return null;
 }
 
-function markerScale({ focused, selected, approximate }: { focused: boolean; selected: boolean; approximate: boolean }) {
+function markerScale({
+  focused,
+  highlighted,
+  selected,
+  approximate,
+}: {
+  focused: boolean;
+  highlighted: boolean;
+  selected: boolean;
+  approximate: boolean;
+}) {
   if (focused) return 1.35;
+  if (highlighted) return 1.26;
   if (selected) return 1.18;
   if (approximate) return 1.08;
   return 1;
@@ -301,6 +305,7 @@ export function GoogleTerritoryMap({
   selectedStopIds,
   orderedStopIds,
   focusedStoreId,
+  highlightedStoreId = null,
   routeCoordinates,
   pinColorMode = 'status',
   onSelectStore,
@@ -489,6 +494,7 @@ export function GoogleTerritoryMap({
 
           {safeStores.map((store) => {
             const focused = focusedStoreId === store.id;
+            const highlighted = highlightedStoreId === store.id;
             const selected = selectedSet.has(store.id);
             const approximate = Boolean(store.isApproximate);
             const glyph = approximate ? '≈' : '';
@@ -505,7 +511,7 @@ export function GoogleTerritoryMap({
                     background={pinColorForStore(store, pinColorMode)}
                     borderColor={approximate ? '#111827' : '#ffffff'}
                     glyphColor="#ffffff"
-                    scale={markerScale({ focused, selected, approximate })}
+                    scale={markerScale({ focused, highlighted, selected, approximate })}
                     glyph={glyph}
                   />
                 </AdvancedMarker>
@@ -521,6 +527,10 @@ export function GoogleTerritoryMap({
                 opacity={approximate ? 0.78 : 1}
                 icon={{
                   url: fallbackMarkerIcon(pinColorForStore(store, pinColorMode), approximate),
+                  scaledSize: new google.maps.Size(
+                    30 * markerScale({ focused, highlighted, selected, approximate }),
+                    38 * markerScale({ focused, highlighted, selected, approximate }),
+                  ),
                 }}
               />
             );

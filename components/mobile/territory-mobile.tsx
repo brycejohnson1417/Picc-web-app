@@ -72,6 +72,7 @@ export function TerritoryMobile() {
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
   const [locationAvailability, setLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [showMapSearch, setShowMapSearch] = useState(false);
   const [pinColorMode, setPinColorMode] = useState<PinColorMode>('status');
   const [draftStatuses, setDraftStatuses] = useState<string[]>([]);
   const [draftReps, setDraftReps] = useState<string[]>([]);
@@ -269,6 +270,56 @@ export function TerritoryMobile() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 4);
   }, [displayedStores, pinColorMode]);
+
+  const highlightedSearchStore = useMemo(() => {
+    const query = debouncedSearch.trim().toLowerCase();
+    if (!query) {
+      return null;
+    }
+
+    const scoreStore = (store: TerritoryStorePin) => {
+      const haystacks = [
+        store.name,
+        store.locationAddress ?? '',
+        store.locationLabel ?? '',
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      if (store.name.toLowerCase() === query) return 0;
+      if (store.name.toLowerCase().startsWith(query)) return 1;
+      if (haystacks.includes(query)) return 2;
+      return 3;
+    };
+
+    return [...displayedStores].sort((left, right) => {
+      const scoreDiff = scoreStore(left) - scoreStore(right);
+      if (scoreDiff !== 0) return scoreDiff;
+      return left.name.localeCompare(right.name);
+    })[0] ?? null;
+  }, [debouncedSearch, displayedStores]);
+
+  const lastSearchFocusRef = useRef<string>('');
+
+  useEffect(() => {
+    if (view !== 'map') {
+      return;
+    }
+
+    const highlightedId = highlightedSearchStore?.id ?? '';
+    if (!highlightedId) {
+      lastSearchFocusRef.current = '';
+      return;
+    }
+
+    if (lastSearchFocusRef.current === highlightedId) {
+      return;
+    }
+
+    lastSearchFocusRef.current = highlightedId;
+    setFocusedId(highlightedId);
+    setFocusRequestToken((current) => current + 1);
+  }, [highlightedSearchStore?.id, view]);
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
   const activeFiltersCount = selectedStatuses.length + selectedReps.length + (locationAvailability === 'all' ? 0 : 1);
@@ -540,6 +591,7 @@ export function TerritoryMobile() {
               selectedStopIds={routePlan.selectedStopIds}
               orderedStopIds={routePlan.orderedStopIds}
               focusedStoreId={focusedStore?.id ?? null}
+              highlightedStoreId={highlightedSearchStore?.id ?? null}
               focusRequestToken={focusRequestToken}
               routeCoordinates={routeCoordinates}
               pinColorMode={pinColorMode}
@@ -564,6 +616,38 @@ export function TerritoryMobile() {
               {showRouteOnly ? 'Hide Route' : 'Visualize Route'}
             </button>
           </div>
+
+          {showMapSearch || search.trim().length > 0 ? (
+            <div className="absolute left-1/2 top-16 z-[1500] w-[min(calc(100%-16px),420px)] -translate-x-1/2">
+              <div className="rounded-2xl bg-white/92 p-2 shadow-[0_12px_24px_rgba(0,0,0,0.16)] backdrop-blur-sm">
+                <div className="flex items-center gap-2">
+                  <MobileSearch
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Search dispensaries on the map"
+                    className="flex-1 bg-[#eef0f3]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch('');
+                      setDebouncedSearch('');
+                      setShowMapSearch(false);
+                      lastSearchFocusRef.current = '';
+                    }}
+                    className="rounded-xl border border-[#d0d3d9] bg-white px-3 py-2 text-[13px] font-medium text-[#4b4f57]"
+                  >
+                    Clear
+                  </button>
+                </div>
+                {search.trim().length > 0 ? (
+                  <p className="mt-2 px-1 text-[12px] text-[#62666f]">
+                    {highlightedSearchStore ? `Highlighting ${highlightedSearchStore.name}` : 'No dispensaries match this search yet'}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
           {showRouteOnly && routePlan.selectedStopIds.length >= 2 ? (
             <div className={cn('absolute left-3 z-[1500] rounded-xl bg-black/70 px-2.5 py-1.5 text-[11px] text-white', focusedStore ? 'bottom-[108px]' : 'bottom-3')}>
@@ -616,8 +700,13 @@ export function TerritoryMobile() {
           </div>
 
           <div className="absolute right-2 top-3 z-[1500] flex flex-col gap-2">
-            <button type="button" aria-label="Switch to list view" className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow" onClick={() => setView('list')}>
-              <Search className="h-5 w-5 text-[#7f828a]" />
+            <button
+              type="button"
+              aria-label="Search dispensaries on the map"
+              className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showMapSearch || search.trim().length > 0 ? 'ring-2 ring-[#cd3814]' : '')}
+              onClick={() => setShowMapSearch((current) => !current)}
+            >
+              <Search className={cn('h-5 w-5', showMapSearch || search.trim().length > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
             </button>
             <button
               type="button"
