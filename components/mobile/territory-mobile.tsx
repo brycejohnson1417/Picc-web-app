@@ -279,8 +279,13 @@ export function TerritoryMobile() {
     }
     return [...counts.entries()]
       .map(([label, count]) => ({ label, count, color: repColorForLabel(label) }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 4);
+      .sort((a, b) => {
+        const countDiff = b.count - a.count;
+        if (countDiff !== 0) {
+          return countDiff;
+        }
+        return a.label.localeCompare(b.label);
+      });
   }, [displayedStores, pinColorMode]);
 
   const highlightedSearchStore = useMemo(() => {
@@ -699,7 +704,7 @@ export function TerritoryMobile() {
           ) : null}
 
           {pinColorMode === 'rep' && repLegend.length > 0 ? (
-            <div className={cn('absolute left-3 z-[1500] max-w-[220px] rounded-xl bg-black/70 px-2.5 py-2 text-white', focusedStore ? 'bottom-[148px]' : 'bottom-12')}>
+            <div className={cn('absolute left-3 z-[1500] max-h-[40vh] max-w-[240px] overflow-y-auto rounded-xl bg-black/70 px-2.5 py-2 text-white', focusedStore ? 'bottom-[148px]' : 'bottom-12')}>
               <p className="mb-1 text-[11px] uppercase tracking-wide text-white/70">Rep Colors</p>
               <div className="space-y-1">
                 {repLegend.map((entry) => (

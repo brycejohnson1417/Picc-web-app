@@ -808,7 +808,9 @@ async function mapNotionPageToTerritoryStore(
   const name = textFromTitleProperty(properties['Dispensary Name']) || 'Untitled Store';
   const statusName = properties['Account Status']?.status?.name ?? 'Unspecified';
   const statusKey = normalizeStatus(statusName);
-  const repPeople = Array.isArray(properties['Rep']?.people) ? properties['Rep'].people : [];
+  const repProperty =
+    (propertyByCandidates('rep', 'picc rep', 'sales rep') as NotionPropertyValue | undefined) ?? properties['Rep'];
+  const repPeople = Array.isArray(repProperty?.people) ? repProperty.people : [];
   const repNames = repPeople.map((person) => person?.name).filter((value: unknown): value is string => Boolean(value));
   const repEmails = repPeople
     .map((person) => person?.person?.email)
@@ -1735,8 +1737,22 @@ export async function loadTerritoryStores(input?: {
       const snapshotStore = snapshotById.get(store.id);
       return {
         ...store,
+        name: snapshotStore?.name ?? store.name,
+        status: snapshotStore?.status ?? store.status,
+        statusKey: snapshotStore?.statusKey ?? store.statusKey,
+        statusColor: snapshotStore?.statusColor ?? store.statusColor,
+        pinKind: snapshotStore?.pinKind ?? store.pinKind,
+        repNames: snapshotStore?.repNames ?? store.repNames,
+        repEmails: snapshotStore?.repEmails ?? store.repEmails,
+        lastEditedTime: snapshotStore?.lastEditedTime ?? store.lastEditedTime,
+        licenseNumber: snapshotStore?.licenseNumber ?? store.licenseNumber,
+        phoneNumber: snapshotStore?.phoneNumber ?? store.phoneNumber,
+        email: snapshotStore?.email ?? store.email,
         followUpNeeded: snapshotStore?.followUpNeeded ?? null,
         followUpReason: snapshotStore?.followUpReason ?? null,
+        followUpDate: snapshotStore?.followUpDate ?? store.followUpDate,
+        notes: snapshotStore?.notes ?? store.notes,
+        lastCheckIn: snapshotStore?.lastCheckIn ?? store.lastCheckIn,
       };
     });
     filters = readModel.filters;

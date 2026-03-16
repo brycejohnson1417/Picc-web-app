@@ -2,17 +2,6 @@ import type { TerritoryStorePin } from '@/lib/territory/types';
 
 export type PinColorMode = 'status' | 'rep';
 
-const REP_PALETTE = [
-  '#0ea5e9',
-  '#6366f1',
-  '#14b8a6',
-  '#f97316',
-  '#e11d48',
-  '#8b5cf6',
-  '#10b981',
-  '#f59e0b',
-];
-
 function hashString(input: string) {
   let hash = 0;
   for (let i = 0; i < input.length; i += 1) {
@@ -27,7 +16,12 @@ export function repColorForLabel(label: string) {
   if (!normalized) {
     return '#64748b';
   }
-  return REP_PALETTE[hashString(normalized) % REP_PALETTE.length];
+
+  const hash = hashString(normalized);
+  const hue = hash % 360;
+  const saturation = 62 + (hash % 14);
+  const lightness = 46 + (Math.floor(hash / 360) % 10);
+  return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
 
 export function pinColorForStore(store: TerritoryStorePin, mode: PinColorMode) {
