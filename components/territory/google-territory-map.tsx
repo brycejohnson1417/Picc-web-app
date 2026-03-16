@@ -20,6 +20,8 @@ interface GoogleTerritoryMapProps {
   orderedStopIds: string[];
   focusedStoreId: string | null;
   highlightedStoreId?: string | null;
+  currentLocation?: { lat: number; lng: number } | null;
+  locationRequestToken?: number;
   routeCoordinates: [number, number][];
   pinColorMode?: PinColorMode;
   onSelectStore: (storeId: string | null) => void;
@@ -258,6 +260,37 @@ function FitController({
   return null;
 }
 
+function CurrentLocationController({
+  currentLocation,
+  locationRequestToken,
+}: {
+  currentLocation?: { lat: number; lng: number } | null;
+  locationRequestToken?: number;
+}) {
+  const map = useMap();
+  const lastRequestRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!map || !currentLocation) {
+      return;
+    }
+
+    if (typeof locationRequestToken !== 'number' || !Number.isFinite(locationRequestToken)) {
+      return;
+    }
+
+    if (lastRequestRef.current === locationRequestToken) {
+      return;
+    }
+
+    lastRequestRef.current = locationRequestToken;
+    map.panTo(currentLocation);
+    map.setZoom(Math.max(map.getZoom() ?? 12, 14));
+  }, [currentLocation, locationRequestToken, map]);
+
+  return null;
+}
+
 function markerScale({
   focused,
   highlighted,
@@ -278,15 +311,17 @@ function markerScale({
 
 const fallbackMarkerIconCache = new Map<string, string>();
 
-function fallbackMarkerIcon(fillColor: string, approximate: boolean) {
-  const key = `${fillColor}|${approximate ? 'approx' : 'exact'}`;
+function fallbackMarkerIcon(fillColor: string, approximate: boolean, scale = 1) {
+  const key = `${fillColor}|${approximate ? 'approx' : 'exact'}|${scale}`;
   const existing = fallbackMarkerIconCache.get(key);
   if (existing) {
     return existing;
   }
 
+  const width = Math.round(30 * scale);
+  const height = Math.round(38 * scale);
   const stroke = approximate ? '#111827' : '#ffffff';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 30 38">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 30 38">
     <path d="M15 1C8.37258 1 3 6.37258 3 13C3 22 15 37 15 37C15 37 27 22 27 13C27 6.37258 21.6274 1 15 1Z" fill="${fillColor}" stroke="${stroke}" stroke-width="2"/>
     <circle cx="15" cy="13" r="4" fill="white" fill-opacity="${approximate ? '0.65' : '0.95'}"/>
   </svg>`;
@@ -306,6 +341,8 @@ export function GoogleTerritoryMap({
   orderedStopIds,
   focusedStoreId,
   highlightedStoreId = null,
+  currentLocation = null,
+  locationRequestToken,
   routeCoordinates,
   pinColorMode = 'status',
   onSelectStore,
@@ -482,6 +519,7 @@ export function GoogleTerritoryMap({
             cameraMode={cameraMode}
             focusRequestToken={focusRequestToken}
           />
+          <CurrentLocationController currentLocation={currentLocation} locationRequestToken={locationRequestToken} />
           <RouteLine routeCoordinates={routeCoordinates} />
           <GoogleTerritoryBoundaries
             boundaries={boundaries}
@@ -498,6 +536,7 @@ export function GoogleTerritoryMap({
             const selected = selectedSet.has(store.id);
             const approximate = Boolean(store.isApproximate);
             const glyph = approximate ? '≈' : '';
+            const scale = markerScale({ focused, highlighted, selected, approximate });
 
             if (useAdvancedMarkers) {
               return (
@@ -511,7 +550,7 @@ export function GoogleTerritoryMap({
                     background={pinColorForStore(store, pinColorMode)}
                     borderColor={approximate ? '#111827' : '#ffffff'}
                     glyphColor="#ffffff"
-                    scale={markerScale({ focused, highlighted, selected, approximate })}
+                    scale={scale}
                     glyph={glyph}
                   />
                 </AdvancedMarker>
@@ -526,15 +565,20 @@ export function GoogleTerritoryMap({
                 title={store.name}
                 opacity={approximate ? 0.78 : 1}
                 icon={{
-                  url: fallbackMarkerIcon(pinColorForStore(store, pinColorMode), approximate),
-                  scaledSize: new google.maps.Size(
-                    30 * markerScale({ focused, highlighted, selected, approximate }),
-                    38 * markerScale({ focused, highlighted, selected, approximate }),
-                  ),
+                  url: fallbackMarkerIcon(pinColorForStore(store, pinColorMode), approximate, scale),
                 }}
               />
             );
           })}
+          {currentLocation ? (
+            useAdvancedMarkers ? (
+              <AdvancedMarker position={currentLocation} title="Your current location">
+                <Pin background="#2563eb" borderColor="#ffffff" glyphColor="#ffffff" scale={0.92} />
+              </AdvancedMarker>
+            ) : (
+              <Marker position={currentLocation} title="Your current location" />
+            )
+          ) : null}
         </GoogleMap>
       </APIProvider>
     </div>

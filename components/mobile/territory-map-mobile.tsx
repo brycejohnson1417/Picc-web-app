@@ -16,6 +16,8 @@ interface TerritoryMapMobileProps {
   orderedStopIds: string[];
   focusedStoreId: string | null;
   highlightedStoreId?: string | null;
+  currentLocation?: { lat: number; lng: number } | null;
+  locationRequestToken?: number;
   focusRequestToken: number;
   routeCoordinates: [number, number][];
   pinColorMode: PinColorMode;
@@ -34,6 +36,8 @@ export function TerritoryMapMobile({
   orderedStopIds,
   focusedStoreId,
   highlightedStoreId = null,
+  currentLocation = null,
+  locationRequestToken,
   focusRequestToken,
   routeCoordinates,
   pinColorMode,
@@ -52,6 +56,8 @@ export function TerritoryMapMobile({
       orderedStopIds={orderedStopIds}
       focusedStoreId={focusedStoreId}
       highlightedStoreId={highlightedStoreId}
+      currentLocation={currentLocation}
+      locationRequestToken={locationRequestToken}
       routeCoordinates={routeCoordinates}
       pinColorMode={pinColorMode}
       cameraMode="manual-focus"

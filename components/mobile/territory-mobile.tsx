@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { AlertTriangle, Filter, Layers3, ListFilter, Loader2, MapPinned, MessageCircleMore, Navigation, Plus, RefreshCw, Search } from 'lucide-react';
+import { AlertTriangle, Crosshair, Filter, Layers3, Loader2, Navigation, Plus, RefreshCw, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -64,6 +64,8 @@ export function TerritoryMobile() {
   const [view, setView] = useState<'map' | 'list'>('map');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [mapSearch, setMapSearch] = useState('');
+  const [debouncedMapSearch, setDebouncedMapSearch] = useState('');
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -80,6 +82,8 @@ export function TerritoryMobile() {
   const [draftPinColorMode, setDraftPinColorMode] = useState<PinColorMode>('status');
   const [savedFiltersAt, setSavedFiltersAt] = useState<string | null>(null);
   const [focusRequestToken, setFocusRequestToken] = useState(0);
+  const [locationRequestToken, setLocationRequestToken] = useState(0);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [hiddenBoundaryIds, setHiddenBoundaryIds] = useState<string[]>([]);
   const [showBoundarySheet, setShowBoundarySheet] = useState(false);
@@ -96,6 +100,14 @@ export function TerritoryMobile() {
 
     return () => window.clearTimeout(timeoutId);
   }, [search]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedMapSearch(mapSearch.trim());
+    }, 180);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [mapSearch]);
 
   useEffect(() => {
     try {
@@ -272,7 +284,7 @@ export function TerritoryMobile() {
   }, [displayedStores, pinColorMode]);
 
   const highlightedSearchStore = useMemo(() => {
-    const query = debouncedSearch.trim().toLowerCase();
+    const query = debouncedMapSearch.trim().toLowerCase();
     if (!query) {
       return null;
     }
@@ -297,7 +309,7 @@ export function TerritoryMobile() {
       if (scoreDiff !== 0) return scoreDiff;
       return left.name.localeCompare(right.name);
     })[0] ?? null;
-  }, [debouncedSearch, displayedStores]);
+  }, [debouncedMapSearch, displayedStores]);
 
   const lastSearchFocusRef = useRef<string>('');
 
@@ -373,17 +385,9 @@ export function TerritoryMobile() {
     toast.success('Filters cleared');
   }
 
-  function toggleRouteOnly() {
-    if (!showRouteOnly && routePlan.selectedStopIds.length === 0) {
-      toast.message('Add locations to your route first.');
-      return;
-    }
-    setShowRouteOnly((value) => !value);
-  }
-
   function toggleRouteVisualization() {
     if (!showRouteOnly && !canVisualizeRoute) {
-      toast.message('Add at least 2 route stops first.');
+      toast.message('Add at least 2 stops in Route first.');
       return;
     }
 
@@ -522,6 +526,38 @@ export function TerritoryMobile() {
     window.open(`mailto:${email}?subject=${subject}`, '_blank', 'noopener,noreferrer');
   }
 
+  function centerOnCurrentLocation() {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      toast.error('Current location is not available on this device.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        setCurrentLocation(nextLocation);
+        setLocationRequestToken((current) => current + 1);
+      },
+      (error) => {
+        const message =
+          error.code === error.PERMISSION_DENIED
+            ? 'Location permission was denied.'
+            : error.code === error.POSITION_UNAVAILABLE
+              ? 'Current location is unavailable right now.'
+              : 'Unable to read your current location.';
+        toast.error(message);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 30000,
+        timeout: 10000,
+      },
+    );
+  }
+
   if (storesQuery.isLoading && !storesQuery.data) {
     return (
       <div className="flex min-h-[calc(100dvh-76px)] items-center justify-center bg-[#e6e6e9]">
@@ -592,6 +628,8 @@ export function TerritoryMobile() {
               orderedStopIds={routePlan.orderedStopIds}
               focusedStoreId={focusedStore?.id ?? null}
               highlightedStoreId={highlightedSearchStore?.id ?? null}
+              currentLocation={currentLocation}
+              locationRequestToken={locationRequestToken}
               focusRequestToken={focusRequestToken}
               routeCoordinates={routeCoordinates}
               pinColorMode={pinColorMode}
@@ -605,9 +643,12 @@ export function TerritoryMobile() {
           <div className="absolute left-1/2 top-3 z-[1500] -translate-x-1/2">
             <button
               type="button"
+              disabled={!canVisualizeRoute}
               className={cn(
                 'rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow',
-                showRouteOnly
+                !canVisualizeRoute
+                  ? 'cursor-not-allowed border-white/40 bg-white/65 text-[#80848d]'
+                  : showRouteOnly
                   ? 'border-[#39a9ff] bg-[#12344b]/90 text-[#8fd5ff]'
                   : 'border-white/70 bg-white/92 text-[#25313d]',
               )}
@@ -617,21 +658,21 @@ export function TerritoryMobile() {
             </button>
           </div>
 
-          {showMapSearch || search.trim().length > 0 ? (
+          {showMapSearch || mapSearch.trim().length > 0 ? (
             <div className="absolute left-1/2 top-16 z-[1500] w-[min(calc(100%-16px),420px)] -translate-x-1/2">
               <div className="rounded-2xl bg-white/92 p-2 shadow-[0_12px_24px_rgba(0,0,0,0.16)] backdrop-blur-sm">
                 <div className="flex items-center gap-2">
                   <MobileSearch
-                    value={search}
-                    onChange={setSearch}
+                    value={mapSearch}
+                    onChange={setMapSearch}
                     placeholder="Search dispensaries on the map"
                     className="flex-1 bg-[#eef0f3]"
                   />
                   <button
                     type="button"
                     onClick={() => {
-                      setSearch('');
-                      setDebouncedSearch('');
+                      setMapSearch('');
+                      setDebouncedMapSearch('');
                       setShowMapSearch(false);
                       lastSearchFocusRef.current = '';
                     }}
@@ -640,7 +681,7 @@ export function TerritoryMobile() {
                     Clear
                   </button>
                 </div>
-                {search.trim().length > 0 ? (
+                {mapSearch.trim().length > 0 ? (
                   <p className="mt-2 px-1 text-[12px] text-[#62666f]">
                     {highlightedSearchStore ? `Highlighting ${highlightedSearchStore.name}` : 'No dispensaries match this search yet'}
                   </p>
@@ -677,21 +718,17 @@ export function TerritoryMobile() {
           <div className="absolute left-2 top-3 z-[1500] flex flex-col gap-2">
             <button
               type="button"
-              aria-label="Open focused account details"
+              aria-label="Center on your current location"
+              title="Current location"
               className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
-              onClick={() => {
-                if (!focusedStore) {
-                  toast.message('Select a location first.');
-                  return;
-                }
-                setDetailStoreId(focusedStore.id);
-              }}
+              onClick={centerOnCurrentLocation}
             >
-              <MapPinned className="h-5 w-5 text-[#7f828a]" />
+              <Crosshair className="h-5 w-5 text-[#7f828a]" />
             </button>
             <button
               type="button"
               aria-label="Refresh territory data"
+              title="Refresh territory data"
               className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
               onClick={() => setRefreshNonce((value) => value + 1)}
             >
@@ -703,14 +740,16 @@ export function TerritoryMobile() {
             <button
               type="button"
               aria-label="Search dispensaries on the map"
-              className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showMapSearch || search.trim().length > 0 ? 'ring-2 ring-[#cd3814]' : '')}
+              title="Search map"
+              className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showMapSearch || mapSearch.trim().length > 0 ? 'ring-2 ring-[#cd3814]' : '')}
               onClick={() => setShowMapSearch((current) => !current)}
             >
-              <Search className={cn('h-5 w-5', showMapSearch || search.trim().length > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
+              <Search className={cn('h-5 w-5', showMapSearch || mapSearch.trim().length > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
             </button>
             <button
               type="button"
               aria-label="Open territory layers"
+              title="Territory layers"
               className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showBoundaries ? 'ring-2 ring-[#cd3814]' : '')}
               onClick={() => setShowBoundarySheet(true)}
             >
@@ -719,17 +758,12 @@ export function TerritoryMobile() {
             <button
               type="button"
               aria-label="Open filters"
+              title="Filters"
               className={cn('relative grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', activeFiltersCount > 0 ? 'ring-2 ring-[#cd3814]' : '')}
               onClick={openFiltersSheet}
             >
               <Filter className={cn('h-5 w-5', activeFiltersCount > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
               {activeFiltersCount > 0 ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#cd3814] px-1 text-[11px] font-semibold text-white">{activeFiltersCount}</span> : null}
-            </button>
-            <button type="button" aria-label="Toggle route filter" className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showRouteOnly ? 'ring-2 ring-[#4f8edf]' : '')} onClick={toggleRouteOnly}>
-              <ListFilter className={cn('h-5 w-5', showRouteOnly ? 'text-[#4f8edf]' : 'text-[#7f828a]')} />
-            </button>
-            <button type="button" aria-label="Message account rep" className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow" onClick={() => messageRep(focusedStore)}>
-              <MessageCircleMore className="h-5 w-5 text-[#d25a3f]" />
             </button>
           </div>
         </div>
