@@ -110,10 +110,13 @@ type NotionPropertyValue = {
   rollup?: {
     type?: string | null;
     number?: number | null;
+    string?: string | null;
+    boolean?: boolean | null;
     date?: {
       start?: string | null;
     } | null;
     array?: NotionPropertyValue[];
+    results?: NotionPropertyValue[];
   } | null;
   people?: NotionPerson[];
   place?: NotionPlace | null;
@@ -271,6 +274,16 @@ function readDateStartProperty(property: NotionPropertyValue | undefined) {
   return typeof property?.date?.start === 'string' ? property.date.start : '';
 }
 
+function readRollupItems(property: NotionPropertyValue | undefined): NotionPropertyValue[] {
+  if (!property?.rollup) {
+    return [];
+  }
+
+  const fromArray = Array.isArray(property.rollup.array) ? property.rollup.array : [];
+  const fromResults = Array.isArray(property.rollup.results) ? property.rollup.results : [];
+  return [...fromArray, ...fromResults];
+}
+
 function readIsoDateProperty(property: NotionPropertyValue | undefined): string {
   const directDate = readDateStartProperty(property);
   if (directDate) {
@@ -287,9 +300,9 @@ function readIsoDateProperty(property: NotionPropertyValue | undefined): string 
     return rollupDate;
   }
 
-  const rollupArray = Array.isArray(property?.rollup?.array) ? property.rollup.array : [];
-  if (rollupArray.length > 0) {
-    const candidates: string[] = rollupArray
+  const rollupItems = readRollupItems(property);
+  if (rollupItems.length > 0) {
+    const candidates: string[] = rollupItems
       .map((item) => readIsoDateProperty(item))
       .filter((value): value is string => Boolean(value))
       .sort((left, right) => {
@@ -324,33 +337,83 @@ function readFormulaNumber(property: NotionPropertyValue | undefined) {
   return 0;
 }
 
-function readSelectNameProperty(property: NotionPropertyValue | undefined) {
+function readSelectNameProperty(property: NotionPropertyValue | undefined): string {
   const selectName = typeof property?.select?.name === 'string' ? property.select.name.trim() : '';
   if (selectName) {
     return selectName;
   }
   const statusName = typeof property?.status?.name === 'string' ? property.status.name.trim() : '';
-  return statusName || '';
+  if (statusName) {
+    return statusName;
+  }
+
+  const formulaText = typeof property?.formula?.string === 'string' ? property.formula.string.trim() : '';
+  if (formulaText) {
+    return formulaText;
+  }
+
+  const rollupString = typeof property?.rollup?.string === 'string' ? property.rollup.string.trim() : '';
+  if (rollupString) {
+    return rollupString;
+  }
+
+  const rollupItems = readRollupItems(property);
+  for (const item of rollupItems) {
+    const nested: string = readSelectNameProperty(item);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return '';
 }
 
-function readPeopleTextProperty(property: NotionPropertyValue | undefined) {
-  if (!Array.isArray(property?.people)) {
+function readPeopleTextProperty(property: NotionPropertyValue | undefined): string {
+  if (Array.isArray(property?.people)) {
+    const direct = property.people
+      .map((person) => person?.name?.trim())
+      .filter((value): value is string => Boolean(value))
+      .join(', ');
+    if (direct) {
+      return direct;
+    }
+  }
+
+  const rollupItems = readRollupItems(property);
+  if (rollupItems.length === 0) {
     return '';
   }
 
-  return property.people
-    .map((person) => person?.name?.trim())
-    .filter((value): value is string => Boolean(value))
-    .join(', ');
+  const nestedPeople: string = rollupItems
+    .map((item) => readPeopleTextProperty(item))
+    .filter(Boolean)
+    .join(', ')
+    .trim();
+
+  return nestedPeople;
 }
 
-function readNumberProperty(property: NotionPropertyValue | undefined) {
+function readNumberProperty(property: NotionPropertyValue | undefined): number | null {
   if (typeof property?.number === 'number' && Number.isFinite(property.number)) {
     return property.number;
   }
 
   if (typeof property?.formula?.number === 'number' && Number.isFinite(property.formula.number)) {
     return property.formula.number;
+  }
+
+  if (typeof property?.rollup?.number === 'number' && Number.isFinite(property.rollup.number)) {
+    return property.rollup.number;
+  }
+
+  const rollupItems = readRollupItems(property);
+  if (rollupItems.length > 0) {
+    const numericChildren: number[] = rollupItems
+      .map((item) => readNumberProperty(item))
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    if (numericChildren.length > 0) {
+      return numericChildren[0];
+    }
   }
 
   const richText = textFromRichTextProperty(property);
@@ -364,13 +427,27 @@ function readNumberProperty(property: NotionPropertyValue | undefined) {
   return null;
 }
 
-function readBooleanProperty(property: NotionPropertyValue | undefined) {
+function readBooleanProperty(property: NotionPropertyValue | undefined): boolean | null {
   if (typeof property?.checkbox === 'boolean') {
     return property.checkbox;
   }
 
   if (typeof property?.formula?.boolean === 'boolean') {
     return property.formula.boolean;
+  }
+
+  if (typeof property?.rollup?.boolean === 'boolean') {
+    return property.rollup.boolean;
+  }
+
+  const rollupItems = readRollupItems(property);
+  if (rollupItems.length > 0) {
+    for (const item of rollupItems) {
+      const nested: boolean | null = readBooleanProperty(item);
+      if (nested !== null) {
+        return nested;
+      }
+    }
   }
 
   const text = readTextFromAnyProperty(property).toLowerCase();
@@ -421,12 +498,15 @@ function readTextFromAnyProperty(property: NotionPropertyValue | undefined): str
   const rollupNumber = typeof property.rollup?.number === 'number' && Number.isFinite(property.rollup.number) ? property.rollup.number : null;
   if (rollupNumber !== null) return String(rollupNumber);
 
+  const rollupString = typeof property.rollup?.string === 'string' ? property.rollup.string.trim() : '';
+  if (rollupString) return rollupString;
+
   const rollupDate = typeof property.rollup?.date?.start === 'string' ? property.rollup.date.start : '';
   if (rollupDate) return rollupDate;
 
-  const rollupArray = Array.isArray(property.rollup?.array) ? property.rollup.array : [];
-  if (rollupArray.length > 0) {
-    const arrayText: string = rollupArray
+  const rollupItems = readRollupItems(property);
+  if (rollupItems.length > 0) {
+    const arrayText: string = rollupItems
       .map((item) => readTextFromAnyProperty(item))
       .filter(Boolean)
       .join(', ')
