@@ -139,6 +139,8 @@ interface TerritorySnapshotResult {
   meta: TerritorySnapshotMeta;
 }
 
+type TerritoryOrderDateFilter = 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
+
 interface CachedContactRow extends TerritoryStoreContact {
   accountPageIds: string[];
   lastEditedTime: string;
@@ -836,6 +838,9 @@ async function mapNotionPageToTerritoryStore(
   const lastSampleOrderDate =
     readDateStartProperty((propertyByCandidates('last sample order date', 'sample order date', 'last sample date') as NotionPropertyValue | undefined) ?? properties['Last Sample Order Date']) ||
     null;
+  const lastOrderDate =
+    readDateStartProperty((propertyByCandidates('last order date', 'most recent order date') as NotionPropertyValue | undefined) ?? properties['Last Order Date']) ||
+    null;
   const followUpDate = readDateStartProperty((propertyByCandidates('follow-up date', 'follow up date') as NotionPropertyValue | undefined) ?? properties['Follow-up Date']) || null;
   const followUpNeeded = readBooleanProperty((propertyByCandidates('follow-up needed', 'follow up needed') as NotionPropertyValue | undefined) ?? properties['Follow-up Needed']);
   const followUpReason = readTextFromAnyProperty((propertyByCandidates('follow-up reason', 'follow up reason') as NotionPropertyValue | undefined) ?? properties['Follow-up Reason']) || null;
@@ -928,6 +933,7 @@ async function mapNotionPageToTerritoryStore(
     phoneNumber,
     email,
     lastSampleOrderDate,
+    lastOrderDate,
     followUpDate,
     followUpNeeded,
     followUpReason,
@@ -1307,6 +1313,36 @@ function maxIsoDate(left: string | null | undefined, right: string | null | unde
   if (!left) return right ?? null;
   if (!right) return left;
   return left >= right ? left : right;
+}
+
+function matchesLastOrderDateFilter(value: string | null | undefined, filter: TerritoryOrderDateFilter) {
+  if (filter === 'all') {
+    return true;
+  }
+
+  if (!value) {
+    return false;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const ageDays = (Date.now() - date.getTime()) / 86_400_000;
+  if (ageDays < 0) {
+    return false;
+  }
+
+  if (filter === 'last_month') {
+    return ageDays <= 30;
+  }
+
+  if (filter === 'last_2_months') {
+    return ageDays <= 60;
+  }
+
+  return ageDays > 60;
 }
 
 async function upsertStoreInSnapshot(store: TerritoryStorePin) {
@@ -1713,6 +1749,7 @@ export async function loadTerritoryStores(input?: {
   query?: string;
   locationAvailability?: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate?: boolean;
+  lastOrderDateFilter?: TerritoryOrderDateFilter;
   refresh?: boolean;
   maxLiveGeocodeLookups?: number;
 }): Promise<TerritoryStoresResponse> {
@@ -1754,6 +1791,7 @@ export async function loadTerritoryStores(input?: {
         phoneNumber: snapshotStore?.phoneNumber ?? store.phoneNumber,
         email: snapshotStore?.email ?? store.email,
         lastSampleOrderDate: snapshotStore?.lastSampleOrderDate ?? store.lastSampleOrderDate,
+        lastOrderDate: snapshotStore?.lastOrderDate ?? store.lastOrderDate,
         followUpNeeded: snapshotStore?.followUpNeeded ?? null,
         followUpReason: snapshotStore?.followUpReason ?? null,
         followUpDate: snapshotStore?.followUpDate ?? store.followUpDate,
@@ -1777,6 +1815,11 @@ export async function loadTerritoryStores(input?: {
 
   if (input?.hasSampleOrderDate) {
     stores = stores.filter((store) => Boolean(store.lastSampleOrderDate));
+  }
+
+  const lastOrderDateFilter = input?.lastOrderDateFilter ?? 'all';
+  if (lastOrderDateFilter !== 'all') {
+    stores = stores.filter((store) => matchesLastOrderDateFilter(store.lastOrderDate, lastOrderDateFilter));
   }
 
   return {

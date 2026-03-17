@@ -15,10 +15,12 @@ interface StoreFilterSheetProps {
   selectedReps: string[];
   locationAvailability: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate: boolean;
+  lastOrderDateFilter: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
   onToggleStatus: (value: string) => void;
   onToggleRep: (value: string) => void;
   onSetLocationAvailability: (value: 'all' | 'available' | 'unavailable') => void;
   onSetHasSampleOrderDate: (value: boolean) => void;
+  onSetLastOrderDateFilter: (value: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months') => void;
   pinColorMode: PinColorMode;
   onSetPinColorMode: (mode: PinColorMode) => void;
   onApply: () => void;
@@ -37,10 +39,12 @@ export function StoreFilterSheet({
   selectedReps,
   locationAvailability,
   hasSampleOrderDate,
+  lastOrderDateFilter,
   onToggleStatus,
   onToggleRep,
   onSetLocationAvailability,
   onSetHasSampleOrderDate,
+  onSetLastOrderDateFilter,
   pinColorMode,
   onSetPinColorMode,
   onApply,
@@ -52,7 +56,12 @@ export function StoreFilterSheet({
     return null;
   }
 
-  const activeFilters = selectedStatuses.length + selectedReps.length + (locationAvailability === 'all' ? 0 : 1) + (hasSampleOrderDate ? 1 : 0);
+  const activeFilters =
+    selectedStatuses.length +
+    selectedReps.length +
+    (locationAvailability === 'all' ? 0 : 1) +
+    (hasSampleOrderDate ? 1 : 0) +
+    (lastOrderDateFilter === 'all' ? 0 : 1);
   const hasActiveFilters = activeFilters > 0;
 
   return (
@@ -146,6 +155,33 @@ export function StoreFilterSheet({
               >
                 Has sample order date
               </button>
+            </div>
+          </section>
+
+          <section className="mb-4">
+            <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Last Order Date</h3>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'All orders' },
+                { value: 'last_month', label: 'Ordered in last month' },
+                { value: 'last_2_months', label: 'Ordered in last 2 months' },
+                { value: 'three_plus_months', label: 'Ordered 3+ months ago' },
+              ].map((option) => {
+                const active = lastOrderDateFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => onSetLastOrderDateFilter(option.value as 'all' | 'last_month' | 'last_2_months' | 'three_plus_months')}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-[13px] font-medium',
+                      active ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
           </section>
         </div>

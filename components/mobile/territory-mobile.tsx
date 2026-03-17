@@ -36,6 +36,7 @@ type SavedFiltersPayload = {
   selectedReps: string[];
   locationAvailability: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate: boolean;
+  lastOrderDateFilter: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
   showRouteOnly: boolean;
   pinColorMode: PinColorMode;
   savedAt: string;
@@ -93,6 +94,7 @@ export function TerritoryMobile() {
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
   const [locationAvailability, setLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
   const [hasSampleOrderDate, setHasSampleOrderDate] = useState(false);
+  const [lastOrderDateFilter, setLastOrderDateFilter] = useState<'all' | 'last_month' | 'last_2_months' | 'three_plus_months'>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [showMapSearch, setShowMapSearch] = useState(false);
   const [pinColorMode, setPinColorMode] = useState<PinColorMode>('status');
@@ -100,6 +102,7 @@ export function TerritoryMobile() {
   const [draftReps, setDraftReps] = useState<string[]>([]);
   const [draftLocationAvailability, setDraftLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
   const [draftHasSampleOrderDate, setDraftHasSampleOrderDate] = useState(false);
+  const [draftLastOrderDateFilter, setDraftLastOrderDateFilter] = useState<'all' | 'last_month' | 'last_2_months' | 'three_plus_months'>('all');
   const [draftPinColorMode, setDraftPinColorMode] = useState<PinColorMode>('status');
   const [savedFiltersAt, setSavedFiltersAt] = useState<string | null>(null);
   const [focusRequestToken, setFocusRequestToken] = useState(0);
@@ -146,6 +149,13 @@ export function TerritoryMobile() {
       setSelectedReps(Array.isArray(parsed.selectedReps) ? parsed.selectedReps.filter((value): value is string => typeof value === 'string') : []);
       setLocationAvailability(parsed.locationAvailability === 'available' || parsed.locationAvailability === 'unavailable' ? parsed.locationAvailability : 'all');
       setHasSampleOrderDate(Boolean(parsed.hasSampleOrderDate));
+      setLastOrderDateFilter(
+        parsed.lastOrderDateFilter === 'last_month' ||
+          parsed.lastOrderDateFilter === 'last_2_months' ||
+          parsed.lastOrderDateFilter === 'three_plus_months'
+          ? parsed.lastOrderDateFilter
+          : 'all',
+      );
       setShowRouteOnly(Boolean(parsed.showRouteOnly));
       setPinColorMode(parsed.pinColorMode === 'rep' ? 'rep' : 'status');
       setSavedFiltersAt(typeof parsed.savedAt === 'string' ? parsed.savedAt : null);
@@ -156,7 +166,16 @@ export function TerritoryMobile() {
   }, []);
 
   const storesQuery = useQuery({
-    queryKey: ['territory-mobile', debouncedSearch, selectedStatuses.join('|'), selectedReps.join('|'), locationAvailability, hasSampleOrderDate ? 'sample' : 'all', refreshNonce],
+    queryKey: [
+      'territory-mobile',
+      debouncedSearch,
+      selectedStatuses.join('|'),
+      selectedReps.join('|'),
+      locationAvailability,
+      hasSampleOrderDate ? 'sample' : 'all',
+      lastOrderDateFilter,
+      refreshNonce,
+    ],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set('q', debouncedSearch);
@@ -164,6 +183,7 @@ export function TerritoryMobile() {
       for (const rep of selectedReps) params.append('rep', rep);
       if (locationAvailability !== 'all') params.set('locationStatus', locationAvailability);
       if (hasSampleOrderDate) params.set('hasSampleOrderDate', '1');
+      if (lastOrderDateFilter !== 'all') params.set('lastOrderDateFilter', lastOrderDateFilter);
       if (refreshNonce > 0) params.set('refresh', '1');
       const response = await fetch(`/api/territory/stores?${params.toString()}`);
       if (!response.ok) {
@@ -394,7 +414,12 @@ export function TerritoryMobile() {
   }, [highlightedSearchStore?.id, view]);
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
-  const activeFiltersCount = selectedStatuses.length + selectedReps.length + (locationAvailability === 'all' ? 0 : 1) + (hasSampleOrderDate ? 1 : 0);
+  const activeFiltersCount =
+    selectedStatuses.length +
+    selectedReps.length +
+    (locationAvailability === 'all' ? 0 : 1) +
+    (hasSampleOrderDate ? 1 : 0) +
+    (lastOrderDateFilter === 'all' ? 0 : 1);
   const canVisualizeRoute = routePlan.selectedStopIds.length >= 2;
 
   function openFiltersSheet() {
@@ -402,6 +427,7 @@ export function TerritoryMobile() {
     setDraftReps(selectedReps);
     setDraftLocationAvailability(locationAvailability);
     setDraftHasSampleOrderDate(hasSampleOrderDate);
+    setDraftLastOrderDateFilter(lastOrderDateFilter);
     setDraftPinColorMode(pinColorMode);
     setShowFilters(true);
   }
@@ -411,6 +437,7 @@ export function TerritoryMobile() {
     setSelectedReps(draftReps);
     setLocationAvailability(draftLocationAvailability);
     setHasSampleOrderDate(draftHasSampleOrderDate);
+    setLastOrderDateFilter(draftLastOrderDateFilter);
     setPinColorMode(draftPinColorMode);
     setShowFilters(false);
   }
@@ -422,6 +449,7 @@ export function TerritoryMobile() {
       selectedReps,
       locationAvailability,
       hasSampleOrderDate,
+      lastOrderDateFilter,
       showRouteOnly,
       pinColorMode,
       savedAt: new Date().toISOString(),
@@ -438,12 +466,14 @@ export function TerritoryMobile() {
     setSelectedReps([]);
     setLocationAvailability('all');
     setHasSampleOrderDate(false);
+    setLastOrderDateFilter('all');
     setShowRouteOnly(false);
     setPinColorMode('status');
     setDraftStatuses([]);
     setDraftReps([]);
     setDraftLocationAvailability('all');
     setDraftHasSampleOrderDate(false);
+    setDraftLastOrderDateFilter('all');
     setDraftPinColorMode('status');
     setSavedFiltersAt(null);
     setLassoSelection(null);
@@ -1048,10 +1078,12 @@ export function TerritoryMobile() {
         selectedReps={draftReps}
         locationAvailability={draftLocationAvailability}
         hasSampleOrderDate={draftHasSampleOrderDate}
+        lastOrderDateFilter={draftLastOrderDateFilter}
         onToggleStatus={(value) => setDraftStatuses((current) => toggleListValue(current, value))}
         onToggleRep={(value) => setDraftReps((current) => toggleListValue(current, value))}
         onSetLocationAvailability={setDraftLocationAvailability}
         onSetHasSampleOrderDate={setDraftHasSampleOrderDate}
+        onSetLastOrderDateFilter={setDraftLastOrderDateFilter}
         pinColorMode={draftPinColorMode}
         onSetPinColorMode={setDraftPinColorMode}
         onApply={applyDraftFilters}

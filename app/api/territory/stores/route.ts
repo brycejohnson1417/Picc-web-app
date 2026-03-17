@@ -27,6 +27,13 @@ export async function GET(request: Request) {
       ? locationAvailabilityParam
       : 'all';
   const hasSampleOrderDate = searchParams.get('hasSampleOrderDate') === '1';
+  const lastOrderDateFilterParam = (searchParams.get('lastOrderDateFilter') ?? 'all').trim().toLowerCase();
+  const lastOrderDateFilter =
+    lastOrderDateFilterParam === 'last_month' ||
+    lastOrderDateFilterParam === 'last_2_months' ||
+    lastOrderDateFilterParam === 'three_plus_months'
+      ? lastOrderDateFilterParam
+      : 'all';
   const q = searchParams.get('q')?.trim() ?? '';
   const refresh = searchParams.get('refresh') === '1';
 
@@ -41,6 +48,7 @@ export async function GET(request: Request) {
       reps,
       locationAvailability,
       hasSampleOrderDate,
+      lastOrderDateFilter,
       query: q,
       refresh,
     });
