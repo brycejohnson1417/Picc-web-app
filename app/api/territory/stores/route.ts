@@ -26,6 +26,7 @@ export async function GET(request: Request) {
     locationAvailabilityParam === 'available' || locationAvailabilityParam === 'unavailable'
       ? locationAvailabilityParam
       : 'all';
+  const hasSampleOrderDate = searchParams.get('hasSampleOrderDate') === '1';
   const q = searchParams.get('q')?.trim() ?? '';
   const refresh = searchParams.get('refresh') === '1';
 
@@ -39,6 +40,7 @@ export async function GET(request: Request) {
       statuses,
       reps,
       locationAvailability,
+      hasSampleOrderDate,
       query: q,
       refresh,
     });

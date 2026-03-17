@@ -35,6 +35,7 @@ type SavedFiltersPayload = {
   selectedStatuses: string[];
   selectedReps: string[];
   locationAvailability: 'all' | 'available' | 'unavailable';
+  hasSampleOrderDate: boolean;
   showRouteOnly: boolean;
   pinColorMode: PinColorMode;
   savedAt: string;
@@ -57,6 +58,24 @@ function formatSavedTimestamp(value: string | null) {
   return date.toLocaleString();
 }
 
+function pointInPolygon(point: [number, number], polygon: [number, number][]) {
+  let inside = false;
+  const [x, y] = point;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    const intersects = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function notionPageUrl(pageId: string) {
+  return `https://www.notion.so/${pageId.replace(/-/g, '')}`;
+}
+
 export function TerritoryMobile() {
   const appAccess = useAppAccess();
   const queryClient = useQueryClient();
@@ -73,12 +92,14 @@ export function TerritoryMobile() {
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
   const [locationAvailability, setLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [hasSampleOrderDate, setHasSampleOrderDate] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showMapSearch, setShowMapSearch] = useState(false);
   const [pinColorMode, setPinColorMode] = useState<PinColorMode>('status');
   const [draftStatuses, setDraftStatuses] = useState<string[]>([]);
   const [draftReps, setDraftReps] = useState<string[]>([]);
   const [draftLocationAvailability, setDraftLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [draftHasSampleOrderDate, setDraftHasSampleOrderDate] = useState(false);
   const [draftPinColorMode, setDraftPinColorMode] = useState<PinColorMode>('status');
   const [savedFiltersAt, setSavedFiltersAt] = useState<string | null>(null);
   const [focusRequestToken, setFocusRequestToken] = useState(0);
@@ -92,6 +113,9 @@ export function TerritoryMobile() {
   const [drawingBoundaryMode, setDrawingBoundaryMode] = useState(false);
   const [savingBoundary, setSavingBoundary] = useState(false);
   const [showRepLegend, setShowRepLegend] = useState(false);
+  const [lassoSelection, setLassoSelection] = useState<TerritoryBoundaryEditorState | null>(null);
+  const [lassoDrawingMode, setLassoDrawingMode] = useState(false);
+  const [lassoSelectedIds, setLassoSelectedIds] = useState<string[]>([]);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
@@ -121,6 +145,7 @@ export function TerritoryMobile() {
       setSelectedStatuses(Array.isArray(parsed.selectedStatuses) ? parsed.selectedStatuses.filter((value): value is string => typeof value === 'string') : []);
       setSelectedReps(Array.isArray(parsed.selectedReps) ? parsed.selectedReps.filter((value): value is string => typeof value === 'string') : []);
       setLocationAvailability(parsed.locationAvailability === 'available' || parsed.locationAvailability === 'unavailable' ? parsed.locationAvailability : 'all');
+      setHasSampleOrderDate(Boolean(parsed.hasSampleOrderDate));
       setShowRouteOnly(Boolean(parsed.showRouteOnly));
       setPinColorMode(parsed.pinColorMode === 'rep' ? 'rep' : 'status');
       setSavedFiltersAt(typeof parsed.savedAt === 'string' ? parsed.savedAt : null);
@@ -131,13 +156,14 @@ export function TerritoryMobile() {
   }, []);
 
   const storesQuery = useQuery({
-    queryKey: ['territory-mobile', debouncedSearch, selectedStatuses.join('|'), selectedReps.join('|'), locationAvailability, refreshNonce],
+    queryKey: ['territory-mobile', debouncedSearch, selectedStatuses.join('|'), selectedReps.join('|'), locationAvailability, hasSampleOrderDate ? 'sample' : 'all', refreshNonce],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set('q', debouncedSearch);
       for (const status of selectedStatuses) params.append('status', status);
       for (const rep of selectedReps) params.append('rep', rep);
       if (locationAvailability !== 'all') params.set('locationStatus', locationAvailability);
+      if (hasSampleOrderDate) params.set('hasSampleOrderDate', '1');
       if (refreshNonce > 0) params.set('refresh', '1');
       const response = await fetch(`/api/territory/stores?${params.toString()}`);
       if (!response.ok) {
@@ -175,15 +201,34 @@ export function TerritoryMobile() {
   const boundaries = useMemo(() => boundariesQuery.data?.boundaries ?? [], [boundariesQuery.data?.boundaries]);
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
   const displayedStores = useMemo(() => {
-    if (!showRouteOnly) return stores;
-    return stores.filter((store) => routePlan.selectedStopIds.includes(store.id));
-  }, [showRouteOnly, stores, routePlan.selectedStopIds]);
+    let nextStores = stores;
+    if (showRouteOnly) {
+      nextStores = nextStores.filter((store) => routePlan.selectedStopIds.includes(store.id));
+    }
+    if (lassoSelectedIds.length > 0) {
+      const selectedSet = new Set(lassoSelectedIds);
+      nextStores = nextStores.filter((store) => selectedSet.has(store.id));
+    }
+    return nextStores;
+  }, [lassoSelectedIds, showRouteOnly, stores, routePlan.selectedStopIds]);
 
   useEffect(() => {
     if (showRouteOnly && routePlan.selectedStopIds.length === 0) {
       setShowRouteOnly(false);
     }
   }, [showRouteOnly, routePlan.selectedStopIds.length]);
+
+  useEffect(() => {
+    if (!lassoSelection || lassoSelection.coordinates.length < 3) {
+      setLassoSelectedIds([]);
+      return;
+    }
+
+    const nextIds = stores
+      .filter((store) => pointInPolygon([store.lng, store.lat], lassoSelection.coordinates))
+      .map((store) => store.id);
+    setLassoSelectedIds(nextIds);
+  }, [lassoSelection, stores]);
 
   useEffect(() => {
     if (!focusedId) return;
@@ -349,13 +394,14 @@ export function TerritoryMobile() {
   }, [highlightedSearchStore?.id, view]);
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
-  const activeFiltersCount = selectedStatuses.length + selectedReps.length + (locationAvailability === 'all' ? 0 : 1);
+  const activeFiltersCount = selectedStatuses.length + selectedReps.length + (locationAvailability === 'all' ? 0 : 1) + (hasSampleOrderDate ? 1 : 0);
   const canVisualizeRoute = routePlan.selectedStopIds.length >= 2;
 
   function openFiltersSheet() {
     setDraftStatuses(selectedStatuses);
     setDraftReps(selectedReps);
     setDraftLocationAvailability(locationAvailability);
+    setDraftHasSampleOrderDate(hasSampleOrderDate);
     setDraftPinColorMode(pinColorMode);
     setShowFilters(true);
   }
@@ -364,6 +410,7 @@ export function TerritoryMobile() {
     setSelectedStatuses(draftStatuses);
     setSelectedReps(draftReps);
     setLocationAvailability(draftLocationAvailability);
+    setHasSampleOrderDate(draftHasSampleOrderDate);
     setPinColorMode(draftPinColorMode);
     setShowFilters(false);
   }
@@ -374,6 +421,7 @@ export function TerritoryMobile() {
       selectedStatuses,
       selectedReps,
       locationAvailability,
+      hasSampleOrderDate,
       showRouteOnly,
       pinColorMode,
       savedAt: new Date().toISOString(),
@@ -389,15 +437,53 @@ export function TerritoryMobile() {
     setSelectedStatuses([]);
     setSelectedReps([]);
     setLocationAvailability('all');
+    setHasSampleOrderDate(false);
     setShowRouteOnly(false);
     setPinColorMode('status');
     setDraftStatuses([]);
     setDraftReps([]);
     setDraftLocationAvailability('all');
+    setDraftHasSampleOrderDate(false);
     setDraftPinColorMode('status');
     setSavedFiltersAt(null);
+    setLassoSelection(null);
+    setLassoDrawingMode(false);
+    setLassoSelectedIds([]);
     window.localStorage.removeItem(FILTER_STORAGE_KEY);
     toast.success('Filters cleared');
+  }
+
+  function toggleLassoMode() {
+    if (lassoSelection) {
+      setLassoSelection(null);
+      setLassoDrawingMode(false);
+      setLassoSelectedIds([]);
+      return;
+    }
+
+    setLassoSelection({
+      id: 'selection',
+      name: 'Selection',
+      description: '',
+      color: '#2563eb',
+      borderWidth: 2,
+      coordinates: [],
+    });
+    setLassoDrawingMode(true);
+    setShowRouteOnly(false);
+    setView('map');
+    toast.message('Tap the map to draw a lasso, then tap Finish Lasso.');
+  }
+
+  function finishLasso() {
+    if (!lassoSelection || lassoSelection.coordinates.length < 3) {
+      toast.error('Add at least 3 points to finish the lasso.');
+      return;
+    }
+
+    setLassoDrawingMode(false);
+    setView('list');
+    toast.success(`Selected ${lassoSelectedIds.length} account${lassoSelectedIds.length === 1 ? '' : 's'}.`);
   }
 
   function toggleRouteVisualization() {
@@ -639,6 +725,8 @@ export function TerritoryMobile() {
               hiddenBoundaryIds={hiddenBoundaryIds}
               draftBoundary={boundaryEditor ? { ...boundaryEditor } : null}
               drawingBoundaryMode={drawingBoundaryMode}
+              selectionBoundaryDraft={lassoSelection ? { ...lassoSelection } : null}
+              selectionDrawingMode={lassoDrawingMode}
               selectedStopIds={routePlan.selectedStopIds}
               orderedStopIds={routePlan.orderedStopIds}
               focusedStoreId={focusedStore?.id ?? null}
@@ -653,25 +741,51 @@ export function TerritoryMobile() {
               onDraftBoundaryChange={(coordinates) =>
                 setBoundaryEditor((current) => (current ? { ...current, coordinates } : current))
               }
+              onSelectionBoundaryChange={(coordinates) =>
+                setLassoSelection((current) => (current ? { ...current, coordinates } : current))
+              }
             />
           </MapRenderBoundary>
 
           <div className="absolute left-1/2 top-3 z-[1500] -translate-x-1/2">
-            <button
-              type="button"
-              disabled={!canVisualizeRoute}
-              className={cn(
-                'rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow',
-                !canVisualizeRoute
-                  ? 'cursor-not-allowed border-white/40 bg-white/65 text-[#80848d]'
-                  : showRouteOnly
-                  ? 'border-[#39a9ff] bg-[#12344b]/90 text-[#8fd5ff]'
-                  : 'border-white/70 bg-white/92 text-[#25313d]',
-              )}
-              onClick={toggleRouteVisualization}
-            >
-              {showRouteOnly ? 'Hide Route' : 'Visualize Route'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={!canVisualizeRoute}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow',
+                  !canVisualizeRoute
+                    ? 'cursor-not-allowed border-white/40 bg-white/65 text-[#80848d]'
+                    : showRouteOnly
+                    ? 'border-[#39a9ff] bg-[#12344b]/90 text-[#8fd5ff]'
+                    : 'border-white/70 bg-white/92 text-[#25313d]',
+                )}
+                onClick={toggleRouteVisualization}
+              >
+                {showRouteOnly ? 'Hide Route' : 'Visualize Route'}
+              </button>
+              {lassoSelection ? (
+                <>
+                  <button
+                    type="button"
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow',
+                      lassoDrawingMode ? 'border-[#2563eb] bg-[#2563eb] text-white' : 'border-white/70 bg-white/92 text-[#25313d]',
+                    )}
+                    onClick={() => setLassoDrawingMode((current) => !current)}
+                  >
+                    {lassoDrawingMode ? 'Pause Lasso' : 'Resume Lasso'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-[#2563eb] bg-white/92 px-3 py-1.5 text-[12px] font-semibold text-[#1d4ed8] shadow"
+                    onClick={finishLasso}
+                  >
+                    Finish Lasso
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
 
           {showMapSearch || mapSearch.trim().length > 0 ? (
@@ -761,6 +875,15 @@ export function TerritoryMobile() {
             >
               <RefreshCw className="h-5 w-5 text-[#7f828a]" />
             </button>
+            <button
+              type="button"
+              aria-label={lassoSelection ? 'Clear lasso selection' : 'Start lasso selection'}
+              title={lassoSelection ? 'Clear lasso selection' : 'Lasso accounts'}
+              className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', lassoSelection ? 'ring-2 ring-[#2563eb]' : '')}
+              onClick={toggleLassoMode}
+            >
+              <span className={cn('text-[12px] font-semibold', lassoSelection ? 'text-[#2563eb]' : 'text-[#7f828a]')}>L</span>
+            </button>
           </div>
 
           <div className="absolute right-2 top-3 z-[1500] flex flex-col gap-2">
@@ -795,7 +918,7 @@ export function TerritoryMobile() {
           </div>
         </div>
       ) : (
-        <div className="px-4 pb-28 pt-3">
+        <div className="px-3 pb-28 pt-2">
           {storesQuery.isError ? (
             <div className="mb-3 rounded-lg border border-[#e6b3a7] bg-[#fdebe7] px-3 py-2 text-[13px] text-[#8f2410]">
               Live sync warning: {storesQuery.error instanceof Error ? storesQuery.error.message : 'Failed to refresh territory'}
@@ -812,7 +935,19 @@ export function TerritoryMobile() {
               {activeFiltersCount > 0 ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#cd3814] px-1 text-[11px] font-semibold text-white">{activeFiltersCount}</span> : null}
             </button>
           </div>
-          <div className="mt-3 border-t border-[#c6c7cb]" />
+          {lassoSelectedIds.length > 0 ? (
+            <div className="mt-2 flex items-center justify-between rounded-xl border border-[#c9d7ff] bg-[#eef4ff] px-3 py-2 text-[12px] text-[#20439b]">
+              <span>Lasso selection: {lassoSelectedIds.length} accounts</span>
+              <button type="button" className="font-semibold" onClick={() => {
+                setLassoSelection(null);
+                setLassoDrawingMode(false);
+                setLassoSelectedIds([]);
+              }}>
+                Clear
+              </button>
+            </div>
+          ) : null}
+          <div className="mt-2 border-t border-[#c6c7cb]" />
           {grouped.map(([letter, list]) => (
             <section
               key={letter}
@@ -820,7 +955,7 @@ export function TerritoryMobile() {
                 sectionRefs.current[letter] = element;
               }}
             >
-              <div className="border-b border-[#c6c7cb] px-1 py-2 text-[38px] text-[#8a8d95]">{letter}</div>
+              <div className="border-b border-[#c6c7cb] px-1 py-1.5 text-[26px] text-[#8a8d95]">{letter}</div>
               {list.map((store) => {
                 const selected = routePlan.selectedStopIds.includes(store.id);
                 const pinColor = pinColorForStore(store, pinColorMode, repColorMap);
@@ -829,18 +964,18 @@ export function TerritoryMobile() {
                     key={store.id}
                     type="button"
                     onClick={() => setDetailStoreId(store.id)}
-                    className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-1 py-3 text-left"
+                    className="flex w-full items-center gap-2 border-b border-[#d0d1d4] px-1 py-2 text-left"
                   >
                     <span className="inline-block h-3.5 w-3.5 shrink-0 rounded-full" style={{ backgroundColor: pinColor }} />
                     <span
                       className={cn(
-                        'grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 text-lg',
+                        'grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 text-sm',
                         selected ? 'border-[#4fb649] text-[#4fb649]' : 'border-[#b8bac0] text-transparent',
                       )}
                     >
                       ✓
                     </span>
-                    <span className="truncate text-[22px] text-[#15171c]">{store.name}</span>
+                    <span className="truncate text-[16px] text-[#15171c]">{store.name}</span>
                   </button>
                 );
               })}
@@ -872,11 +1007,21 @@ export function TerritoryMobile() {
                 </div>
               </div>
             </button>
-            <div className="grid grid-cols-[1fr_56px_56px] border-b border-[#30333b]">
+            <div className="grid grid-cols-[1fr_56px_56px_56px] border-b border-[#30333b]">
               <button type="button" className="flex items-center gap-2 px-3 py-2 text-[14px] text-[#d5d9e1]" onClick={() => messageRep(focusedStore)}>
                 <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: pinColorForStore(focusedStore, pinColorMode, repColorMap) }} />
                 {focusedStore.repNames[0] ?? 'Unassigned'}
               </button>
+              <a
+                href={notionPageUrl(focusedStore.notionPageId)}
+                target="_blank"
+                rel="noreferrer"
+                className="grid place-items-center border-l border-[#30333b] text-[20px] font-semibold text-[#d8dde6]"
+                aria-label="Open in Notion"
+                title="Open in Notion"
+              >
+                N
+              </a>
               <button type="button" onClick={() => routePlan.toggleStop(focusedStore.id)} className="grid place-items-center border-l border-[#30333b]">
                 <Plus className={cn('h-6 w-6', selectedOnCard ? 'text-[#4fb649]' : 'text-[#d8dde6]')} />
               </button>
@@ -902,9 +1047,11 @@ export function TerritoryMobile() {
         selectedStatuses={draftStatuses}
         selectedReps={draftReps}
         locationAvailability={draftLocationAvailability}
+        hasSampleOrderDate={draftHasSampleOrderDate}
         onToggleStatus={(value) => setDraftStatuses((current) => toggleListValue(current, value))}
         onToggleRep={(value) => setDraftReps((current) => toggleListValue(current, value))}
         onSetLocationAvailability={setDraftLocationAvailability}
+        onSetHasSampleOrderDate={setDraftHasSampleOrderDate}
         pinColorMode={draftPinColorMode}
         onSetPinColorMode={setDraftPinColorMode}
         onApply={applyDraftFilters}

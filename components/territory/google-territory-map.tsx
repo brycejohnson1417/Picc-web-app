@@ -17,6 +17,8 @@ interface GoogleTerritoryMapProps {
   hiddenBoundaryIds?: string[];
   draftBoundary?: TerritoryBoundaryDraft | null;
   drawingBoundaryMode?: boolean;
+  selectionBoundaryDraft?: TerritoryBoundaryDraft | null;
+  selectionDrawingMode?: boolean;
   selectedStopIds: string[];
   orderedStopIds: string[];
   focusedStoreId: string | null;
@@ -27,6 +29,7 @@ interface GoogleTerritoryMapProps {
   pinColorMode?: PinColorMode;
   onSelectStore: (storeId: string | null) => void;
   onDraftBoundaryChange?: (coordinates: [number, number][]) => void;
+  onSelectionBoundaryChange?: (coordinates: [number, number][]) => void;
   className?: string;
   fitPadding?: number;
   maxFitZoom?: number;
@@ -339,6 +342,8 @@ export function GoogleTerritoryMap({
   hiddenBoundaryIds = [],
   draftBoundary = null,
   drawingBoundaryMode = false,
+  selectionBoundaryDraft = null,
+  selectionDrawingMode = false,
   selectedStopIds,
   orderedStopIds,
   focusedStoreId,
@@ -349,6 +354,7 @@ export function GoogleTerritoryMap({
   pinColorMode = 'status',
   onSelectStore,
   onDraftBoundaryChange,
+  onSelectionBoundaryChange,
   className,
   fitPadding = 36,
   maxFitZoom = 12,
@@ -530,6 +536,9 @@ export function GoogleTerritoryMap({
             draftBoundary={draftBoundary}
             drawingMode={drawingBoundaryMode}
             onDraftCoordinatesChange={onDraftBoundaryChange}
+            selectionBoundaryDraft={selectionBoundaryDraft}
+            selectionDrawingMode={selectionDrawingMode}
+            onSelectionCoordinatesChange={onSelectionBoundaryChange}
           />
 
           {safeStores.map((store) => {

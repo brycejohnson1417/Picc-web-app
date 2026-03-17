@@ -13,6 +13,8 @@ interface TerritoryMapMobileProps {
   hiddenBoundaryIds: string[];
   draftBoundary?: TerritoryBoundaryDraft | null;
   drawingBoundaryMode?: boolean;
+  selectionBoundaryDraft?: TerritoryBoundaryDraft | null;
+  selectionDrawingMode?: boolean;
   selectedStopIds: string[];
   orderedStopIds: string[];
   focusedStoreId: string | null;
@@ -24,6 +26,7 @@ interface TerritoryMapMobileProps {
   pinColorMode: PinColorMode;
   onSelectStore: (id: string | null) => void;
   onDraftBoundaryChange?: (coordinates: [number, number][]) => void;
+  onSelectionBoundaryChange?: (coordinates: [number, number][]) => void;
 }
 
 export function TerritoryMapMobile({
@@ -34,6 +37,8 @@ export function TerritoryMapMobile({
   hiddenBoundaryIds,
   draftBoundary = null,
   drawingBoundaryMode = false,
+  selectionBoundaryDraft = null,
+  selectionDrawingMode = false,
   selectedStopIds,
   orderedStopIds,
   focusedStoreId,
@@ -45,6 +50,7 @@ export function TerritoryMapMobile({
   pinColorMode,
   onSelectStore,
   onDraftBoundaryChange,
+  onSelectionBoundaryChange,
 }: TerritoryMapMobileProps) {
   return (
     <GoogleTerritoryMap
@@ -55,6 +61,8 @@ export function TerritoryMapMobile({
       hiddenBoundaryIds={hiddenBoundaryIds}
       draftBoundary={draftBoundary}
       drawingBoundaryMode={drawingBoundaryMode}
+      selectionBoundaryDraft={selectionBoundaryDraft}
+      selectionDrawingMode={selectionDrawingMode}
       selectedStopIds={selectedStopIds}
       orderedStopIds={orderedStopIds}
       focusedStoreId={focusedStoreId}
@@ -71,6 +79,7 @@ export function TerritoryMapMobile({
       className="rounded-none"
       onSelectStore={onSelectStore}
       onDraftBoundaryChange={onDraftBoundaryChange}
+      onSelectionBoundaryChange={onSelectionBoundaryChange}
     />
   );
 }

@@ -21,6 +21,9 @@ interface GoogleTerritoryBoundariesProps {
   draftBoundary?: TerritoryBoundaryDraft | null;
   drawingMode?: boolean;
   onDraftCoordinatesChange?: (coordinates: TerritoryBoundaryCoordinates) => void;
+  selectionBoundaryDraft?: TerritoryBoundaryDraft | null;
+  selectionDrawingMode?: boolean;
+  onSelectionCoordinatesChange?: (coordinates: TerritoryBoundaryCoordinates) => void;
 }
 
 function toLatLngPath(coordinates: TerritoryBoundaryCoordinates) {
@@ -273,8 +276,11 @@ export function GoogleTerritoryBoundaries({
   draftBoundary = null,
   drawingMode = false,
   onDraftCoordinatesChange,
+  selectionBoundaryDraft = null,
+  selectionDrawingMode = false,
+  onSelectionCoordinatesChange,
 }: GoogleTerritoryBoundariesProps) {
-  if (!showBoundaries && !draftBoundary) {
+  if (!showBoundaries && !draftBoundary && !selectionBoundaryDraft) {
     return null;
   }
 
@@ -293,6 +299,14 @@ export function GoogleTerritoryBoundaries({
           enabled={drawingMode}
           draftBoundary={draftBoundary}
           onDraftCoordinatesChange={onDraftCoordinatesChange}
+        />
+      ) : null}
+      {selectionBoundaryDraft ? <BoundaryDraftLayer draftBoundary={selectionBoundaryDraft} onDraftCoordinatesChange={onSelectionCoordinatesChange} /> : null}
+      {selectionBoundaryDraft ? (
+        <BoundaryDrawingController
+          enabled={selectionDrawingMode}
+          draftBoundary={selectionBoundaryDraft}
+          onDraftCoordinatesChange={onSelectionCoordinatesChange}
         />
       ) : null}
     </>

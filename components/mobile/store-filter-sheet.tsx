@@ -14,9 +14,11 @@ interface StoreFilterSheetProps {
   selectedStatuses: string[];
   selectedReps: string[];
   locationAvailability: 'all' | 'available' | 'unavailable';
+  hasSampleOrderDate: boolean;
   onToggleStatus: (value: string) => void;
   onToggleRep: (value: string) => void;
   onSetLocationAvailability: (value: 'all' | 'available' | 'unavailable') => void;
+  onSetHasSampleOrderDate: (value: boolean) => void;
   pinColorMode: PinColorMode;
   onSetPinColorMode: (mode: PinColorMode) => void;
   onApply: () => void;
@@ -34,9 +36,11 @@ export function StoreFilterSheet({
   selectedStatuses,
   selectedReps,
   locationAvailability,
+  hasSampleOrderDate,
   onToggleStatus,
   onToggleRep,
   onSetLocationAvailability,
+  onSetHasSampleOrderDate,
   pinColorMode,
   onSetPinColorMode,
   onApply,
@@ -48,7 +52,7 @@ export function StoreFilterSheet({
     return null;
   }
 
-  const activeFilters = selectedStatuses.length + selectedReps.length + (locationAvailability === 'all' ? 0 : 1);
+  const activeFilters = selectedStatuses.length + selectedReps.length + (locationAvailability === 'all' ? 0 : 1) + (hasSampleOrderDate ? 1 : 0);
   const hasActiveFilters = activeFilters > 0;
 
   return (
@@ -126,6 +130,22 @@ export function StoreFilterSheet({
                   </button>
                 );
               })}
+            </div>
+          </section>
+
+          <section className="mb-4">
+            <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Sample Orders</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onSetHasSampleOrderDate(!hasSampleOrderDate)}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-[13px] font-medium',
+                  hasSampleOrderDate ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                )}
+              >
+                Has sample order date
+              </button>
             </div>
           </section>
         </div>

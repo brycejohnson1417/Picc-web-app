@@ -47,6 +47,7 @@ export interface TerritoryStorePin {
   daysOverdue?: number | null;
   phoneNumber?: string | null;
   email?: string | null;
+  lastSampleOrderDate?: string | null;
   followUpDate?: string | null;
   followUpNeeded?: boolean | null;
   followUpReason?: string | null;

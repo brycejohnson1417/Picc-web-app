@@ -833,6 +833,9 @@ async function mapNotionPageToTerritoryStore(
   const daysOverdue = readFormulaNumber((propertyByCandidates('days overdue') as NotionPropertyValue | undefined) ?? properties['Days Overdue']);
   const phoneNumber = readPhoneNumberProperty((propertyByCandidates('phone number', 'phone') as NotionPropertyValue | undefined) ?? properties['Phone Number']) || null;
   const email = readEmailProperty((propertyByCandidates('email', 'email address') as NotionPropertyValue | undefined) ?? properties.Email) || null;
+  const lastSampleOrderDate =
+    readDateStartProperty((propertyByCandidates('last sample order date', 'sample order date', 'last sample date') as NotionPropertyValue | undefined) ?? properties['Last Sample Order Date']) ||
+    null;
   const followUpDate = readDateStartProperty((propertyByCandidates('follow-up date', 'follow up date') as NotionPropertyValue | undefined) ?? properties['Follow-up Date']) || null;
   const followUpNeeded = readBooleanProperty((propertyByCandidates('follow-up needed', 'follow up needed') as NotionPropertyValue | undefined) ?? properties['Follow-up Needed']);
   const followUpReason = readTextFromAnyProperty((propertyByCandidates('follow-up reason', 'follow up reason') as NotionPropertyValue | undefined) ?? properties['Follow-up Reason']) || null;
@@ -924,6 +927,7 @@ async function mapNotionPageToTerritoryStore(
     daysOverdue,
     phoneNumber,
     email,
+    lastSampleOrderDate,
     followUpDate,
     followUpNeeded,
     followUpReason,
@@ -1708,6 +1712,7 @@ export async function loadTerritoryStores(input?: {
   reps?: string[];
   query?: string;
   locationAvailability?: 'all' | 'available' | 'unavailable';
+  hasSampleOrderDate?: boolean;
   refresh?: boolean;
   maxLiveGeocodeLookups?: number;
 }): Promise<TerritoryStoresResponse> {
@@ -1748,6 +1753,7 @@ export async function loadTerritoryStores(input?: {
         licenseNumber: snapshotStore?.licenseNumber ?? store.licenseNumber,
         phoneNumber: snapshotStore?.phoneNumber ?? store.phoneNumber,
         email: snapshotStore?.email ?? store.email,
+        lastSampleOrderDate: snapshotStore?.lastSampleOrderDate ?? store.lastSampleOrderDate,
         followUpNeeded: snapshotStore?.followUpNeeded ?? null,
         followUpReason: snapshotStore?.followUpReason ?? null,
         followUpDate: snapshotStore?.followUpDate ?? store.followUpDate,
@@ -1767,6 +1773,10 @@ export async function loadTerritoryStores(input?: {
     filters = fallback.filters;
     recordsRead = fallback.recordsRead;
     sourceEngine = undefined;
+  }
+
+  if (input?.hasSampleOrderDate) {
+    stores = stores.filter((store) => Boolean(store.lastSampleOrderDate));
   }
 
   return {
