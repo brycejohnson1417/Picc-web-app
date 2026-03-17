@@ -107,6 +107,14 @@ type NotionPropertyValue = {
       start?: string | null;
     } | null;
   } | null;
+  rollup?: {
+    type?: string | null;
+    number?: number | null;
+    date?: {
+      start?: string | null;
+    } | null;
+    array?: NotionPropertyValue[];
+  } | null;
   people?: NotionPerson[];
   place?: NotionPlace | null;
   relation?: Array<{ id?: string }>;
@@ -263,7 +271,7 @@ function readDateStartProperty(property: NotionPropertyValue | undefined) {
   return typeof property?.date?.start === 'string' ? property.date.start : '';
 }
 
-function readIsoDateProperty(property: NotionPropertyValue | undefined) {
+function readIsoDateProperty(property: NotionPropertyValue | undefined): string {
   const directDate = readDateStartProperty(property);
   if (directDate) {
     return directDate;
@@ -272,6 +280,27 @@ function readIsoDateProperty(property: NotionPropertyValue | undefined) {
   const formulaDate = typeof property?.formula?.date?.start === 'string' ? property.formula.date.start : '';
   if (formulaDate) {
     return formulaDate;
+  }
+
+  const rollupDate = typeof property?.rollup?.date?.start === 'string' ? property.rollup.date.start : '';
+  if (rollupDate) {
+    return rollupDate;
+  }
+
+  const rollupArray = Array.isArray(property?.rollup?.array) ? property.rollup.array : [];
+  if (rollupArray.length > 0) {
+    const candidates: string[] = rollupArray
+      .map((item) => readIsoDateProperty(item))
+      .filter((value): value is string => Boolean(value))
+      .sort((left, right) => {
+        const leftTime = new Date(left).getTime();
+        const rightTime = new Date(right).getTime();
+        return rightTime - leftTime;
+      });
+
+    if (candidates.length > 0) {
+      return candidates[0];
+    }
   }
 
   const text = readTextFromAnyProperty(property);
@@ -357,7 +386,7 @@ function readBooleanProperty(property: NotionPropertyValue | undefined) {
   return null;
 }
 
-function readTextFromAnyProperty(property: NotionPropertyValue | undefined) {
+function readTextFromAnyProperty(property: NotionPropertyValue | undefined): string {
   if (!property) {
     return '';
   }
@@ -388,6 +417,22 @@ function readTextFromAnyProperty(property: NotionPropertyValue | undefined) {
 
   const formulaText = typeof property.formula?.string === 'string' ? property.formula.string.trim() : '';
   if (formulaText) return formulaText;
+
+  const rollupNumber = typeof property.rollup?.number === 'number' && Number.isFinite(property.rollup.number) ? property.rollup.number : null;
+  if (rollupNumber !== null) return String(rollupNumber);
+
+  const rollupDate = typeof property.rollup?.date?.start === 'string' ? property.rollup.date.start : '';
+  if (rollupDate) return rollupDate;
+
+  const rollupArray = Array.isArray(property.rollup?.array) ? property.rollup.array : [];
+  if (rollupArray.length > 0) {
+    const arrayText: string = rollupArray
+      .map((item) => readTextFromAnyProperty(item))
+      .filter(Boolean)
+      .join(', ')
+      .trim();
+    if (arrayText) return arrayText;
+  }
 
   return '';
 }
@@ -1847,6 +1892,14 @@ export async function loadTerritoryStores(input?: {
   const lastOrderDateFilter = input?.lastOrderDateFilter ?? 'all';
   if (lastOrderDateFilter !== 'all') {
     stores = stores.filter((store) => matchesLastOrderDateFilter(store.lastOrderDate, lastOrderDateFilter));
+  }
+
+  if ((input?.hasSampleOrderDate || lastOrderDateFilter !== 'all') && stores.length === 0 && !input?.refresh) {
+    return loadTerritoryStores({
+      ...input,
+      refresh: true,
+      maxLiveGeocodeLookups: 0,
+    });
   }
 
   return {
