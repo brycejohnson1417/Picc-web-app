@@ -154,6 +154,7 @@ interface TerritorySnapshotResult {
 }
 
 type TerritoryOrderDateFilter = 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
+type TerritorySampleAccountTypeFilter = 'all' | 'customers' | 'non_customers';
 
 interface CachedContactRow extends TerritoryStoreContact {
   accountPageIds: string[];
@@ -1901,6 +1902,7 @@ export async function loadTerritoryStores(input?: {
   query?: string;
   locationAvailability?: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate?: boolean;
+  sampleAccountTypeFilter?: TerritorySampleAccountTypeFilter;
   lastOrderDateFilter?: TerritoryOrderDateFilter;
   refresh?: boolean;
   maxLiveGeocodeLookups?: number;
@@ -1967,6 +1969,17 @@ export async function loadTerritoryStores(input?: {
 
   if (input?.hasSampleOrderDate) {
     stores = stores.filter((store) => Boolean(store.lastSampleOrderDate));
+  }
+
+  const sampleAccountTypeFilter = input?.sampleAccountTypeFilter ?? 'all';
+  if (sampleAccountTypeFilter !== 'all') {
+    stores = stores.filter((store) => {
+      if (!store.lastSampleOrderDate) {
+        return false;
+      }
+      const isCustomer = store.statusKey === 'customer' || store.statusKey === 'customer overdue';
+      return sampleAccountTypeFilter === 'customers' ? isCustomer : !isCustomer;
+    });
   }
 
   const lastOrderDateFilter = input?.lastOrderDateFilter ?? 'all';

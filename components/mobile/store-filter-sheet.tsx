@@ -15,11 +15,13 @@ interface StoreFilterSheetProps {
   selectedReps: string[];
   locationAvailability: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate: boolean;
+  sampleAccountTypeFilter: 'all' | 'customers' | 'non_customers';
   lastOrderDateFilter: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
   onToggleStatus: (value: string) => void;
   onToggleRep: (value: string) => void;
   onSetLocationAvailability: (value: 'all' | 'available' | 'unavailable') => void;
   onSetHasSampleOrderDate: (value: boolean) => void;
+  onSetSampleAccountTypeFilter: (value: 'all' | 'customers' | 'non_customers') => void;
   onSetLastOrderDateFilter: (value: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months') => void;
   pinColorMode: PinColorMode;
   onSetPinColorMode: (mode: PinColorMode) => void;
@@ -39,11 +41,13 @@ export function StoreFilterSheet({
   selectedReps,
   locationAvailability,
   hasSampleOrderDate,
+  sampleAccountTypeFilter,
   lastOrderDateFilter,
   onToggleStatus,
   onToggleRep,
   onSetLocationAvailability,
   onSetHasSampleOrderDate,
+  onSetSampleAccountTypeFilter,
   onSetLastOrderDateFilter,
   pinColorMode,
   onSetPinColorMode,
@@ -61,6 +65,7 @@ export function StoreFilterSheet({
     selectedReps.length +
     (locationAvailability === 'all' ? 0 : 1) +
     (hasSampleOrderDate ? 1 : 0) +
+    (sampleAccountTypeFilter === 'all' ? 0 : 1) +
     (lastOrderDateFilter === 'all' ? 0 : 1);
   const hasActiveFilters = activeFilters > 0;
 
@@ -155,7 +160,28 @@ export function StoreFilterSheet({
               >
                 Has sample order date
               </button>
+              {[
+                { value: 'all', label: 'All sampled stores' },
+                { value: 'customers', label: 'Sampled customers' },
+                { value: 'non_customers', label: 'Sampled non-customers' },
+              ].map((option) => {
+                const active = sampleAccountTypeFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => onSetSampleAccountTypeFilter(option.value as 'all' | 'customers' | 'non_customers')}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-[13px] font-medium',
+                      active ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
+            <p className="mt-2 text-[12px] text-[#72757d]">Sampled non-customers excludes Customer and Customer Overdue.</p>
           </section>
 
           <section className="mb-4">

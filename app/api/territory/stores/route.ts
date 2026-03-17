@@ -27,6 +27,11 @@ export async function GET(request: Request) {
       ? locationAvailabilityParam
       : 'all';
   const hasSampleOrderDate = searchParams.get('hasSampleOrderDate') === '1';
+  const sampleAccountTypeFilterParam = (searchParams.get('sampleAccountTypeFilter') ?? 'all').trim().toLowerCase();
+  const sampleAccountTypeFilter =
+    sampleAccountTypeFilterParam === 'customers' || sampleAccountTypeFilterParam === 'non_customers'
+      ? sampleAccountTypeFilterParam
+      : 'all';
   const lastOrderDateFilterParam = (searchParams.get('lastOrderDateFilter') ?? 'all').trim().toLowerCase();
   const lastOrderDateFilter =
     lastOrderDateFilterParam === 'last_month' ||
@@ -48,6 +53,7 @@ export async function GET(request: Request) {
       reps,
       locationAvailability,
       hasSampleOrderDate,
+      sampleAccountTypeFilter,
       lastOrderDateFilter,
       query: q,
       refresh,
