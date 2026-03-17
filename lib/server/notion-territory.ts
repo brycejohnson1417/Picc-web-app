@@ -103,6 +103,9 @@ type NotionPropertyValue = {
     number?: number | null;
     string?: string | null;
     boolean?: boolean | null;
+    date?: {
+      start?: string | null;
+    } | null;
   } | null;
   people?: NotionPerson[];
   place?: NotionPlace | null;
@@ -258,6 +261,30 @@ function readEmailProperty(property: NotionPropertyValue | undefined) {
 
 function readDateStartProperty(property: NotionPropertyValue | undefined) {
   return typeof property?.date?.start === 'string' ? property.date.start : '';
+}
+
+function readIsoDateProperty(property: NotionPropertyValue | undefined) {
+  const directDate = readDateStartProperty(property);
+  if (directDate) {
+    return directDate;
+  }
+
+  const formulaDate = typeof property?.formula?.date?.start === 'string' ? property.formula.date.start : '';
+  if (formulaDate) {
+    return formulaDate;
+  }
+
+  const text = readTextFromAnyProperty(property);
+  if (!text) {
+    return '';
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+
+  return parsed.toISOString();
 }
 
 function readFormulaNumber(property: NotionPropertyValue | undefined) {
@@ -836,10 +863,10 @@ async function mapNotionPageToTerritoryStore(
   const phoneNumber = readPhoneNumberProperty((propertyByCandidates('phone number', 'phone') as NotionPropertyValue | undefined) ?? properties['Phone Number']) || null;
   const email = readEmailProperty((propertyByCandidates('email', 'email address') as NotionPropertyValue | undefined) ?? properties.Email) || null;
   const lastSampleOrderDate =
-    readDateStartProperty((propertyByCandidates('last sample order date', 'sample order date', 'last sample date') as NotionPropertyValue | undefined) ?? properties['Last Sample Order Date']) ||
+    readIsoDateProperty((propertyByCandidates('last sample order date', 'sample order date', 'last sample date') as NotionPropertyValue | undefined) ?? properties['Last Sample Order Date']) ||
     null;
   const lastOrderDate =
-    readDateStartProperty((propertyByCandidates('last order date', 'most recent order date') as NotionPropertyValue | undefined) ?? properties['Last Order Date']) ||
+    readIsoDateProperty((propertyByCandidates('last order date', 'most recent order date') as NotionPropertyValue | undefined) ?? properties['Last Order Date']) ||
     null;
   const followUpDate = readDateStartProperty((propertyByCandidates('follow-up date', 'follow up date') as NotionPropertyValue | undefined) ?? properties['Follow-up Date']) || null;
   const followUpNeeded = readBooleanProperty((propertyByCandidates('follow-up needed', 'follow up needed') as NotionPropertyValue | undefined) ?? properties['Follow-up Needed']);

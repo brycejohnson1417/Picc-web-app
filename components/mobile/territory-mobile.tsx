@@ -220,17 +220,21 @@ export function TerritoryMobile() {
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
   const boundaries = useMemo(() => boundariesQuery.data?.boundaries ?? [], [boundariesQuery.data?.boundaries]);
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
-  const displayedStores = useMemo(() => {
+  const mapStores = useMemo(() => {
     let nextStores = stores;
     if (showRouteOnly) {
       nextStores = nextStores.filter((store) => routePlan.selectedStopIds.includes(store.id));
     }
-    if (lassoSelectedIds.length > 0) {
-      const selectedSet = new Set(lassoSelectedIds);
-      nextStores = nextStores.filter((store) => selectedSet.has(store.id));
-    }
     return nextStores;
-  }, [lassoSelectedIds, showRouteOnly, stores, routePlan.selectedStopIds]);
+  }, [showRouteOnly, stores, routePlan.selectedStopIds]);
+
+  const listStores = useMemo(() => {
+    if (lassoSelectedIds.length === 0) {
+      return mapStores;
+    }
+    const selectedSet = new Set(lassoSelectedIds);
+    return mapStores.filter((store) => selectedSet.has(store.id));
+  }, [lassoSelectedIds, mapStores]);
 
   useEffect(() => {
     if (showRouteOnly && routePlan.selectedStopIds.length === 0) {
@@ -252,9 +256,9 @@ export function TerritoryMobile() {
 
   useEffect(() => {
     if (!focusedId) return;
-    if (displayedStores.some((store) => store.id === focusedId)) return;
+    if (mapStores.some((store) => store.id === focusedId)) return;
     setFocusedId(null);
-  }, [focusedId, displayedStores]);
+  }, [focusedId, mapStores]);
 
   useEffect(() => {
     if (boundaryPrefsReady || boundariesQuery.isLoading) {
@@ -325,21 +329,21 @@ export function TerritoryMobile() {
 
   const grouped = useMemo(() => {
     const groups = new Map<string, TerritoryStorePin[]>();
-    for (const store of displayedStores) {
+    for (const store of listStores) {
       const letter = firstLetter(store.name);
       const list = groups.get(letter) ?? [];
       list.push(store);
       groups.set(letter, list);
     }
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [displayedStores]);
+  }, [listStores]);
 
   const repLegend = useMemo(() => {
     if (pinColorMode !== 'rep') {
       return [] as Array<{ label: string; color: string; count: number }>;
     }
     const counts = new Map<string, number>();
-    for (const store of displayedStores) {
+    for (const store of mapStores) {
       const label = store.repNames.find((name) => name.trim().length > 0) ?? 'Unassigned';
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
@@ -353,7 +357,7 @@ export function TerritoryMobile() {
         }
         return a.label.localeCompare(b.label);
       });
-  }, [displayedStores, pinColorMode]);
+  }, [mapStores, pinColorMode]);
 
   const repColorMap = useMemo(() => createRepColorMap(repLegend.map((entry) => entry.label)), [repLegend]);
 
@@ -384,12 +388,12 @@ export function TerritoryMobile() {
       return 3;
     };
 
-    return [...displayedStores].sort((left, right) => {
+    return [...mapStores].sort((left, right) => {
       const scoreDiff = scoreStore(left) - scoreStore(right);
       if (scoreDiff !== 0) return scoreDiff;
       return left.name.localeCompare(right.name);
     })[0] ?? null;
-  }, [debouncedMapSearch, displayedStores]);
+  }, [debouncedMapSearch, mapStores]);
 
   const lastSearchFocusRef = useRef<string>('');
 
@@ -749,7 +753,7 @@ export function TerritoryMobile() {
         <div className="relative h-[calc(100dvh-162px)] min-h-[360px] md:h-[calc(100dvh-146px)] lg:h-[calc(100dvh-138px)]">
           <MapRenderBoundary onReset={() => setRefreshNonce((value) => value + 1)}>
             <TerritoryMapMobile
-              stores={displayedStores}
+              stores={mapStores}
               boundaries={boundaries}
               showBoundaries={showBoundaries}
               hiddenBoundaryIds={hiddenBoundaryIds}
@@ -912,7 +916,21 @@ export function TerritoryMobile() {
               className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', lassoSelection ? 'ring-2 ring-[#2563eb]' : '')}
               onClick={toggleLassoMode}
             >
-              <span className={cn('text-[12px] font-semibold', lassoSelection ? 'text-[#2563eb]' : 'text-[#7f828a]')}>L</span>
+              <svg
+                viewBox="0 0 24 24"
+                className={cn('h-5 w-5', lassoSelection ? 'text-[#2563eb]' : 'text-[#7f828a]')}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M6 7.5c0-2.8 2.9-4.5 6.2-4.5 4.4 0 7.8 2.4 7.8 5.9 0 3-2.4 4.9-5.4 5.5" />
+                <path d="M10.5 13.3c-3.9-.1-6.5-2-6.5-5 0-1.5.8-2.8 2.1-3.8" />
+                <path d="M14.5 16.2c0 1.3-1.1 2.3-2.5 2.3s-2.5-1-2.5-2.3 1.1-2.3 2.5-2.3 2.5 1 2.5 2.3Z" />
+                <path d="M12 18.5v2.5" />
+              </svg>
             </button>
           </div>
 
