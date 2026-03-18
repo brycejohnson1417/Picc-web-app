@@ -23,7 +23,15 @@ import { createTerritoryStoreDetailService } from '@/lib/server/notion-territory
 import { loadStoreVendorDaySummary } from '@/lib/server/notion-territory-vendor-days';
 import { resolveAccountIdentity } from '@/lib/server/account-identity';
 import { checkGoogleBudgetCap, estimateGoogleUsageCostUsd, recordGoogleUsage } from '@/lib/server/google-usage';
-import { colorForStatus, normalizeStatus, pinKindForStatus, type TerritoryStoreContact, type TerritoryStorePin, type TerritoryStoresResponse } from '@/lib/territory/types';
+import {
+  colorForStatus,
+  normalizeStatus,
+  pinKindForStatus,
+  type TerritoryFilterCount,
+  type TerritoryStoreContact,
+  type TerritoryStorePin,
+  type TerritoryStoresResponse,
+} from '@/lib/territory/types';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
@@ -155,6 +163,7 @@ interface TerritorySnapshotResult {
 
 type TerritoryOrderDateFilter = 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
 type TerritorySampleAccountTypeFilter = 'all' | 'customers' | 'non_customers';
+type TerritoryVendorDayStatusFilter = string[];
 
 interface CachedContactRow extends TerritoryStoreContact {
   accountPageIds: string[];
@@ -988,6 +997,9 @@ async function mapNotionPageToTerritoryStore(
   const daysOverdue = readFormulaNumber((propertyByCandidates('days overdue') as NotionPropertyValue | undefined) ?? properties['Days Overdue']);
   const phoneNumber = readPhoneNumberProperty((propertyByCandidates('phone number', 'phone') as NotionPropertyValue | undefined) ?? properties['Phone Number']) || null;
   const email = readEmailProperty((propertyByCandidates('email', 'email address') as NotionPropertyValue | undefined) ?? properties.Email) || null;
+  const vendorDayStatus =
+    readSelectNameProperty((propertyByCandidates('vendor day status') as NotionPropertyValue | undefined) ?? properties['Vendor Day Status']) ||
+    null;
   const lastSampleOrderDate =
     readIsoDateProperty((propertyByCandidates('last sample order date', 'sample order date', 'last sample date') as NotionPropertyValue | undefined) ?? properties['Last Sample Order Date']) ||
     null;
@@ -1085,6 +1097,7 @@ async function mapNotionPageToTerritoryStore(
     daysOverdue,
     phoneNumber,
     email,
+    vendorDayStatus,
     lastSampleOrderDate,
     lastOrderDate,
     followUpDate,
@@ -1498,6 +1511,18 @@ function matchesLastOrderDateFilter(value: string | null | undefined, filter: Te
   return ageDays > 60;
 }
 
+function buildVendorDayStatusCounts(stores: TerritoryStorePin[]): TerritoryFilterCount[] {
+  const counts = new Map<string, number>();
+  for (const store of stores) {
+    const value = store.vendorDayStatus?.trim();
+    if (!value) continue;
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+}
+
 async function upsertStoreInSnapshot(store: TerritoryStorePin) {
   const snapshot = await readNotionCacheSnapshot<TerritoryStorePin[]>(TERRITORY_SNAPSHOT_KEY);
   const payload = normalizeSnapshotPayload(snapshot?.payload);
@@ -1899,6 +1924,7 @@ export async function territoryConnectionCheck() {
 export async function loadTerritoryStores(input?: {
   statuses?: string[];
   reps?: string[];
+  vendorDayStatuses?: TerritoryVendorDayStatusFilter;
   query?: string;
   locationAvailability?: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate?: boolean;
@@ -1944,6 +1970,7 @@ export async function loadTerritoryStores(input?: {
         licenseNumber: snapshotStore?.licenseNumber ?? store.licenseNumber,
         phoneNumber: snapshotStore?.phoneNumber ?? store.phoneNumber,
         email: snapshotStore?.email ?? store.email,
+        vendorDayStatus: snapshotStore?.vendorDayStatus ?? store.vendorDayStatus,
         lastSampleOrderDate: snapshotStore?.lastSampleOrderDate ?? store.lastSampleOrderDate,
         lastOrderDate: snapshotStore?.lastOrderDate ?? store.lastOrderDate,
         followUpNeeded: snapshotStore?.followUpNeeded ?? null,
@@ -1965,6 +1992,14 @@ export async function loadTerritoryStores(input?: {
     filters = fallback.filters;
     recordsRead = fallback.recordsRead;
     sourceEngine = undefined;
+  }
+
+  const vendorDayStatusFilters = new Set((input?.vendorDayStatuses ?? []).map((value) => normalizeStatus(value)).filter(Boolean));
+  if (vendorDayStatusFilters.size > 0) {
+    stores = stores.filter((store) => {
+      const statusKey = normalizeStatus(store.vendorDayStatus ?? '');
+      return Boolean(statusKey) && vendorDayStatusFilters.has(statusKey);
+    });
   }
 
   if (input?.hasSampleOrderDate) {
@@ -1994,6 +2029,11 @@ export async function loadTerritoryStores(input?: {
       maxLiveGeocodeLookups: 0,
     });
   }
+
+  filters = {
+    ...filters,
+    vendorDayStatuses: buildVendorDayStatusCounts(stores),
+  };
 
   return {
     stores,

@@ -34,6 +34,7 @@ type SavedFiltersPayload = {
   search: string;
   selectedStatuses: string[];
   selectedReps: string[];
+  selectedVendorDayStatuses: string[];
   locationAvailability: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate: boolean;
   sampleAccountTypeFilter: 'all' | 'customers' | 'non_customers';
@@ -93,6 +94,7 @@ export function TerritoryMobile() {
   const [showRouteOnly, setShowRouteOnly] = useState(false);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
+  const [selectedVendorDayStatuses, setSelectedVendorDayStatuses] = useState<string[]>([]);
   const [locationAvailability, setLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
   const [hasSampleOrderDate, setHasSampleOrderDate] = useState(false);
   const [sampleAccountTypeFilter, setSampleAccountTypeFilter] = useState<'all' | 'customers' | 'non_customers'>('all');
@@ -102,6 +104,7 @@ export function TerritoryMobile() {
   const [pinColorMode, setPinColorMode] = useState<PinColorMode>('status');
   const [draftStatuses, setDraftStatuses] = useState<string[]>([]);
   const [draftReps, setDraftReps] = useState<string[]>([]);
+  const [draftVendorDayStatuses, setDraftVendorDayStatuses] = useState<string[]>([]);
   const [draftLocationAvailability, setDraftLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
   const [draftHasSampleOrderDate, setDraftHasSampleOrderDate] = useState(false);
   const [draftSampleAccountTypeFilter, setDraftSampleAccountTypeFilter] = useState<'all' | 'customers' | 'non_customers'>('all');
@@ -150,6 +153,11 @@ export function TerritoryMobile() {
       setDebouncedSearch(typeof parsed.search === 'string' ? parsed.search.trim() : '');
       setSelectedStatuses(Array.isArray(parsed.selectedStatuses) ? parsed.selectedStatuses.filter((value): value is string => typeof value === 'string') : []);
       setSelectedReps(Array.isArray(parsed.selectedReps) ? parsed.selectedReps.filter((value): value is string => typeof value === 'string') : []);
+      setSelectedVendorDayStatuses(
+        Array.isArray(parsed.selectedVendorDayStatuses)
+          ? parsed.selectedVendorDayStatuses.filter((value): value is string => typeof value === 'string')
+          : [],
+      );
       setLocationAvailability(parsed.locationAvailability === 'available' || parsed.locationAvailability === 'unavailable' ? parsed.locationAvailability : 'all');
       setHasSampleOrderDate(Boolean(parsed.hasSampleOrderDate));
       setSampleAccountTypeFilter(
@@ -179,6 +187,7 @@ export function TerritoryMobile() {
       debouncedSearch,
       selectedStatuses.join('|'),
       selectedReps.join('|'),
+      selectedVendorDayStatuses.join('|'),
       locationAvailability,
       hasSampleOrderDate ? 'sample' : 'all',
       sampleAccountTypeFilter,
@@ -190,6 +199,7 @@ export function TerritoryMobile() {
       if (debouncedSearch) params.set('q', debouncedSearch);
       for (const status of selectedStatuses) params.append('status', status);
       for (const rep of selectedReps) params.append('rep', rep);
+      for (const vendorDayStatus of selectedVendorDayStatuses) params.append('vendorDayStatus', vendorDayStatus);
       if (locationAvailability !== 'all') params.set('locationStatus', locationAvailability);
       if (hasSampleOrderDate) params.set('hasSampleOrderDate', '1');
       if (sampleAccountTypeFilter !== 'all') params.set('sampleAccountTypeFilter', sampleAccountTypeFilter);
@@ -221,8 +231,9 @@ export function TerritoryMobile() {
     },
     staleTime: 300000,
     gcTime: 900000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 60000,
     retry: 1,
     placeholderData: (previousData) => previousData,
   });
@@ -279,14 +290,16 @@ export function TerritoryMobile() {
       const raw = window.localStorage.getItem(BOUNDARY_VISIBILITY_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as {
-          showBoundaries?: boolean;
           hiddenBoundaryIds?: string[];
         };
-        setShowBoundaries(parsed.showBoundaries !== false);
+        setShowBoundaries(true);
         setHiddenBoundaryIds(
-          Array.isArray(parsed.hiddenBoundaryIds)
-            ? parsed.hiddenBoundaryIds.filter((value): value is string => typeof value === 'string')
-            : [],
+          [
+            ...(Array.isArray(parsed.hiddenBoundaryIds)
+              ? parsed.hiddenBoundaryIds.filter((value): value is string => typeof value === 'string')
+              : []),
+            ...boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id),
+          ].filter((value, index, array) => array.indexOf(value) === index),
         );
       } else {
         setShowBoundaries(true);
@@ -308,17 +321,20 @@ export function TerritoryMobile() {
     window.localStorage.setItem(
       BOUNDARY_VISIBILITY_STORAGE_KEY,
       JSON.stringify({
-        showBoundaries,
         hiddenBoundaryIds,
       }),
     );
-  }, [boundaryPrefsReady, hiddenBoundaryIds, showBoundaries]);
+  }, [boundaryPrefsReady, hiddenBoundaryIds]);
 
   useEffect(() => {
     if (boundaries.length === 0) {
       return;
     }
-    setHiddenBoundaryIds((current) => current.filter((boundaryId) => boundaries.some((boundary) => boundary.id === boundaryId)));
+    setHiddenBoundaryIds((current) => {
+      const knownIds = current.filter((boundaryId) => boundaries.some((boundary) => boundary.id === boundaryId));
+      const hiddenByDefault = boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id);
+      return [...knownIds, ...hiddenByDefault].filter((value, index, array) => array.indexOf(value) === index);
+    });
   }, [boundaries]);
 
   const focusedStore = useMemo(() => {
@@ -431,6 +447,7 @@ export function TerritoryMobile() {
   const activeFiltersCount =
     selectedStatuses.length +
     selectedReps.length +
+    selectedVendorDayStatuses.length +
     (locationAvailability === 'all' ? 0 : 1) +
     (hasSampleOrderDate ? 1 : 0) +
     (sampleAccountTypeFilter === 'all' ? 0 : 1) +
@@ -440,6 +457,7 @@ export function TerritoryMobile() {
   function openFiltersSheet() {
     setDraftStatuses(selectedStatuses);
     setDraftReps(selectedReps);
+    setDraftVendorDayStatuses(selectedVendorDayStatuses);
     setDraftLocationAvailability(locationAvailability);
     setDraftHasSampleOrderDate(hasSampleOrderDate);
     setDraftSampleAccountTypeFilter(sampleAccountTypeFilter);
@@ -451,6 +469,7 @@ export function TerritoryMobile() {
   function applyDraftFilters() {
     setSelectedStatuses(draftStatuses);
     setSelectedReps(draftReps);
+    setSelectedVendorDayStatuses(draftVendorDayStatuses);
     setLocationAvailability(draftLocationAvailability);
     setHasSampleOrderDate(draftHasSampleOrderDate);
     setSampleAccountTypeFilter(draftSampleAccountTypeFilter);
@@ -464,6 +483,7 @@ export function TerritoryMobile() {
       search: search.trim(),
       selectedStatuses,
       selectedReps,
+      selectedVendorDayStatuses,
       locationAvailability,
       hasSampleOrderDate,
       sampleAccountTypeFilter,
@@ -482,6 +502,7 @@ export function TerritoryMobile() {
     setDebouncedSearch('');
     setSelectedStatuses([]);
     setSelectedReps([]);
+    setSelectedVendorDayStatuses([]);
     setLocationAvailability('all');
     setHasSampleOrderDate(false);
     setSampleAccountTypeFilter('all');
@@ -490,6 +511,7 @@ export function TerritoryMobile() {
     setPinColorMode('status');
     setDraftStatuses([]);
     setDraftReps([]);
+    setDraftVendorDayStatuses([]);
     setDraftLocationAvailability('all');
     setDraftHasSampleOrderDate(false);
     setDraftSampleAccountTypeFilter('all');
@@ -1107,15 +1129,18 @@ export function TerritoryMobile() {
         onClose={() => setShowFilters(false)}
         statuses={storesQuery.data?.filters.statuses ?? []}
         reps={storesQuery.data?.filters.reps ?? []}
+        vendorDayStatuses={storesQuery.data?.filters.vendorDayStatuses ?? []}
         locationAvailabilityOptions={storesQuery.data?.filters.locationAvailability ?? []}
         selectedStatuses={draftStatuses}
         selectedReps={draftReps}
+        selectedVendorDayStatuses={draftVendorDayStatuses}
         locationAvailability={draftLocationAvailability}
         hasSampleOrderDate={draftHasSampleOrderDate}
         sampleAccountTypeFilter={draftSampleAccountTypeFilter}
         lastOrderDateFilter={draftLastOrderDateFilter}
         onToggleStatus={(value) => setDraftStatuses((current) => toggleListValue(current, value))}
         onToggleRep={(value) => setDraftReps((current) => toggleListValue(current, value))}
+        onToggleVendorDayStatus={(value) => setDraftVendorDayStatuses((current) => toggleListValue(current, value))}
         onSetLocationAvailability={setDraftLocationAvailability}
         onSetHasSampleOrderDate={setDraftHasSampleOrderDate}
         onSetSampleAccountTypeFilter={setDraftSampleAccountTypeFilter}

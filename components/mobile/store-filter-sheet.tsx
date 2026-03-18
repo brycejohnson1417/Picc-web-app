@@ -10,15 +10,18 @@ interface StoreFilterSheetProps {
   onClose: () => void;
   statuses: TerritoryFilterCount[];
   reps: TerritoryFilterCount[];
+  vendorDayStatuses: TerritoryFilterCount[];
   locationAvailabilityOptions: TerritoryFilterCount[];
   selectedStatuses: string[];
   selectedReps: string[];
+  selectedVendorDayStatuses: string[];
   locationAvailability: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate: boolean;
   sampleAccountTypeFilter: 'all' | 'customers' | 'non_customers';
   lastOrderDateFilter: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
   onToggleStatus: (value: string) => void;
   onToggleRep: (value: string) => void;
+  onToggleVendorDayStatus: (value: string) => void;
   onSetLocationAvailability: (value: 'all' | 'available' | 'unavailable') => void;
   onSetHasSampleOrderDate: (value: boolean) => void;
   onSetSampleAccountTypeFilter: (value: 'all' | 'customers' | 'non_customers') => void;
@@ -36,15 +39,18 @@ export function StoreFilterSheet({
   onClose,
   statuses,
   reps,
+  vendorDayStatuses,
   locationAvailabilityOptions,
   selectedStatuses,
   selectedReps,
+  selectedVendorDayStatuses,
   locationAvailability,
   hasSampleOrderDate,
   sampleAccountTypeFilter,
   lastOrderDateFilter,
   onToggleStatus,
   onToggleRep,
+  onToggleVendorDayStatus,
   onSetLocationAvailability,
   onSetHasSampleOrderDate,
   onSetSampleAccountTypeFilter,
@@ -63,6 +69,7 @@ export function StoreFilterSheet({
   const activeFilters =
     selectedStatuses.length +
     selectedReps.length +
+    selectedVendorDayStatuses.length +
     (locationAvailability === 'all' ? 0 : 1) +
     (hasSampleOrderDate ? 1 : 0) +
     (sampleAccountTypeFilter === 'all' ? 0 : 1) +
@@ -118,6 +125,12 @@ export function StoreFilterSheet({
             options={reps.map((entry) => ({ label: entry.value, value: entry.value, count: entry.count }))}
             selected={selectedReps}
             onToggle={onToggleRep}
+          />
+          <FilterSection
+            title="Vendor Day Status"
+            options={vendorDayStatuses.map((entry) => ({ label: entry.value, value: entry.value, count: entry.count }))}
+            selected={selectedVendorDayStatuses}
+            onToggle={onToggleVendorDayStatus}
           />
 
           <section className="mb-4">

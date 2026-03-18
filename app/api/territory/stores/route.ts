@@ -21,6 +21,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const statuses = readMultiParam(searchParams, 'status');
   const reps = readMultiParam(searchParams, 'rep');
+  const vendorDayStatuses = readMultiParam(searchParams, 'vendorDayStatus');
   const locationAvailabilityParam = (searchParams.get('locationStatus') ?? 'all').trim().toLowerCase();
   const locationAvailability =
     locationAvailabilityParam === 'available' || locationAvailabilityParam === 'unavailable'
@@ -51,6 +52,7 @@ export async function GET(request: Request) {
     const payload = await loadTerritoryStores({
       statuses,
       reps,
+      vendorDayStatuses,
       locationAvailability,
       hasSampleOrderDate,
       sampleAccountTypeFilter,

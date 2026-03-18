@@ -338,9 +338,13 @@ export function filterTerritoryPins(
   const pinsInTerritory = pins.filter(isInHomeTerritory);
   const statusCounts = new Map<string, number>();
   const repCounts = new Map<string, number>();
+  const vendorDayStatusCounts = new Map<string, number>();
 
   for (const pin of pinsInTerritory) {
     statusCounts.set(pin.status, (statusCounts.get(pin.status) ?? 0) + 1);
+    if (pin.vendorDayStatus?.trim()) {
+      vendorDayStatusCounts.set(pin.vendorDayStatus, (vendorDayStatusCounts.get(pin.vendorDayStatus) ?? 0) + 1);
+    }
     if (pin.repNames.length === 0 && pin.repEmails.length === 0) {
       repCounts.set('Unassigned', (repCounts.get('Unassigned') ?? 0) + 1);
       continue;
@@ -390,6 +394,10 @@ export function filterTerritoryPins(
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
+  const vendorDayStatuses: TerritoryFilterCount[] = [...vendorDayStatusCounts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
   return {
     stores: filteredStores,
     filters: {
@@ -399,6 +407,7 @@ export function filterTerritoryPins(
         { value: 'Available location', count: availableCount },
         { value: 'Unavailable location', count: unavailableCount },
       ],
+      vendorDayStatuses,
     },
     recordsRead: pinsInTerritory.length,
   };

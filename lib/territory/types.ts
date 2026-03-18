@@ -47,6 +47,7 @@ export interface TerritoryStorePin {
   daysOverdue?: number | null;
   phoneNumber?: string | null;
   email?: string | null;
+  vendorDayStatus?: string | null;
   lastSampleOrderDate?: string | null;
   lastOrderDate?: string | null;
   followUpDate?: string | null;
@@ -150,6 +151,7 @@ export interface TerritoryStoresResponse {
     statuses: TerritoryFilterCount[];
     reps: TerritoryFilterCount[];
     locationAvailability: TerritoryFilterCount[];
+    vendorDayStatuses: TerritoryFilterCount[];
   };
   meta: {
     dataSource: 'notion-live-cache' | 'notion-live-cache-stale';
