@@ -26,7 +26,7 @@ const DISTINCT_REP_COLORS = [
 
 const FIXED_REP_COLORS: Record<string, string> = {
   roxy: '#22c55e',
-  'bryce johnson': '#ff1493',
+  'bryce johnson': '#fde047',
   ben: '#dc2626',
   'benjamin rosenthal': '#dc2626',
   donovan: '#f97316',
