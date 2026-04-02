@@ -27,7 +27,7 @@ export async function GET() {
       { boundaries },
       {
         headers: {
-          'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
+          'Cache-Control': 'private, max-age=5, stale-while-revalidate=30',
         },
       },
     );

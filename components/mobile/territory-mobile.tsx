@@ -205,16 +205,18 @@ export function TerritoryMobile() {
       if (sampleAccountTypeFilter !== 'all') params.set('sampleAccountTypeFilter', sampleAccountTypeFilter);
       if (lastOrderDateFilter !== 'all') params.set('lastOrderDateFilter', lastOrderDateFilter);
       if (refreshNonce > 0) params.set('refresh', '1');
-      const response = await fetch(`/api/territory/stores?${params.toString()}`);
+      const response = await fetch(`/api/territory/stores?${params.toString()}`, {
+        cache: 'no-store',
+      });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.error ?? 'Failed to load stores');
       }
       return (await response.json()) as TerritoryStoresResponse;
     },
-    staleTime: 30000,
+    staleTime: 10000,
     refetchOnWindowFocus: true,
-    refetchInterval: 45000,
+    refetchInterval: 15000,
     retry: 1,
     placeholderData: (previousData) => previousData,
   });
@@ -222,18 +224,20 @@ export function TerritoryMobile() {
   const boundariesQuery = useQuery({
     queryKey: ['territory-boundaries'],
     queryFn: async () => {
-      const response = await fetch('/api/territory/boundaries');
+      const response = await fetch('/api/territory/boundaries', {
+        cache: 'no-store',
+      });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.error ?? 'Failed to load territory boundaries');
       }
       return (await response.json()) as TerritoryBoundaryListResponse;
     },
-    staleTime: 300000,
-    gcTime: 900000,
+    staleTime: 5000,
+    gcTime: 300000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    refetchInterval: 60000,
+    refetchInterval: 10000,
     retry: 1,
     placeholderData: (previousData) => previousData,
   });

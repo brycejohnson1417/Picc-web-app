@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Copy, Mail, MapPinned, MessageSquare, Navigation, PencilLine, Phone, PhoneCall, X } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAppAccess } from '@/components/auth/app-access-provider';
 import type { TerritoryStoreContact, TerritoryStoreDetailResponse, TerritoryStorePin } from '@/lib/territory/types';
@@ -107,6 +108,7 @@ interface AccountDetailSheetProps {
 
 export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterStore }: AccountDetailSheetProps) {
   const appAccess = useAppAccess();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<DetailTab>('detail');
   const [detail, setDetail] = useState<TerritoryStoreDetailResponse | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -178,6 +180,16 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
         setDetail(payload);
         hydrateDrafts(payload.store);
         writeCachedStoreDetail(payload);
+
+        const liveRepSignature = payload.store.repNames.join('|');
+        const visibleRepSignature = store.repNames.join('|');
+        if (
+          liveRepSignature !== visibleRepSignature ||
+          payload.store.status !== store.status ||
+          payload.store.vendorDayStatus !== store.vendorDayStatus
+        ) {
+          void queryClient.invalidateQueries({ queryKey: ['territory-mobile'] });
+        }
       } catch (error) {
         if (controller.signal.aborted) return;
         if (!cachedDetail) {
@@ -195,7 +207,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
     void loadDetail();
 
     return () => controller.abort();
-  }, [store]);
+  }, [queryClient, store]);
 
   if (!store) {
     return null;

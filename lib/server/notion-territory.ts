@@ -41,7 +41,7 @@ const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v1';
 const DEFAULT_SYNC_TTL_MINUTES = 5;
 const DEFAULT_STALE_SYNC_GEOCODE_LOOKUPS = 12;
 const DEFAULT_FORCE_SYNC_GEOCODE_LOOKUPS = 80;
-const DEFAULT_INCREMENTAL_FRESHNESS_SECONDS = 20;
+const DEFAULT_INCREMENTAL_FRESHNESS_SECONDS = 8;
 
 const REQUIRED_PROPERTIES = [
   { name: 'Dispensary Name', type: 'title' },
@@ -402,6 +402,51 @@ function readPeopleTextProperty(property: NotionPropertyValue | undefined): stri
     .trim();
 
   return nestedPeople;
+}
+
+function readPeopleValuesProperty(property: NotionPropertyValue | undefined): {
+  names: string[];
+  emails: string[];
+} {
+  const names: string[] = [];
+  const emails: string[] = [];
+
+  if (Array.isArray(property?.people)) {
+    for (const person of property.people) {
+      const name = person?.name?.trim();
+      const email = person?.person?.email?.trim();
+      if (name) {
+        names.push(name);
+      }
+      if (email) {
+        emails.push(email);
+      }
+    }
+  }
+
+  const rollupItems = readRollupItems(property);
+  for (const item of rollupItems) {
+    const nested = readPeopleValuesProperty(item);
+    names.push(...nested.names);
+    emails.push(...nested.emails);
+  }
+
+  if (names.length === 0) {
+    const text = readPeopleTextProperty(property) || readTextFromAnyProperty(property);
+    if (text) {
+      names.push(
+        ...text
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
+      );
+    }
+  }
+
+  return {
+    names: [...new Set(names)],
+    emails: [...new Set(emails)],
+  };
 }
 
 function readNumberProperty(property: NotionPropertyValue | undefined): number | null {
@@ -975,11 +1020,9 @@ async function mapNotionPageToTerritoryStore(
   const statusKey = normalizeStatus(statusName);
   const repProperty =
     (propertyByCandidates('rep', 'picc rep', 'sales rep') as NotionPropertyValue | undefined) ?? properties['Rep'];
-  const repPeople = Array.isArray(repProperty?.people) ? repProperty.people : [];
-  const repNames = repPeople.map((person) => person?.name).filter((value: unknown): value is string => Boolean(value));
-  const repEmails = repPeople
-    .map((person) => person?.person?.email)
-    .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
+  const repValues = readPeopleValuesProperty(repProperty);
+  const repNames = repValues.names;
+  const repEmails = repValues.emails;
 
   const place = properties['Map Location']?.place;
   const notionLat = typeof place?.lat === 'number' ? place.lat : null;

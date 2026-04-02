@@ -75,6 +75,7 @@ export async function GET(request: Request) {
     return NextResponse.json(payload, {
       headers: {
         'X-Territory-Data-Source': payload.meta.sourceEngine ?? payload.meta.dataSource,
+        'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
       },
     });
   } catch (error) {
@@ -88,6 +89,7 @@ export async function GET(request: Request) {
         status: 500,
         headers: {
           'X-Territory-Data-Source': 'postgis',
+          'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
         },
       },
     );
