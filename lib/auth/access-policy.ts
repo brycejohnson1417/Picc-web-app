@@ -6,6 +6,7 @@ import { hasNotionWorkspaceUser } from '@/lib/server/notion-workspace-users';
 
 const REQUIRED_EMAIL_DOMAIN = 'piccplatform.com';
 const DEFAULT_ALLOWED_EMAILS = `@${REQUIRED_EMAIL_DOMAIN}`;
+const DEFAULT_SHARED_WORKSPACE_ID = 'picc_company_workspace';
 
 export interface AccessPolicyResult {
   ok: boolean;
@@ -18,6 +19,10 @@ export interface AccessPolicyResult {
 
 export function getWorkspaceAllowlist() {
   return parseEmailAllowlist(process.env.TERRITORY_ALLOWED_EMAILS?.trim() || DEFAULT_ALLOWED_EMAILS);
+}
+
+export function getSharedWorkspaceId() {
+  return process.env.PICC_WORKSPACE_ORG_ID?.trim() || DEFAULT_SHARED_WORKSPACE_ID;
 }
 
 export function isRequiredCompanyEmail(email: string) {

@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { evaluateUserAccess } from '@/lib/auth/access-policy';
+import { evaluateUserAccess, getSharedWorkspaceId } from '@/lib/auth/access-policy';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { AUTH_BYPASS_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 
@@ -22,7 +22,7 @@ const loadWorkspaceContext = cache(async () => {
     throw new Error(access.status === 503 ? 'ACCESS_VERIFICATION_UNAVAILABLE' : 'ACCESS_DENIED');
   }
 
-  const workspaceKey = access.workspaceOrgId ?? orgId ?? `user_${userId}`;
+  const workspaceKey = access.workspaceOrgId ?? orgId ?? getSharedWorkspaceId();
   const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
     email: access.email!,
     accessType: access.accessType ?? 'workspace',

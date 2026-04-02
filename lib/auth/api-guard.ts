@@ -1,7 +1,7 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { AppRole } from '@/lib/types/rbac';
-import { evaluateUserAccess } from '@/lib/auth/access-policy';
+import { evaluateUserAccess, getSharedWorkspaceId } from '@/lib/auth/access-policy';
 import { getUserRole } from '@/lib/rbac/guards';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { AUTH_BYPASS_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
@@ -54,7 +54,7 @@ export async function guard(allowedRoles?: AppRole[]) {
     return { error: NextResponse.json({ error: access.error }, { status: access.status }) };
   }
 
-    const workspaceKey = access.workspaceOrgId ?? orgId ?? `user_${userId}`;
+    const workspaceKey = access.workspaceOrgId ?? orgId ?? getSharedWorkspaceId();
     let workspaceOrgId = workspaceKey;
     try {
       workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {

@@ -3,7 +3,7 @@ import { Role } from '@prisma/client';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui';
-import { evaluateUserAccess } from '@/lib/auth/access-policy';
+import { evaluateUserAccess, getSharedWorkspaceId } from '@/lib/auth/access-policy';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { recordAppSession } from '@/lib/auth/session-audit';
 import { AUTH_BYPASS_MODE, DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
@@ -79,7 +79,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     );
   }
 
-  const workspaceKey = access.workspaceOrgId ?? orgId ?? `user_${userId}`;
+  const workspaceKey = access.workspaceOrgId ?? orgId ?? getSharedWorkspaceId();
   const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
     email: access.email!,
     accessType: access.accessType ?? 'workspace',

@@ -3,7 +3,7 @@ import 'server-only';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { getUserRole } from '@/lib/rbac/guards';
-import { evaluateUserAccess, getWorkspaceAllowlist } from '@/lib/auth/access-policy';
+import { evaluateUserAccess, getSharedWorkspaceId, getWorkspaceAllowlist } from '@/lib/auth/access-policy';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { firstAllowlistEntryAsCsv, isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
 import { AUTH_BYPASS_MODE } from '@/lib/config/runtime';
@@ -77,7 +77,7 @@ export async function checkTerritoryAccess(opts?: {
     }
   }
 
-  const workspaceKey = access.workspaceOrgId ?? orgId ?? `user_${userId}`;
+  const workspaceKey = access.workspaceOrgId ?? orgId ?? getSharedWorkspaceId();
   const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
     email: access.email!,
     accessType: access.accessType ?? 'workspace',

@@ -1,5 +1,7 @@
 import { Role } from '@prisma/client';
 import { markGuestInviteAccepted } from '@/lib/auth/guest-invites';
+import { firstAllowlistEntryAsCsv, isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
+import { getSharedWorkspaceId, getWorkspaceAllowlist } from '@/lib/auth/access-policy';
 import { prisma } from '@/lib/db/prisma';
 
 type AuthorizedAccessInput = {
@@ -8,18 +10,47 @@ type AuthorizedAccessInput = {
   workspaceOrgId?: string;
 };
 
+function getAdminAllowlistCsv() {
+  const explicitAdmins = parseEmailAllowlist(process.env.TERRITORY_ADMIN_EMAILS);
+  if (explicitAdmins.entries.length > 0) {
+    return process.env.TERRITORY_ADMIN_EMAILS;
+  }
+
+  const allowlist = getWorkspaceAllowlist();
+  if (allowlist.allowAll) {
+    return '*';
+  }
+
+  return firstAllowlistEntryAsCsv(allowlist);
+}
+
+function shouldGrantAdminRole(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const adminAllowlist = parseEmailAllowlist(getAdminAllowlistCsv());
+  return isEmailAllowed(normalizedEmail, adminAllowlist);
+}
+
 export async function ensureWorkspaceAndMembership(clerkOrgId: string, clerkUserId: string, access: AuthorizedAccessInput) {
+  const workspaceKey =
+    access.accessType === 'guest'
+      ? access.workspaceOrgId
+      : access.workspaceOrgId ?? clerkOrgId ?? getSharedWorkspaceId();
+
+  if (!workspaceKey) {
+    throw new Error('WORKSPACE_KEY_REQUIRED');
+  }
+
   const workspace =
     access.accessType === 'guest'
       ? await prisma.organizationWorkspace.findUnique({
-          where: { id: access.workspaceOrgId },
+          where: { id: workspaceKey },
         })
       : await prisma.organizationWorkspace.upsert({
-          where: { clerkOrgId },
+          where: { clerkOrgId: workspaceKey },
           update: {},
           create: {
-            id: clerkOrgId,
-            clerkOrgId,
+            id: workspaceKey,
+            clerkOrgId: workspaceKey,
             name: 'PICC Workspace',
           },
         });
@@ -39,17 +70,24 @@ export async function ensureWorkspaceAndMembership(clerkOrgId: string, clerkUser
 
   if (!membership) {
     const existingCount = await prisma.membership.count({ where: { orgId: workspace.id } });
+    const shouldBeAdmin = access.accessType !== 'guest' && shouldGrantAdminRole(access.email);
 
     await prisma.membership.create({
       data: {
         orgId: workspace.id,
         clerkUserId,
-        role: access.accessType === 'guest' ? Role.GUEST_VIEWER : existingCount === 0 ? Role.ADMIN : Role.SALES_REP,
+        role:
+          access.accessType === 'guest'
+            ? Role.GUEST_VIEWER
+            : shouldBeAdmin || existingCount === 0
+              ? Role.ADMIN
+              : Role.SALES_REP,
         source: 'BOOTSTRAP',
         active: true,
       },
     });
-  } else if (!membership.active) {
+  } else {
+    const shouldBeAdmin = access.accessType !== 'guest' && shouldGrantAdminRole(access.email);
     await prisma.membership.update({
       where: {
         orgId_clerkUserId: {
@@ -57,7 +95,10 @@ export async function ensureWorkspaceAndMembership(clerkOrgId: string, clerkUser
           clerkUserId,
         },
       },
-      data: { active: true },
+      data: {
+        active: true,
+        ...(shouldBeAdmin && membership.role !== Role.ADMIN ? { role: Role.ADMIN } : {}),
+      },
     });
   }
 
