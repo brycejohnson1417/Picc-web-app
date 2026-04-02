@@ -16,6 +16,22 @@ export interface TerritoryBoundary {
   updatedAt: string;
 }
 
+export interface TerritoryMarker {
+  id: string;
+  name: string;
+  description?: string | null;
+  address?: string | null;
+  lat: number;
+  lng: number;
+  color: string;
+  kind: 'home';
+  isVisibleByDefault: boolean;
+  createdByEmail?: string | null;
+  updatedByEmail?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TerritoryStorePin {
   id: string;
   notionPageId: string;
@@ -169,6 +185,10 @@ export interface TerritoryStoresResponse {
 
 export interface TerritoryBoundaryListResponse {
   boundaries: TerritoryBoundary[];
+}
+
+export interface TerritoryMarkerListResponse {
+  markers: TerritoryMarker[];
 }
 
 export interface TerritoryRouteStop {

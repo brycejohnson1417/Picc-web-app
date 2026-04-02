@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdvancedMarker, APIProvider, Map as GoogleMap, Marker, Pin, useMap } from '@vis.gl/react-google-maps';
 import { GoogleTerritoryBoundaries, type TerritoryBoundaryDraft } from '@/components/territory/google-territory-boundaries';
+import { GoogleTerritoryMarkers, GoogleTerritoryMarkersFallback } from '@/components/territory/google-territory-markers';
 import { pinColorForStore, type PinColorMode } from '@/lib/territory/pin-colors';
-import type { TerritoryBoundary, TerritoryStorePin } from '@/lib/territory/types';
+import type { TerritoryBoundary, TerritoryMarker, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
 export type MapCameraMode = 'follow-selection' | 'manual-focus';
@@ -13,8 +14,11 @@ interface GoogleTerritoryMapProps {
   stores: TerritoryStorePin[];
   repColorMap?: Map<string, string>;
   boundaries?: TerritoryBoundary[];
+  markers?: TerritoryMarker[];
   showBoundaries?: boolean;
   hiddenBoundaryIds?: string[];
+  showMarkers?: boolean;
+  hiddenMarkerIds?: string[];
   draftBoundary?: TerritoryBoundaryDraft | null;
   drawingBoundaryMode?: boolean;
   selectionBoundaryDraft?: TerritoryBoundaryDraft | null;
@@ -338,8 +342,11 @@ export function GoogleTerritoryMap({
   stores,
   repColorMap,
   boundaries = [],
+  markers = [],
   showBoundaries = true,
   hiddenBoundaryIds = [],
+  showMarkers = true,
+  hiddenMarkerIds = [],
   draftBoundary = null,
   drawingBoundaryMode = false,
   selectionBoundaryDraft = null,
@@ -540,6 +547,19 @@ export function GoogleTerritoryMap({
             selectionDrawingMode={selectionDrawingMode}
             onSelectionCoordinatesChange={onSelectionBoundaryChange}
           />
+          {useAdvancedMarkers ? (
+            <GoogleTerritoryMarkers
+              markers={markers}
+              hiddenMarkerIds={hiddenMarkerIds}
+              showMarkers={showMarkers}
+            />
+          ) : (
+            <GoogleTerritoryMarkersFallback
+              markers={markers}
+              hiddenMarkerIds={hiddenMarkerIds}
+              showMarkers={showMarkers}
+            />
+          )}
 
           {safeStores.map((store) => {
             const focused = focusedStoreId === store.id;

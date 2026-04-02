@@ -1,7 +1,7 @@
 'use client';
 
 import type { PinColorMode } from '@/lib/territory/pin-colors';
-import type { TerritoryBoundary, TerritoryStorePin } from '@/lib/territory/types';
+import type { TerritoryBoundary, TerritoryMarker, TerritoryStorePin } from '@/lib/territory/types';
 import type { TerritoryBoundaryDraft } from '@/components/territory/google-territory-boundaries';
 import { GoogleTerritoryMap } from '@/components/territory/google-territory-map';
 
@@ -9,8 +9,11 @@ interface TerritoryMapMobileProps {
   stores: TerritoryStorePin[];
   repColorMap?: Map<string, string>;
   boundaries: TerritoryBoundary[];
+  markers: TerritoryMarker[];
   showBoundaries: boolean;
   hiddenBoundaryIds: string[];
+  showMarkers: boolean;
+  hiddenMarkerIds: string[];
   draftBoundary?: TerritoryBoundaryDraft | null;
   drawingBoundaryMode?: boolean;
   selectionBoundaryDraft?: TerritoryBoundaryDraft | null;
@@ -33,8 +36,11 @@ export function TerritoryMapMobile({
   stores,
   repColorMap,
   boundaries,
+  markers,
   showBoundaries,
   hiddenBoundaryIds,
+  showMarkers,
+  hiddenMarkerIds,
   draftBoundary = null,
   drawingBoundaryMode = false,
   selectionBoundaryDraft = null,
@@ -57,8 +63,11 @@ export function TerritoryMapMobile({
       stores={stores}
       repColorMap={repColorMap}
       boundaries={boundaries}
+      markers={markers}
       showBoundaries={showBoundaries}
       hiddenBoundaryIds={hiddenBoundaryIds}
+      showMarkers={showMarkers}
+      hiddenMarkerIds={hiddenMarkerIds}
       draftBoundary={draftBoundary}
       drawingBoundaryMode={drawingBoundaryMode}
       selectionBoundaryDraft={selectionBoundaryDraft}

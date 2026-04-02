@@ -51,6 +51,58 @@ function updateCoordinateAtIndex(
   return coordinates.map((point, pointIndex) => (pointIndex === index ? nextPoint : point));
 }
 
+function sqDistanceToSegment(
+  point: [number, number],
+  start: [number, number],
+  end: [number, number],
+) {
+  const [px, py] = point;
+  const [x1, y1] = start;
+  const [x2, y2] = end;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  if (dx === 0 && dy === 0) {
+    const deltaX = px - x1;
+    const deltaY = py - y1;
+    return deltaX * deltaX + deltaY * deltaY;
+  }
+
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
+  const projectedX = x1 + t * dx;
+  const projectedY = y1 + t * dy;
+  const deltaX = px - projectedX;
+  const deltaY = py - projectedY;
+  return deltaX * deltaX + deltaY * deltaY;
+}
+
+function insertCoordinateAtNearestSegment(
+  coordinates: TerritoryBoundaryCoordinates,
+  nextPoint: [number, number],
+  isClosed: boolean,
+): TerritoryBoundaryCoordinates {
+  if (coordinates.length < 2) {
+    return [...coordinates, nextPoint];
+  }
+
+  const segmentCount = isClosed ? coordinates.length : coordinates.length - 1;
+  let bestInsertIndex = coordinates.length;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < segmentCount; index += 1) {
+    const start = coordinates[index];
+    const end = coordinates[(index + 1) % coordinates.length];
+    const distance = sqDistanceToSegment(nextPoint, start, end);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestInsertIndex = index + 1;
+    }
+  }
+
+  const next = [...coordinates];
+  next.splice(bestInsertIndex, 0, nextPoint);
+  return next;
+}
+
 function BoundaryDisplayLayer({
   boundaries,
   hiddenBoundaryIds,
@@ -98,9 +150,11 @@ function BoundaryDisplayLayer({
 
 function BoundaryDraftLayer({
   draftBoundary,
+  drawingMode,
   onDraftCoordinatesChange,
 }: {
   draftBoundary: TerritoryBoundaryDraft;
+  drawingMode: boolean;
   onDraftCoordinatesChange?: (coordinates: TerritoryBoundaryCoordinates) => void;
 }) {
   const map = useMap();
@@ -181,11 +235,37 @@ function BoundaryDraftLayer({
             onDraftCoordinatesChange(readDraftPath(polygon.getPath()));
           }),
         );
+        if (!drawingMode) {
+          listeners.push(
+            polygon.addListener('click', (event: google.maps.PolyMouseEvent) => {
+              const latLng = event.latLng;
+              if (!latLng) {
+                return;
+              }
+              onDraftCoordinatesChange(
+                insertCoordinateAtNearestSegment(readDraftPath(polygon.getPath()), [latLng.lng(), latLng.lat()], true),
+              );
+            }),
+          );
+        }
       }
     }
 
     if (polyline) {
       attachEditablePathListeners(polyline.getPath());
+      if (onDraftCoordinatesChange && !drawingMode) {
+        listeners.push(
+          polyline.addListener('click', (event: google.maps.PolyMouseEvent) => {
+            const latLng = event.latLng;
+            if (!latLng) {
+              return;
+            }
+            onDraftCoordinatesChange(
+              insertCoordinateAtNearestSegment(readDraftPath(polyline.getPath()), [latLng.lng(), latLng.lat()], false),
+            );
+          }),
+        );
+      }
     }
 
     if (onDraftCoordinatesChange && pointMarkers.length > 0) {
@@ -218,7 +298,7 @@ function BoundaryDraftLayer({
       polyline?.setMap(null);
       pointMarkers.forEach((marker) => marker.setMap(null));
     };
-  }, [draftBoundary.borderWidth, draftBoundary.color, draftBoundary.coordinates, map, onDraftCoordinatesChange]);
+  }, [draftBoundary.borderWidth, draftBoundary.color, draftBoundary.coordinates, drawingMode, map, onDraftCoordinatesChange]);
 
   return null;
 }
@@ -293,7 +373,13 @@ export function GoogleTerritoryBoundaries({
           editingBoundaryId={draftBoundary?.id ?? null}
         />
       ) : null}
-      {draftBoundary ? <BoundaryDraftLayer draftBoundary={draftBoundary} onDraftCoordinatesChange={onDraftCoordinatesChange} /> : null}
+      {draftBoundary ? (
+        <BoundaryDraftLayer
+          draftBoundary={draftBoundary}
+          drawingMode={drawingMode}
+          onDraftCoordinatesChange={onDraftCoordinatesChange}
+        />
+      ) : null}
       {draftBoundary ? (
         <BoundaryDrawingController
           enabled={drawingMode}
@@ -301,7 +387,13 @@ export function GoogleTerritoryBoundaries({
           onDraftCoordinatesChange={onDraftCoordinatesChange}
         />
       ) : null}
-      {selectionBoundaryDraft ? <BoundaryDraftLayer draftBoundary={selectionBoundaryDraft} onDraftCoordinatesChange={onSelectionCoordinatesChange} /> : null}
+      {selectionBoundaryDraft ? (
+        <BoundaryDraftLayer
+          draftBoundary={selectionBoundaryDraft}
+          drawingMode={selectionDrawingMode}
+          onDraftCoordinatesChange={onSelectionCoordinatesChange}
+        />
+      ) : null}
       {selectionBoundaryDraft ? (
         <BoundaryDrawingController
           enabled={selectionDrawingMode}

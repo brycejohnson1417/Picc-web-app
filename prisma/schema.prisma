@@ -136,6 +136,7 @@ model OrganizationWorkspace {
   exportJobs      ExportJob[]
   salesRoutes     SalesRoute[]
   territories     Territory[]
+  territoryMarkers TerritoryMarker[]
   checkIns        CheckIn[]
   territoryCheckInMirrors TerritoryCheckInMirror[]
   territorySyncJobs TerritoryStoreSyncJob[]
@@ -867,6 +868,26 @@ model Territory {
   updatedAt     DateTime              @updatedAt
 
   @@index([orgId, name])
+}
+
+model TerritoryMarker {
+  id               String                @id @default(cuid())
+  orgId            String
+  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  address          String?
+  lat              Float
+  lng              Float
+  color            String                @default("#0f172a")
+  kind             String                @default("home")
+  isVisibleByDefault Boolean             @default(true)
+  createdByEmail   String?
+  updatedByEmail   String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([orgId, kind, name])
 }
 
 model SalesRoute {

@@ -11,11 +11,17 @@ import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
 import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
-import { TerritoryBoundaryEditor, TerritoryBoundarySheet, type TerritoryBoundaryEditorState } from '@/components/mobile/territory-boundary-sheet';
+import {
+  TerritoryBoundaryEditor,
+  TerritoryBoundarySheet,
+  TerritoryMarkerEditor,
+  type TerritoryBoundaryEditorState,
+  type TerritoryMarkerEditorState,
+} from '@/components/mobile/territory-boundary-sheet';
 import { StoreFilterSheet } from '@/components/mobile/store-filter-sheet';
 import { MapRenderBoundary } from '@/components/mobile/map-render-boundary';
 import { createRepColorMap, pinColorForStore, type PinColorMode } from '@/lib/territory/pin-colors';
-import type { TerritoryBoundaryListResponse, TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
+import type { TerritoryBoundaryListResponse, TerritoryMarkerListResponse, TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import { cn } from '@/lib/utils';
 
@@ -116,11 +122,16 @@ export function TerritoryMobile() {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showBoundaries, setShowBoundaries] = useState(true);
   const [hiddenBoundaryIds, setHiddenBoundaryIds] = useState<string[]>([]);
+  const [showMarkers, setShowMarkers] = useState(true);
+  const [hiddenMarkerIds, setHiddenMarkerIds] = useState<string[]>([]);
   const [showBoundarySheet, setShowBoundarySheet] = useState(false);
   const [boundaryPrefsReady, setBoundaryPrefsReady] = useState(false);
   const [boundaryEditor, setBoundaryEditor] = useState<TerritoryBoundaryEditorState | null>(null);
   const [drawingBoundaryMode, setDrawingBoundaryMode] = useState(false);
   const [savingBoundary, setSavingBoundary] = useState(false);
+  const [markerEditor, setMarkerEditor] = useState<TerritoryMarkerEditorState | null>(null);
+  const [savingMarker, setSavingMarker] = useState(false);
+  const [searchingMarkerAddress, setSearchingMarkerAddress] = useState(false);
   const [showRepLegend, setShowRepLegend] = useState(false);
   const [lassoSelection, setLassoSelection] = useState<TerritoryBoundaryEditorState | null>(null);
   const [lassoDrawingMode, setLassoDrawingMode] = useState(false);
@@ -242,8 +253,30 @@ export function TerritoryMobile() {
     placeholderData: (previousData) => previousData,
   });
 
+  const markersQuery = useQuery({
+    queryKey: ['territory-markers'],
+    queryFn: async () => {
+      const response = await fetch('/api/territory/markers', {
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error ?? 'Failed to load territory markers');
+      }
+      return (await response.json()) as TerritoryMarkerListResponse;
+    },
+    staleTime: 5000,
+    gcTime: 300000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 10000,
+    retry: 1,
+    placeholderData: (previousData) => previousData,
+  });
+
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
   const boundaries = useMemo(() => boundariesQuery.data?.boundaries ?? [], [boundariesQuery.data?.boundaries]);
+  const markers = useMemo(() => markersQuery.data?.markers ?? [], [markersQuery.data?.markers]);
   const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
   const mapStores = useMemo(() => {
     let nextStores = stores;
@@ -295,8 +328,11 @@ export function TerritoryMobile() {
       if (raw) {
         const parsed = JSON.parse(raw) as {
           hiddenBoundaryIds?: string[];
+          hiddenMarkerIds?: string[];
+          showBoundaries?: boolean;
+          showMarkers?: boolean;
         };
-        setShowBoundaries(true);
+        setShowBoundaries(parsed.showBoundaries !== false);
         setHiddenBoundaryIds(
           [
             ...(Array.isArray(parsed.hiddenBoundaryIds)
@@ -305,17 +341,30 @@ export function TerritoryMobile() {
             ...boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id),
           ].filter((value, index, array) => array.indexOf(value) === index),
         );
+        setShowMarkers(parsed.showMarkers !== false);
+        setHiddenMarkerIds(
+          [
+            ...(Array.isArray(parsed.hiddenMarkerIds)
+              ? parsed.hiddenMarkerIds.filter((value): value is string => typeof value === 'string')
+              : []),
+            ...markers.filter((marker) => !marker.isVisibleByDefault).map((marker) => marker.id),
+          ].filter((value, index, array) => array.indexOf(value) === index),
+        );
       } else {
         setShowBoundaries(true);
         setHiddenBoundaryIds(boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id));
+        setShowMarkers(true);
+        setHiddenMarkerIds(markers.filter((marker) => !marker.isVisibleByDefault).map((marker) => marker.id));
       }
     } catch {
       setShowBoundaries(true);
       setHiddenBoundaryIds(boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id));
+      setShowMarkers(true);
+      setHiddenMarkerIds(markers.filter((marker) => !marker.isVisibleByDefault).map((marker) => marker.id));
     } finally {
       setBoundaryPrefsReady(true);
     }
-  }, [boundaries, boundariesQuery.isLoading, boundaryPrefsReady]);
+  }, [boundaries, boundariesQuery.isLoading, boundaryPrefsReady, markers]);
 
   useEffect(() => {
     if (!boundaryPrefsReady) {
@@ -325,10 +374,13 @@ export function TerritoryMobile() {
     window.localStorage.setItem(
       BOUNDARY_VISIBILITY_STORAGE_KEY,
       JSON.stringify({
+        showBoundaries,
         hiddenBoundaryIds,
+        showMarkers,
+        hiddenMarkerIds,
       }),
     );
-  }, [boundaryPrefsReady, hiddenBoundaryIds]);
+  }, [boundaryPrefsReady, hiddenBoundaryIds, hiddenMarkerIds, showBoundaries, showMarkers]);
 
   useEffect(() => {
     if (boundaries.length === 0) {
@@ -340,6 +392,17 @@ export function TerritoryMobile() {
       return [...knownIds, ...hiddenByDefault].filter((value, index, array) => array.indexOf(value) === index);
     });
   }, [boundaries]);
+
+  useEffect(() => {
+    if (markers.length === 0) {
+      return;
+    }
+    setHiddenMarkerIds((current) => {
+      const knownIds = current.filter((markerId) => markers.some((marker) => marker.id === markerId));
+      const hiddenByDefault = markers.filter((marker) => !marker.isVisibleByDefault).map((marker) => marker.id);
+      return [...knownIds, ...hiddenByDefault].filter((value, index, array) => array.indexOf(value) === index);
+    });
+  }, [markers]);
 
   const focusedStore = useMemo(() => {
     if (!focusedId) return null;
@@ -585,9 +648,21 @@ export function TerritoryMobile() {
     setShowBoundaries((current) => !current);
   }
 
+  function toggleMarkerVisibility(markerId: string) {
+    setHiddenMarkerIds((current) => (current.includes(markerId) ? current.filter((value) => value !== markerId) : [...current, markerId]));
+  }
+
+  function toggleAllMarkers() {
+    setShowMarkers((current) => !current);
+  }
+
   function closeBoundaryEditor() {
     setBoundaryEditor(null);
     setDrawingBoundaryMode(false);
+  }
+
+  function closeMarkerEditor() {
+    setMarkerEditor(null);
   }
 
   function startCreatingBoundary() {
@@ -618,6 +693,34 @@ export function TerritoryMobile() {
     setView('map');
   }
 
+  function startCreatingMarker() {
+    setShowBoundarySheet(false);
+    setMarkerEditor({
+      id: null,
+      name: '',
+      description: '',
+      address: '',
+      lat: null,
+      lng: null,
+      color: '#0f172a',
+    });
+    setView('map');
+  }
+
+  function startEditingMarker(marker: TerritoryMarkerListResponse['markers'][number]) {
+    setShowBoundarySheet(false);
+    setMarkerEditor({
+      id: marker.id,
+      name: marker.name,
+      description: marker.description ?? '',
+      address: marker.address ?? '',
+      lat: marker.lat,
+      lng: marker.lng,
+      color: marker.color,
+    });
+    setView('map');
+  }
+
   async function deleteBoundary(boundary: TerritoryBoundaryListResponse['boundaries'][number]) {
     if (!window.confirm(`Delete the "${boundary.name}" territory boundary?`)) {
       return;
@@ -637,6 +740,28 @@ export function TerritoryMobile() {
       toast.success('Territory boundary deleted');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to delete territory boundary');
+    }
+  }
+
+  async function deleteMarker(marker: TerritoryMarkerListResponse['markers'][number]) {
+    if (!window.confirm(`Delete the "${marker.name}" home marker?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/territory/markers/${marker.id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error ?? 'Unable to delete home marker');
+      }
+
+      setHiddenMarkerIds((current) => current.filter((value) => value !== marker.id));
+      await queryClient.invalidateQueries({ queryKey: ['territory-markers'] });
+      toast.success('Home marker deleted');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to delete home marker');
     }
   }
 
@@ -686,6 +811,94 @@ export function TerritoryMobile() {
       toast.error(error instanceof Error ? error.message : 'Unable to save territory boundary');
     } finally {
       setSavingBoundary(false);
+    }
+  }
+
+  async function searchMarkerAddress() {
+    if (!markerEditor?.address.trim()) {
+      toast.error('Enter an address first.');
+      return;
+    }
+
+    setSearchingMarkerAddress(true);
+    try {
+      const params = new URLSearchParams({ q: markerEditor.address.trim() });
+      const response = await fetch(`/api/territory/geocode?${params.toString()}`, {
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'Address search failed');
+      }
+
+      setMarkerEditor((current) =>
+        current
+          ? {
+              ...current,
+              address: payload.formattedAddress ?? current.address,
+              lat: payload.lat,
+              lng: payload.lng,
+            }
+          : current,
+      );
+
+      setCurrentLocation({ lat: payload.lat, lng: payload.lng });
+      setLocationRequestToken((current) => current + 1);
+      toast.success('Address found');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Address search failed');
+    } finally {
+      setSearchingMarkerAddress(false);
+    }
+  }
+
+  async function saveMarker() {
+    if (!markerEditor) {
+      return;
+    }
+
+    if (!markerEditor.name.trim()) {
+      toast.error('Marker name is required.');
+      return;
+    }
+
+    if (markerEditor.lat === null || markerEditor.lng === null) {
+      toast.error('Search an address first.');
+      return;
+    }
+
+    setSavingMarker(true);
+    try {
+      const response = await fetch(
+        markerEditor.id ? `/api/territory/markers/${markerEditor.id}` : '/api/territory/markers',
+        {
+          method: markerEditor.id ? 'PATCH' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: markerEditor.name,
+            description: markerEditor.description || null,
+            address: markerEditor.address || null,
+            lat: markerEditor.lat,
+            lng: markerEditor.lng,
+            color: markerEditor.color,
+          }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'Unable to save home marker');
+      }
+
+      closeMarkerEditor();
+      setShowMarkers(true);
+      await queryClient.invalidateQueries({ queryKey: ['territory-markers'] });
+      toast.success(markerEditor.id ? 'Home marker updated' : 'Home marker saved');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save home marker');
+    } finally {
+      setSavingMarker(false);
     }
   }
 
@@ -797,8 +1010,11 @@ export function TerritoryMobile() {
             <TerritoryMapMobile
               stores={mapStores}
               boundaries={boundaries}
+              markers={markers}
               showBoundaries={showBoundaries}
               hiddenBoundaryIds={hiddenBoundaryIds}
+              showMarkers={showMarkers}
+              hiddenMarkerIds={hiddenMarkerIds}
               draftBoundary={boundaryEditor ? { ...boundaryEditor } : null}
               drawingBoundaryMode={drawingBoundaryMode}
               selectionBoundaryDraft={lassoSelection ? { ...lassoSelection } : null}
@@ -1168,6 +1384,14 @@ export function TerritoryMobile() {
         onCreateBoundary={startCreatingBoundary}
         onEditBoundary={startEditingBoundary}
         onDeleteBoundary={deleteBoundary}
+        markers={markers}
+        showMarkers={showMarkers}
+        hiddenMarkerIds={hiddenMarkerIds}
+        onToggleAllMarkers={toggleAllMarkers}
+        onToggleMarker={toggleMarkerVisibility}
+        onCreateMarker={startCreatingMarker}
+        onEditMarker={startEditingMarker}
+        onDeleteMarker={deleteMarker}
       />
       <TerritoryBoundaryEditor
         open={Boolean(boundaryEditor)}
@@ -1209,6 +1433,16 @@ export function TerritoryMobile() {
         }
         onFinishDrawing={() => setDrawingBoundaryMode(false)}
         onSave={saveBoundary}
+      />
+      <TerritoryMarkerEditor
+        open={Boolean(markerEditor)}
+        marker={markerEditor}
+        saving={savingMarker}
+        searching={searchingMarkerAddress}
+        onClose={closeMarkerEditor}
+        onChange={(patch) => setMarkerEditor((current) => (current ? { ...current, ...patch } : current))}
+        onSearchAddress={searchMarkerAddress}
+        onSave={saveMarker}
       />
 
       <AccountDetailSheet

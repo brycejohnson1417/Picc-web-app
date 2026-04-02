@@ -1,7 +1,7 @@
 'use client';
 
-import { Check, Eye, EyeOff, Layers3, Pencil, Plus, Save, Trash2, Undo2, X } from 'lucide-react';
-import type { TerritoryBoundary } from '@/lib/territory/types';
+import { Check, Eye, EyeOff, Home, Layers3, Loader2, Pencil, Plus, Save, Search, Trash2, Undo2, X } from 'lucide-react';
+import type { TerritoryBoundary, TerritoryMarker } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
 export interface TerritoryBoundaryEditorState {
@@ -11,6 +11,16 @@ export interface TerritoryBoundaryEditorState {
   color: string;
   borderWidth: number;
   coordinates: [number, number][];
+}
+
+export interface TerritoryMarkerEditorState {
+  id: string | null;
+  name: string;
+  description: string;
+  address: string;
+  lat: number | null;
+  lng: number | null;
+  color: string;
 }
 
 interface TerritoryBoundarySheetProps {
@@ -25,6 +35,14 @@ interface TerritoryBoundarySheetProps {
   onCreateBoundary: () => void;
   onEditBoundary: (boundary: TerritoryBoundary) => void;
   onDeleteBoundary: (boundary: TerritoryBoundary) => void;
+  markers: TerritoryMarker[];
+  showMarkers: boolean;
+  hiddenMarkerIds: string[];
+  onToggleAllMarkers: () => void;
+  onToggleMarker: (markerId: string) => void;
+  onCreateMarker: () => void;
+  onEditMarker: (marker: TerritoryMarker) => void;
+  onDeleteMarker: (marker: TerritoryMarker) => void;
 }
 
 export function TerritoryBoundarySheet({
@@ -39,12 +57,21 @@ export function TerritoryBoundarySheet({
   onCreateBoundary,
   onEditBoundary,
   onDeleteBoundary,
+  markers,
+  showMarkers,
+  hiddenMarkerIds,
+  onToggleAllMarkers,
+  onToggleMarker,
+  onCreateMarker,
+  onEditMarker,
+  onDeleteMarker,
 }: TerritoryBoundarySheetProps) {
   if (!open) {
     return null;
   }
 
   const hidden = new Set(hiddenBoundaryIds);
+  const hiddenMarkers = new Set(hiddenMarkerIds);
 
   return (
     <div className="fixed inset-0 z-[5400] bg-black/35">
@@ -139,6 +166,83 @@ export function TerritoryBoundarySheet({
               })}
             </div>
           </section>
+
+          <section className="mt-4 rounded-xl border border-[#c7c9cf] bg-white">
+            <div className="flex items-center justify-between border-b border-[#e0e2e8] px-3 py-3">
+              <div>
+                <h3 className="text-[15px] font-semibold text-[#23262d]">Rep home markers</h3>
+                <p className="mt-1 text-[13px] text-[#6a6e77]">
+                  {markers.length > 0 ? `${markers.length} shared point${markers.length === 1 ? '' : 's'}` : 'No shared home markers saved yet'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onToggleAllMarkers}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-[13px] font-semibold',
+                    showMarkers ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                  )}
+                >
+                  {showMarkers ? 'Hide All' : 'Show All'}
+                </button>
+                {isAdmin ? (
+                  <button type="button" onClick={onCreateMarker} className="inline-flex items-center gap-1 rounded-lg bg-[#cd3814] px-3 py-2 text-[13px] font-semibold text-white">
+                    <Plus className="h-4 w-4" />
+                    New
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="divide-y divide-[#eceef3]">
+              {markers.length === 0 ? (
+                <div className="px-3 py-4 text-[13px] text-[#6a6e77]">No rep home markers have been saved yet.</div>
+              ) : null}
+              {markers.map((marker) => {
+                const isVisible = showMarkers && !hiddenMarkers.has(marker.id);
+                return (
+                  <div key={marker.id} className="px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="grid h-4 w-4 place-items-center rounded-full" style={{ backgroundColor: marker.color }}>
+                            <Home className="h-2.5 w-2.5 text-white" />
+                          </span>
+                          <p className="truncate text-[15px] font-semibold text-[#23262d]">{marker.name}</p>
+                        </div>
+                        {marker.address ? <p className="mt-1 truncate text-[13px] text-[#6a6e77]">{marker.address}</p> : null}
+                        {marker.description ? <p className="mt-1 text-[12px] text-[#8a8d95]">{marker.description}</p> : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onToggleMarker(marker.id)}
+                        className={cn(
+                          'grid h-10 w-10 place-items-center rounded-lg border',
+                          isVisible ? 'border-[#cd3814] bg-[#fdebe7] text-[#cd3814]' : 'border-[#c8c9cf] bg-white text-[#757984]',
+                        )}
+                        aria-label={isVisible ? `Hide ${marker.name}` : `Show ${marker.name}`}
+                      >
+                        {isVisible ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+                      </button>
+                    </div>
+                    {isAdmin ? (
+                      <div className="mt-3 flex gap-2">
+                        <button type="button" onClick={() => onEditMarker(marker)} className="inline-flex items-center gap-1 rounded-lg border border-[#c8c9cf] bg-white px-3 py-2 text-[13px] font-medium text-[#3e4046]">
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </button>
+                        <button type="button" onClick={() => onDeleteMarker(marker)} className="inline-flex items-center gap-1 rounded-lg border border-[#e2b4ab] bg-[#fff4f1] px-3 py-2 text-[13px] font-medium text-[#b43819]">
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -188,8 +292,8 @@ export function TerritoryBoundaryEditor({
             <p className="text-[16px] font-semibold text-[#23262d]">{isNewBoundary ? 'Draw Territory Boundary' : 'Edit Territory Boundary'}</p>
             <p className="mt-1 text-[12px] text-[#7a5e56]">
               {drawingMode
-                ? 'Tap the map to add points. Drag corners, edge handles, or the whole shape to refine it.'
-                : 'Resume drawing or drag corners, edge handles, or the whole shape directly on the map.'}
+                ? 'Tap the map to add new points. Turn this off to move the shape or click the border to insert a point cleanly.'
+                : 'Drag corners, edge handles, or the whole shape. Click a border segment to insert a point without distorting the territory.'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg text-[#7a5e56] hover:bg-[#f6e3de]" aria-label="Close territory editor">
@@ -252,7 +356,7 @@ export function TerritoryBoundaryEditor({
                 drawingMode ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c8c9cf] bg-white text-[#3e4046]',
               )}
             >
-              {drawingMode ? 'Pause Drawing' : 'Resume Drawing'}
+              {drawingMode ? 'Stop Adding Points' : 'Add Points by Click'}
             </button>
             <button type="button" onClick={onUndoLastPoint} className="inline-flex items-center gap-1 rounded-lg border border-[#c8c9cf] bg-white px-3 py-2 text-[13px] font-medium text-[#3e4046]">
               <Undo2 className="h-4 w-4" />
@@ -313,6 +417,130 @@ export function TerritoryBoundaryEditor({
             >
               <Save className="h-4 w-4" />
               {saving ? 'Saving...' : 'Save Boundary'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface TerritoryMarkerEditorProps {
+  open: boolean;
+  marker: TerritoryMarkerEditorState | null;
+  saving: boolean;
+  searching: boolean;
+  onClose: () => void;
+  onChange: (patch: Partial<TerritoryMarkerEditorState>) => void;
+  onSearchAddress: () => void;
+  onSave: () => void;
+}
+
+export function TerritoryMarkerEditor({
+  open,
+  marker,
+  saving,
+  searching,
+  onClose,
+  onChange,
+  onSearchAddress,
+  onSave,
+}: TerritoryMarkerEditorProps) {
+  if (!open || !marker) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-[96px] z-[5300] px-3 md:inset-x-auto md:right-4 md:top-[106px] md:w-[380px] md:max-w-[calc(100vw-32px)] md:px-0 lg:w-[420px]">
+      <div className="pointer-events-auto mx-auto flex max-h-[calc(100dvh-112px)] max-w-[720px] flex-col rounded-2xl border border-[#d8b0a5] bg-[#fffaf8] shadow-[0_8px_28px_rgba(0,0,0,0.18)] md:max-h-[calc(100dvh-126px)]">
+        <div className="flex items-center justify-between border-b border-[#f0d6ce] px-4 py-3">
+          <div>
+            <p className="text-[16px] font-semibold text-[#23262d]">{marker.id ? 'Edit Home Marker' : 'Add Home Marker'}</p>
+            <p className="mt-1 text-[12px] text-[#7a5e56]">Search an address, save it once, and everyone can toggle the rep-home layer on the map.</p>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg text-[#7a5e56] hover:bg-[#f6e3de]" aria-label="Close marker editor">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-4 py-4">
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Name</span>
+            <input
+              value={marker.name}
+              onChange={(event) => onChange({ name: event.target.value })}
+              placeholder="Roxy Home"
+              className="w-full rounded-xl border border-[#c8c9cf] bg-white px-3 py-2 text-[14px] text-[#1f232a] outline-none focus:border-[#cd3814]"
+            />
+          </label>
+
+          <label className="mt-3 block">
+            <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Address</span>
+            <div className="flex gap-2">
+              <input
+                value={marker.address}
+                onChange={(event) => onChange({ address: event.target.value })}
+                placeholder="Search a rep home address"
+                className="min-w-0 flex-1 rounded-xl border border-[#c8c9cf] bg-white px-3 py-2 text-[14px] text-[#1f232a] outline-none focus:border-[#cd3814]"
+              />
+              <button
+                type="button"
+                onClick={onSearchAddress}
+                disabled={searching}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#c8c9cf] bg-white px-3 py-2 text-[13px] font-semibold text-[#3e4046] disabled:opacity-60"
+              >
+                {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Find
+              </button>
+            </div>
+          </label>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-[120px_minmax(0,1fr)]">
+            <label className="block">
+              <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Color</span>
+              <input
+                type="color"
+                value={marker.color}
+                onChange={(event) => onChange({ color: event.target.value })}
+                className="h-[44px] w-full rounded-xl border border-[#c8c9cf] bg-white px-2 py-1"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Description</span>
+              <input
+                value={marker.description}
+                onChange={(event) => onChange({ description: event.target.value })}
+                placeholder="Optional note"
+                className="w-full rounded-xl border border-[#c8c9cf] bg-white px-3 py-2 text-[14px] text-[#1f232a] outline-none focus:border-[#cd3814]"
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-[#f0d6ce] bg-white px-3 py-3 text-[13px] text-[#3e4046]">
+            {marker.lat !== null && marker.lng !== null ? (
+              <>
+                <p className="font-semibold text-[#23262d]">Marker location ready</p>
+                <p className="mt-1 text-[#6b7280]">{marker.address || 'Address not set'}</p>
+                <p className="mt-1 text-[12px] text-[#7b7e87]">
+                  {marker.lat.toFixed(5)}, {marker.lng.toFixed(5)}
+                </p>
+              </>
+            ) : (
+              <p>Search an address first to place this shared home marker.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-[#f0d6ce] px-4 py-3">
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#cd3814] px-4 py-2 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              {saving ? 'Saving...' : 'Save Marker'}
             </button>
           </div>
         </div>
