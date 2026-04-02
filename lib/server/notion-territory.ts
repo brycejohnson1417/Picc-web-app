@@ -41,6 +41,7 @@ const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v1';
 const DEFAULT_SYNC_TTL_MINUTES = 5;
 const DEFAULT_STALE_SYNC_GEOCODE_LOOKUPS = 12;
 const DEFAULT_FORCE_SYNC_GEOCODE_LOOKUPS = 80;
+const DEFAULT_INCREMENTAL_FRESHNESS_SECONDS = 20;
 
 const REQUIRED_PROPERTIES = [
   { name: 'Dispensary Name', type: 'title' },
@@ -1337,6 +1338,32 @@ async function getTerritorySnapshot(input?: {
   let stale = false;
   let syncError: string | null = territoryLastSyncError;
   let syncing = Boolean(territorySyncInFlight);
+  const freshnessCheckSeconds = parsePositiveInt(
+    process.env.TERRITORY_INCREMENTAL_FRESHNESS_SECONDS,
+    DEFAULT_INCREMENTAL_FRESHNESS_SECONDS,
+  );
+
+  if (
+    !input?.refresh &&
+    cached &&
+    cached.payload.length > 0 &&
+    cached.lastEditedMax &&
+    !territorySyncInFlight &&
+    isSnapshotOlderThanSeconds(cached.syncedAt, freshnessCheckSeconds)
+  ) {
+    try {
+      const synced = await syncTerritorySnapshotIncrementalFromNotion({
+        after: cached.lastEditedMax,
+        maxLiveGeocodeLookups: 0,
+      });
+      cached = synced.snapshot;
+      geocodedThisRequest = synced.geocodedThisSync;
+      syncError = null;
+      syncing = false;
+    } catch (error) {
+      syncError = error instanceof Error ? error.message : 'Territory sync failed';
+    }
+  }
 
   if (shouldSync) {
     const defaultGeocodeBudget = input?.refresh
@@ -1479,6 +1506,17 @@ function maxIsoDate(left: string | null | undefined, right: string | null | unde
   if (!left) return right ?? null;
   if (!right) return left;
   return left >= right ? left : right;
+}
+
+function isSnapshotOlderThanSeconds(syncedAt: string | null | undefined, seconds: number) {
+  if (!syncedAt) {
+    return true;
+  }
+  const syncedAtMs = Date.parse(syncedAt);
+  if (!Number.isFinite(syncedAtMs)) {
+    return true;
+  }
+  return Date.now() - syncedAtMs > Math.max(1, seconds) * 1000;
 }
 
 function matchesLastOrderDateFilter(value: string | null | undefined, filter: TerritoryOrderDateFilter) {

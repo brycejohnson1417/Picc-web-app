@@ -174,7 +174,6 @@ export function StoreFilterSheet({
                 Has sample order date
               </button>
               {[
-                { value: 'all', label: 'All sampled stores' },
                 { value: 'customers', label: 'Sampled customers' },
                 { value: 'non_customers', label: 'Sampled non-customers' },
               ].map((option) => {
@@ -183,7 +182,11 @@ export function StoreFilterSheet({
                   <button
                     key={option.value}
                     type="button"
-                    onClick={() => onSetSampleAccountTypeFilter(option.value as 'all' | 'customers' | 'non_customers')}
+                    onClick={() =>
+                      onSetSampleAccountTypeFilter(
+                        (active ? 'all' : option.value) as 'all' | 'customers' | 'non_customers',
+                      )
+                    }
                     className={cn(
                       'rounded-full border px-3 py-1.5 text-[13px] font-medium',
                       active ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
@@ -201,7 +204,6 @@ export function StoreFilterSheet({
             <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Last Order Date</h3>
             <div className="flex flex-wrap gap-2">
               {[
-                { value: 'all', label: 'All orders' },
                 { value: 'last_month', label: 'Ordered in last month' },
                 { value: 'last_2_months', label: 'Ordered in last 2 months' },
                 { value: 'three_plus_months', label: 'Ordered 3+ months ago' },
@@ -211,7 +213,11 @@ export function StoreFilterSheet({
                   <button
                     key={option.value}
                     type="button"
-                    onClick={() => onSetLastOrderDateFilter(option.value as 'all' | 'last_month' | 'last_2_months' | 'three_plus_months')}
+                    onClick={() =>
+                      onSetLastOrderDateFilter(
+                        (active ? 'all' : option.value) as 'all' | 'last_month' | 'last_2_months' | 'three_plus_months',
+                      )
+                    }
                     className={cn(
                       'rounded-full border px-3 py-1.5 text-[13px] font-medium',
                       active ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',

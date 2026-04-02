@@ -96,16 +96,25 @@ export async function POST(request: Request) {
   }
 
   if (isPageEvent(parsedPayload.type)) {
-    await enqueueTerritoryStoreSync(pageId, {
+    const queueResult = await enqueueTerritoryStoreSync(pageId, {
       reason: parsedPayload.type,
     }).catch((error) => ({
       error: error instanceof Error ? error.message : 'Failed to queue territory page sync',
     }));
 
+    if (queueResult && typeof queueResult === 'object' && 'error' in queueResult) {
+      console.error('Notion webhook page queue failed', {
+        type: parsedPayload.type,
+        pageId,
+        error: queueResult.error,
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       type: parsedPayload.type,
       queuedPageId: pageId,
+      queued: !(queueResult && typeof queueResult === 'object' && 'error' in queueResult),
     });
   }
 
@@ -116,7 +125,18 @@ export async function POST(request: Request) {
   }));
 
   if ('error' in result) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
+    console.error('Notion webhook comment sync failed', {
+      type: parsedPayload.type,
+      pageId,
+      error: result.error,
+    });
+    return NextResponse.json({
+      ok: true,
+      type: parsedPayload.type,
+      syncedPageId: pageId,
+      synced: false,
+      error: result.error,
+    });
   }
 
   return NextResponse.json({

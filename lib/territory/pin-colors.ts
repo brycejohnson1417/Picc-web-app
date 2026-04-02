@@ -3,40 +3,54 @@ import type { TerritoryStorePin } from '@/lib/territory/types';
 export type PinColorMode = 'status' | 'rep';
 
 const DISTINCT_REP_COLORS = [
-  '#e11d48',
-  '#2563eb',
-  '#16a34a',
-  '#d97706',
   '#7c3aed',
   '#0891b2',
   '#c026d3',
   '#65a30d',
-  '#dc2626',
-  '#1d4ed8',
+  '#4f46e5',
   '#0f766e',
-  '#ea580c',
+  '#a16207',
   '#9333ea',
   '#0d9488',
   '#db2777',
-  '#4f46e5',
   '#15803d',
   '#b45309',
   '#7e22ce',
   '#0369a1',
+  '#7c3aed',
   '#be123c',
   '#4338ca',
   '#059669',
-  '#a16207',
+  '#ea580c',
 ];
+
+const FIXED_REP_COLORS: Record<string, string> = {
+  roxy: '#22c55e',
+  'bryce johnson': '#ff1493',
+  ben: '#dc2626',
+  'benjamin rosenthal': '#dc2626',
+  donovan: '#f97316',
+  'donovan snyder': '#f97316',
+  eric: '#60a5fa',
+  'eric acosta': '#60a5fa',
+};
 
 function normalizeRepLabel(label: string) {
   return label.trim();
+}
+
+function normalizeRepKey(label: string) {
+  return normalizeRepLabel(label).toLowerCase();
 }
 
 export function repColorForLabel(label: string) {
   const normalized = normalizeRepLabel(label);
   if (!normalized) {
     return '#64748b';
+  }
+  const fixed = FIXED_REP_COLORS[normalizeRepKey(normalized)];
+  if (fixed) {
+    return fixed;
   }
   return createRepColorMap([normalized]).get(normalized) ?? '#64748b';
 }
@@ -49,8 +63,20 @@ export function createRepColorMap(labels: string[]) {
   });
 
   const map = new Map<string, string>();
-  uniqueLabels.forEach((label, index) => {
-    map.set(label, label === 'Unassigned' ? '#64748b' : DISTINCT_REP_COLORS[index % DISTINCT_REP_COLORS.length]);
+  let paletteIndex = 0;
+  uniqueLabels.forEach((label) => {
+    if (label === 'Unassigned') {
+      map.set(label, '#64748b');
+      return;
+    }
+    const fixed = FIXED_REP_COLORS[normalizeRepKey(label)];
+    if (fixed) {
+      map.set(label, fixed);
+      return;
+    }
+    const color = DISTINCT_REP_COLORS[paletteIndex % DISTINCT_REP_COLORS.length];
+    paletteIndex += 1;
+    map.set(label, color);
   });
   return map;
 }
