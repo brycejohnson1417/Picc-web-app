@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
   try {
     await processPendingTerritoryStoreSyncQueue({
-      limit: refresh ? 24 : 8,
+      limit: refresh ? 48 : 24,
       maxLiveGeocodeLookups: 0,
     }).catch(() => null);
 
