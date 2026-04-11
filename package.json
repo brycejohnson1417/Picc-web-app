@@ -14,7 +14,7 @@
     "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "eslint app components lib prisma --ext .ts,.tsx",
-    "typecheck": "rm -f tsconfig.tsbuildinfo && next typegen && tsc --noEmit",
+    "typecheck": "rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.typecheck.json --noEmit",
     "perf:collect": "lhci collect --config=.lighthouserc.json",
     "perf:assert": "lhci assert --config=.lighthouserc.json",
     "perf:lighthouse": "lhci autorun --config=.lighthouserc.json",
