@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
+import { WorkspaceHero, WorkspacePage } from '@/components/layout/workspace-page';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { getPayrollOverview } from '@/lib/server/payroll';
 import { getVendorDayReportSummary } from '@/lib/server/roi';
@@ -20,14 +21,12 @@ export default async function ReportsPage() {
   const [report, payroll] = await Promise.all([getVendorDayReportSummary({ orgId }), getPayrollOverview(orgId)]);
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <header className="rounded-[28px] border border-[#d8d9de] bg-[linear-gradient(135deg,#fff5ef_0%,#ffffff_42%,#f4f7fb_100%)] p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#c93412]">Vendor Day Reporting</p>
-        <h1 className="mt-2 text-3xl font-bold text-[#17181c]">ROI, payroll, and utilization</h1>
-        <p className="mt-2 max-w-3xl text-sm text-[#5d6470]">
-          This page is now driven by local payroll and ROI snapshots rather than generic CRM counts.
-        </p>
-      </header>
+    <WorkspacePage>
+      <WorkspaceHero
+        eyebrow="Vendor Day Reporting"
+        title="ROI, payroll, and utilization in one reporting surface."
+        description="Reporting should read like the rest of the operating system. These metrics are driven by local payroll and ROI snapshots rather than generic CRM counts."
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
         <ReportCard label="Revenue Lift" value={currency(report.totals.revenueLift)} />
@@ -131,7 +130,7 @@ export default async function ReportsPage() {
           ))}
         </CardContent>
       </Card>
-    </div>
+    </WorkspacePage>
   );
 }
 

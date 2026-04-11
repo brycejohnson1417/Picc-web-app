@@ -3,20 +3,39 @@
 import { useQuery } from '@tanstack/react-query';
 import type { TerritoryBoundaryListResponse, TerritoryMarkerListResponse, TerritoryStoresResponse } from '@/lib/territory/types';
 
-const STORES_STALE_MS = 30_000;
-const STORES_REFETCH_MS = 45_000;
-const OVERLAY_STALE_MS = 30_000;
-const OVERLAY_REFETCH_MS = 30_000;
-const OVERLAY_GC_MS = 300_000;
+const STORES_STALE_MS = 1000 * 60 * 5;
+const OVERLAY_STALE_MS = 1000 * 60 * 15;
+const QUERY_GC_MS = 1000 * 60 * 30;
+const TERRITORY_CACHE_PREFIX = 'picc:territory-cache:';
 
-function activeInterval(intervalMs: number) {
-  return () => (typeof document === 'undefined' || document.visibilityState === 'visible' ? intervalMs : false);
+function readCachedJson<T>(cacheKey: string): T | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(`${TERRITORY_CACHE_PREFIX}${cacheKey}`);
+    if (!raw) return undefined;
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeCachedJson<T>(cacheKey: string, payload: T) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(`${TERRITORY_CACHE_PREFIX}${cacheKey}`, JSON.stringify(payload));
+  } catch {
+    // Ignore quota/storage failures.
+  }
 }
 
 async function fetchJson<T>(url: string, fallbackError: string) {
-  const response = await fetch(url, {
-    cache: 'no-store',
-  });
+  const response = await fetch(url);
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload?.error ?? fallbackError);
@@ -57,6 +76,11 @@ function buildStoresSearchParams(input: TerritoryStoreQueryInput) {
 }
 
 export function useTerritoryData(input: TerritoryStoreQueryInput) {
+  const storesUrl = `/api/territory/stores?${buildStoresSearchParams(input).toString()}`;
+  const cachedStores = readCachedJson<TerritoryStoresResponse>(storesUrl);
+  const cachedBoundaries = readCachedJson<TerritoryBoundaryListResponse>('/api/territory/boundaries');
+  const cachedMarkers = readCachedJson<TerritoryMarkerListResponse>('/api/territory/markers');
+
   const storesQuery = useQuery({
     queryKey: [
       'territory-mobile',
@@ -73,41 +97,51 @@ export function useTerritoryData(input: TerritoryStoreQueryInput) {
       input.lastOrderDateFilter,
       input.refreshNonce,
     ],
-    queryFn: async () =>
-      fetchJson<TerritoryStoresResponse>(
-        `/api/territory/stores?${buildStoresSearchParams(input).toString()}`,
-        'Failed to load stores',
-      ),
+    queryFn: async () => {
+      const payload = await fetchJson<TerritoryStoresResponse>(storesUrl, 'Failed to load stores');
+      writeCachedJson(storesUrl, payload);
+      return payload;
+    },
+    initialData: cachedStores,
     staleTime: STORES_STALE_MS,
-    refetchOnWindowFocus: true,
+    gcTime: QUERY_GC_MS,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    refetchInterval: activeInterval(STORES_REFETCH_MS),
     retry: 1,
     placeholderData: (previousData) => previousData,
   });
 
   const boundariesQuery = useQuery({
     queryKey: ['territory-boundaries'],
-    queryFn: async () =>
-      fetchJson<TerritoryBoundaryListResponse>('/api/territory/boundaries', 'Failed to load territory boundaries'),
+    queryFn: async () => {
+      const payload = await fetchJson<TerritoryBoundaryListResponse>('/api/territory/boundaries', 'Failed to load territory boundaries');
+      writeCachedJson('/api/territory/boundaries', payload);
+      return payload;
+    },
+    initialData: cachedBoundaries,
     staleTime: OVERLAY_STALE_MS,
-    gcTime: OVERLAY_GC_MS,
-    refetchOnWindowFocus: true,
+    gcTime: QUERY_GC_MS,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    refetchInterval: activeInterval(OVERLAY_REFETCH_MS),
     retry: 1,
     placeholderData: (previousData) => previousData,
   });
 
   const markersQuery = useQuery({
     queryKey: ['territory-markers'],
-    queryFn: async () =>
-      fetchJson<TerritoryMarkerListResponse>('/api/territory/markers', 'Failed to load territory markers'),
+    queryFn: async () => {
+      const payload = await fetchJson<TerritoryMarkerListResponse>('/api/territory/markers', 'Failed to load territory markers');
+      writeCachedJson('/api/territory/markers', payload);
+      return payload;
+    },
+    initialData: cachedMarkers,
     staleTime: OVERLAY_STALE_MS,
-    gcTime: OVERLAY_GC_MS,
-    refetchOnWindowFocus: true,
+    gcTime: QUERY_GC_MS,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    refetchInterval: activeInterval(OVERLAY_REFETCH_MS),
     retry: 1,
     placeholderData: (previousData) => previousData,
   });

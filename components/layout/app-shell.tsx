@@ -17,11 +17,26 @@ const CommandPalette = dynamic(
   { ssr: false, loading: () => null },
 );
 
-const tabs = [
+type NavTab = {
+  href: string;
+  matchHref?: string;
+  label: string;
+  icon: typeof House;
+};
+
+const defaultTabs: NavTab[] = [
   { href: '/home', label: 'Home', icon: House },
   { href: '/territory', label: 'Map', icon: MapPinned },
   { href: '/accounts', label: 'Accounts', icon: UserRound },
   { href: '/route', label: 'Route', icon: Route },
+  { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
+];
+
+const brandAmbassadorTabs: NavTab[] = [
+  { href: '/home', label: 'Home', icon: House },
+  { href: '/vendor-days?view=today', matchHref: '/vendor-days', label: 'Vendor Days', icon: CalendarDays },
+  { href: '/territory', label: 'Map', icon: MapPinned },
+  { href: '/accounts', label: 'Accounts', icon: UserRound },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
 ];
 
@@ -31,14 +46,6 @@ function isActive(pathname: string, href: string) {
 
 function roleLabel(role: AppAccessState['role']) {
   return RoleDisplayNames[role];
-}
-
-function vendorDaysHref(role: AppAccessState['role']) {
-  if (role === 'BRAND_AMBASSADOR') {
-    return '/vendor-days?view=today';
-  }
-
-  return '/vendor-days?view=queue';
 }
 
 export function AppShell({
@@ -54,7 +61,7 @@ export function AppShell({
   const { signOut } = useClerk();
   const [commandMounted, setCommandMounted] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const fieldHref = vendorDaysHref(access.role);
+  const tabs = access.role === 'BRAND_AMBASSADOR' ? brandAmbassadorTabs : defaultTabs;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -90,7 +97,7 @@ export function AppShell({
         >
           <header className="sticky top-0 z-[3000] flex items-center justify-between border-b border-[#d7dde7] bg-[linear-gradient(180deg,rgba(249,251,255,0.96)_0%,rgba(241,245,250,0.94)_100%)] px-3 py-2 text-[#1f232b] backdrop-blur-xl">
             <div className="flex items-center gap-2">
-              <div>
+              <div className="rounded-2xl border border-[#d7dde7] bg-white px-3 py-2 shadow-[0_8px_24px_rgba(31,35,43,0.06)]">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6a7583]">PICC</p>
                 <p className="text-[12px] font-semibold tracking-[0.02em] text-[#18212d]">Internal Platform</p>
               </div>
@@ -110,24 +117,11 @@ export function AppShell({
               ) : null}
             </div>
             <div className="flex items-center gap-2">
-              {!access.isGuestViewer ? (
-                <Link
-                  href={fieldHref}
-                  className="inline-flex items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#2f3640] hover:bg-[#f6f8fb]"
-                >
-                  <CalendarDays className="h-4 w-4" />
-                  {access.role === 'BRAND_AMBASSADOR' ? 'Field Hub' : 'Vendor Days'}
-                </Link>
-              ) : null}
               <details className="relative">
                 <summary className="flex list-none cursor-pointer items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-1 text-[11px] font-semibold text-[#2f3640]">
                   Profile
                 </summary>
                 <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[170px] rounded-xl border border-[#d3d9e2] bg-white p-1.5 shadow-[0_18px_45px_rgba(31,35,43,0.18)]">
-                  <Link href={fieldHref} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
-                    <CalendarDays className="h-4 w-4" />
-                    {access.role === 'BRAND_AMBASSADOR' ? 'Field Hub' : 'Vendor Days'}
-                  </Link>
                   <Link href="/settings" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
                     <Settings className="h-4 w-4" />
                     Settings
@@ -159,7 +153,7 @@ export function AppShell({
             )}
           >
             {tabs.map((item) => {
-              const active = isActive(pathname, item.href);
+              const active = isActive(pathname, item.matchHref ?? item.href);
               const Icon = item.icon;
               const showBadge = item.href === '/route' && routePlan.selectedCount > 0;
 

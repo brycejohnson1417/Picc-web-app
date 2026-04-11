@@ -18,6 +18,12 @@ import { prisma } from '@/lib/db/prisma';
 
 export const dynamic = 'force-dynamic';
 
+function responseHeaders() {
+  return {
+    'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
+  };
+}
+
 const createRequestSchema = z.object({
   accountId: z.string().cuid(),
   requestedStart: z.string().datetime(),
@@ -121,7 +127,7 @@ export async function GET() {
       viewerEmail: ctx.email ?? null,
     });
 
-    return NextResponse.json(payload);
+    return NextResponse.json(payload, { headers: responseHeaders() });
   } catch (error) {
     return routeErrorResponse(error, { fallbackMessage: 'Failed to load vendor-day workspace' });
   }

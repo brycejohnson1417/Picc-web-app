@@ -5,13 +5,40 @@ import { getUserRole } from '@/lib/rbac/guards';
 
 export const dynamic = 'force-dynamic';
 
-function responseHeaders() {
+const DASHBOARD_RESPONSE_CACHE_TTL_MS = 1000 * 60;
+
+type DashboardCacheEntry = {
+  expiresAt: number;
+  payload: Awaited<ReturnType<typeof getDashboardPayload>>;
+};
+
+const dashboardResponseCache = new Map<string, DashboardCacheEntry>();
+
+function responseHeaders(forceRefresh: boolean) {
   return {
-    'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
-    Pragma: 'no-cache',
+    'Cache-Control': forceRefresh ? 'private, no-store, max-age=0, must-revalidate' : 'private, max-age=30, stale-while-revalidate=120',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
+    ...(forceRefresh ? { Pragma: 'no-cache' } : {}),
   };
+}
+
+function cacheKey(orgId: string, start: string, end: string) {
+  return `${orgId}::${start}::${end}`;
+}
+
+function readDashboardCache(key: string) {
+  const cached = dashboardResponseCache.get(key);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    dashboardResponseCache.delete(key);
+    return null;
+  }
+
+  return cached.payload;
 }
 
 export async function GET(request: Request) {
@@ -27,6 +54,7 @@ export async function GET(request: Request) {
       end: searchParams.get('end'),
     });
     const forceRefresh = searchParams.get('refresh') === '1';
+    const key = cacheKey(ctx.orgId, start, end);
 
     if (forceRefresh) {
       const role = await getUserRole(ctx.orgId, ctx.userId);
@@ -35,9 +63,16 @@ export async function GET(request: Request) {
           { error: 'Only admin, ops, or finance can trigger a Nabis refresh.' },
           {
             status: 403,
-            headers: responseHeaders(),
+            headers: responseHeaders(true),
           },
         );
+      }
+    }
+
+    if (!forceRefresh) {
+      const cached = readDashboardCache(key);
+      if (cached) {
+        return NextResponse.json(cached, { headers: responseHeaders(false) });
       }
     }
 
@@ -51,7 +86,15 @@ export async function GET(request: Request) {
         email: ctx.email,
       },
     });
-    return NextResponse.json(payload, { headers: responseHeaders() });
+
+    if (!forceRefresh) {
+      dashboardResponseCache.set(key, {
+        expiresAt: Date.now() + DASHBOARD_RESPONSE_CACHE_TTL_MS,
+        payload,
+      });
+    }
+
+    return NextResponse.json(payload, { headers: responseHeaders(forceRefresh) });
   } catch (error) {
     const statusCode = Number((error as Error & { statusCode?: number })?.statusCode || 500);
     const publicMessage =
@@ -66,7 +109,7 @@ export async function GET(request: Request) {
       { error: publicMessage },
       {
         status: statusCode,
-        headers: responseHeaders(),
+        headers: responseHeaders(true),
       },
     );
   }

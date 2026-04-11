@@ -52,9 +52,9 @@ export function AccountsMobile() {
       }
       return (await response.json()) as TerritoryStoresResponse;
     },
-    staleTime: 30000,
-    refetchOnWindowFocus: true,
-    refetchInterval: 15000,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
     retry: 1,
     placeholderData: (previousData) => previousData,
   });

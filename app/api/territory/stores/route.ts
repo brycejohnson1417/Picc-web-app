@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
 import { loadTerritoryStores, processPendingTerritoryStoreSyncQueue } from '@/lib/server/notion-territory';
+import type { TerritoryStoresResponse } from '@/lib/territory/types';
 
 export const dynamic = 'force-dynamic';
+
+const TERRITORY_RESPONSE_CACHE_TTL_MS = 1000 * 30;
+
+type TerritoryCacheEntry = {
+  expiresAt: number;
+  payload: TerritoryStoresResponse;
+};
+
+const territoryStoresCache = new Map<string, TerritoryCacheEntry>();
 
 function readMultiParam(searchParams: URLSearchParams, key: string) {
   return searchParams
@@ -10,6 +20,36 @@ function readMultiParam(searchParams: URLSearchParams, key: string) {
     .flatMap((value) => value.split(','))
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+function buildTerritoryCacheKey(input: {
+  statuses: string[];
+  reps: string[];
+  referralSources: string[];
+  includeNoReferralSource: boolean;
+  vendorDayStatuses: string[];
+  locationAvailability: string;
+  hasSampleOrderDate: boolean;
+  noLastSampleDeliveryDate: boolean;
+  sampleAccountTypeFilter: string;
+  lastOrderDateFilter: string;
+  query: string;
+}) {
+  return JSON.stringify(input);
+}
+
+function readTerritoryCache(cacheKey: string) {
+  const cached = territoryStoresCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    territoryStoresCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.payload;
 }
 
 export async function GET(request: Request) {
@@ -45,12 +85,37 @@ export async function GET(request: Request) {
       : 'all';
   const q = searchParams.get('q')?.trim() ?? '';
   const refresh = searchParams.get('refresh') === '1';
+  const cacheKey = buildTerritoryCacheKey({
+    statuses,
+    reps,
+    referralSources,
+    includeNoReferralSource,
+    vendorDayStatuses,
+    locationAvailability,
+    hasSampleOrderDate,
+    noLastSampleDeliveryDate,
+    sampleAccountTypeFilter,
+    lastOrderDateFilter,
+    query: q,
+  });
 
   try {
-    await processPendingTerritoryStoreSyncQueue({
-      limit: refresh ? 48 : 24,
-      maxLiveGeocodeLookups: 0,
-    }).catch(() => null);
+    if (!refresh) {
+      const cached = readTerritoryCache(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: {
+            'X-Territory-Data-Source': cached.meta.sourceEngine ?? cached.meta.dataSource,
+            'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
+          },
+        });
+      }
+    } else {
+      await processPendingTerritoryStoreSyncQueue({
+        limit: 48,
+        maxLiveGeocodeLookups: 0,
+      }).catch(() => null);
+    }
 
     const payload = await loadTerritoryStores({
       statuses,
@@ -78,10 +143,19 @@ export async function GET(request: Request) {
       refresh,
     });
 
+    if (!refresh) {
+      territoryStoresCache.set(cacheKey, {
+        expiresAt: Date.now() + TERRITORY_RESPONSE_CACHE_TTL_MS,
+        payload,
+      });
+    }
+
     return NextResponse.json(payload, {
       headers: {
         'X-Territory-Data-Source': payload.meta.sourceEngine ?? payload.meta.dataSource,
-        'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+        'Cache-Control': refresh
+          ? 'private, no-store, max-age=0, must-revalidate'
+          : 'private, max-age=120, stale-while-revalidate=600',
       },
     });
   } catch (error) {
@@ -95,7 +169,7 @@ export async function GET(request: Request) {
         status: 500,
         headers: {
           'X-Territory-Data-Source': 'postgis',
-          'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+          'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
         },
       },
     );

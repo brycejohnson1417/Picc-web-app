@@ -1107,18 +1107,44 @@ export async function listVendorDayWorkspaceData(input: {
         })
       : null;
 
+  const isBrandAmbassador = input.viewerRole === Role.BRAND_AMBASSADOR;
+
   const [requests, assignments, accounts, workers] = await Promise.all([
     prisma.vendorDayRequest.findMany({
-      where: { orgId: input.orgId },
+      where: {
+        orgId: input.orgId,
+        ...(isBrandAmbassador && worker
+          ? {
+              OR: [
+                {
+                  offers: {
+                    some: {
+                      workerProfileId: worker.id,
+                    },
+                  },
+                },
+                {
+                  assignments: {
+                    some: {
+                      workerProfileId: worker.id,
+                    },
+                  },
+                },
+              ],
+            }
+          : {}),
+      },
       include: {
         account: true,
         offers: {
+          where: isBrandAmbassador && worker ? { workerProfileId: worker.id } : undefined,
           include: {
             workerProfile: true,
           },
           orderBy: [{ rankScore: 'desc' }, { createdAt: 'asc' }],
         },
         assignments: {
+          where: isBrandAmbassador && worker ? { workerProfileId: worker.id } : undefined,
           include: {
             workerProfile: true,
             execution: {
@@ -1128,37 +1154,41 @@ export async function listVendorDayWorkspaceData(input: {
         },
       },
       orderBy: [{ requestedStart: 'asc' }, { createdAt: 'desc' }],
-      take: 120,
+      take: isBrandAmbassador ? 40 : 120,
     }),
     prisma.vendorDayAssignment.findMany({
       where: {
         orgId: input.orgId,
-        ...(input.viewerRole === Role.BRAND_AMBASSADOR && worker ? { workerProfileId: worker.id } : {}),
+        ...(isBrandAmbassador && worker ? { workerProfileId: worker.id } : {}),
       },
       include: {
         request: { include: { account: true } },
         execution: { include: { artifacts: true } },
       },
       orderBy: [{ scheduledStart: 'asc' }],
-      take: 60,
+      take: isBrandAmbassador ? 30 : 60,
     }),
-    prisma.account.findMany({
-      where: { orgId: input.orgId, status: 'ACTIVE' },
-      select: {
-        id: true,
-        name: true,
-        city: true,
-        state: true,
-        licensedLocationId: true,
-        nabisRetailerId: true,
-      },
-      orderBy: { name: 'asc' },
-      take: 400,
-    }),
-    prisma.workerProfile.findMany({
-      where: { orgId: input.orgId, active: true },
-      orderBy: { displayName: 'asc' },
-    }),
+    isBrandAmbassador
+      ? Promise.resolve([])
+      : prisma.account.findMany({
+          where: { orgId: input.orgId, status: 'ACTIVE' },
+          select: {
+            id: true,
+            name: true,
+            city: true,
+            state: true,
+            licensedLocationId: true,
+            nabisRetailerId: true,
+          },
+          orderBy: { name: 'asc' },
+          take: 400,
+        }),
+    isBrandAmbassador
+      ? Promise.resolve([])
+      : prisma.workerProfile.findMany({
+          where: { orgId: input.orgId, active: true },
+          orderBy: { displayName: 'asc' },
+        }),
   ]);
 
   return {

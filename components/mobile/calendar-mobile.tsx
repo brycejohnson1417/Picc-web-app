@@ -19,11 +19,26 @@ type VendorDayEntry = {
   repName: string | null;
   ambassadorName: string | null;
   account: {
+    id?: string | null;
     name: string;
   } | null;
+  source?: 'local_assignment' | 'local_request' | 'notion_archive';
 };
 
 const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const CALENDAR_SNAPSHOT_KEY = 'picc:calendar-mobile:v1';
+const CALENDAR_SNAPSHOT_TTL_MS = 1000 * 60 * 5;
+
+type CalendarSnapshot = {
+  fetchedAt: number;
+  mode: CalendarMode;
+  viewDate: string;
+  selectedDayKey: string;
+  followUps: FollowUpEntry[];
+  vendorDays: VendorDayEntry[];
+  salesRepFilter: string;
+  vendorDayRepFilter: string;
+};
 
 function startOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -71,6 +86,40 @@ function formatTimeLabel(value: string) {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function readCalendarSnapshot() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(CALENDAR_SNAPSHOT_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as CalendarSnapshot | null;
+    if (!parsed || typeof parsed.fetchedAt !== 'number') {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCalendarSnapshot(snapshot: CalendarSnapshot) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(CALENDAR_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Ignore quota / private mode failures.
+  }
+}
+
 export function CalendarMobile() {
   const router = useRouter();
   const [mode, setMode] = useState<CalendarMode>('follow-ups');
@@ -82,8 +131,26 @@ export function CalendarMobile() {
   const [vendorDayRepFilter, setVendorDayRepFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
 
   useEffect(() => {
+    const cachedSnapshot = readCalendarSnapshot();
+    if (cachedSnapshot) {
+      setMode(cachedSnapshot.mode);
+      setViewDate(startOfMonth(new Date(cachedSnapshot.viewDate)));
+      setSelectedDayKey(cachedSnapshot.selectedDayKey);
+      setFollowUps(cachedSnapshot.followUps);
+      setVendorDays(cachedSnapshot.vendorDays);
+      setSalesRepFilter(cachedSnapshot.salesRepFilter);
+      setVendorDayRepFilter(cachedSnapshot.vendorDayRepFilter);
+      setLastFetchedAt(cachedSnapshot.fetchedAt);
+      if (Date.now() - cachedSnapshot.fetchedAt < CALENDAR_SNAPSHOT_TTL_MS) {
+        setLoading(false);
+        setLoadError(null);
+        return;
+      }
+    }
+
     const controller = new AbortController();
 
     const loadCalendar = async () => {
@@ -91,8 +158,8 @@ export function CalendarMobile() {
       setLoadError(null);
       try {
         const [storesResponse, vendorDaysResponse] = await Promise.all([
-          fetch('/api/territory/stores', { signal: controller.signal, cache: 'no-store' }),
-          fetch('/api/vendor-days', { signal: controller.signal, cache: 'no-store' }),
+          fetch('/api/territory/stores', { signal: controller.signal }),
+          fetch('/api/vendor-days/calendar', { signal: controller.signal }),
         ]);
 
         if (!storesResponse.ok || !vendorDaysResponse.ok) {
@@ -100,7 +167,7 @@ export function CalendarMobile() {
         }
 
         const storesPayload = (await storesResponse.json()) as { stores?: TerritoryStorePin[] };
-        const vendorDaysPayload = (await vendorDaysResponse.json()) as VendorDayEntry[];
+        const vendorDaysPayload = (await vendorDaysResponse.json()) as { entries?: VendorDayEntry[] };
 
         setFollowUps(
           (storesPayload.stores ?? [])
@@ -114,7 +181,8 @@ export function CalendarMobile() {
               salesRep: store.repNames[0] ?? null,
             })),
         );
-        setVendorDays(vendorDaysPayload ?? []);
+        setVendorDays(vendorDaysPayload.entries ?? []);
+        setLastFetchedAt(Date.now());
       } catch (error) {
         if (controller.signal.aborted) return;
         setLoadError(error instanceof Error ? error.message : 'Failed to load calendar data');
@@ -129,6 +197,23 @@ export function CalendarMobile() {
 
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (lastFetchedAt == null || loading) {
+      return;
+    }
+
+    writeCalendarSnapshot({
+      fetchedAt: lastFetchedAt,
+      mode,
+      viewDate: viewDate.toISOString(),
+      selectedDayKey,
+      followUps,
+      vendorDays,
+      salesRepFilter,
+      vendorDayRepFilter,
+    });
+  }, [followUps, lastFetchedAt, loading, mode, salesRepFilter, selectedDayKey, vendorDayRepFilter, vendorDays, viewDate]);
 
   useEffect(() => {
     const monthPrefix = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, '0')}`;
@@ -307,11 +392,25 @@ export function CalendarMobile() {
                 </div>
               ))
             : (activeEntries as VendorDayEntry[]).map((entry) => (
-                <div key={entry.id} className="rounded-2xl border border-[#d4d6dc] bg-white px-4 py-3">
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => {
+                    if (entry.account?.id) {
+                      router.push(`/accounts?storeId=${encodeURIComponent(entry.account.id)}`);
+                      return;
+                    }
+                    router.push('/vendor-days?view=history');
+                  }}
+                  className="w-full rounded-2xl border border-[#d4d6dc] bg-white px-4 py-3 text-left transition hover:border-[#bfd0ff] hover:bg-[#f7f9ff]"
+                >
                   <p className="text-[16px] font-semibold text-[#1d1f23]">{entry.account?.name ?? 'Unknown store'}</p>
                   <p className="mt-1 text-[14px] text-[#4f5661]">{entry.repName || entry.ambassadorName || 'Rep not assigned'}</p>
-                  <p className="mt-2 text-[13px] uppercase tracking-wide text-[#8b9099]">{formatTimeLabel(entry.eventDate)}</p>
-                </div>
+                  <p className="mt-2 text-[13px] uppercase tracking-wide text-[#8b9099]">
+                    {formatTimeLabel(entry.eventDate)}
+                    {entry.source === 'notion_archive' ? ' · archive' : ''}
+                  </p>
+                </button>
               ))}
         </div>
       </div>

@@ -21,11 +21,51 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
-import type { DashboardDateRange, NabisDashboardMetadata, NabisDashboardResponse, ProcessedNabisOrder, RepStat } from '@/lib/dashboard/nabis-types';
+import type { DashboardDateRange, NabisDashboardMetadata, NabisDashboardResponse, ProcessedNabisOrder, RepStat, SerializedNabisOrder } from '@/lib/dashboard/nabis-types';
 import { deserializeOrders, formatCurrency, formatTimestamp, getDefaultDateRange, isDateRangeValid } from '@/lib/dashboard/nabis-client';
 import { SalesTrendChart } from '@/components/dashboard/sales-trend-chart';
 
 const REP_COLORS = ['#1d4ed8', '#2563eb', '#0f766e', '#0284c7', '#7c3aed', '#db2777', '#f97316', '#eab308', '#16a34a', '#475569'];
+const DASHBOARD_SNAPSHOT_TTL_MS = 1000 * 60 * 5;
+const DASHBOARD_SNAPSHOT_KEY_PREFIX = 'picc:nabis-dashboard';
+
+type DashboardSnapshot = {
+  fetchedAt: number;
+  orders: SerializedNabisOrder[];
+  metadata: NabisDashboardMetadata;
+};
+
+function dashboardSnapshotKey(range: DashboardDateRange) {
+  return `${DASHBOARD_SNAPSHOT_KEY_PREFIX}:${range.start}:${range.end}`;
+}
+
+function readDashboardSnapshot(range: DashboardDateRange) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(dashboardSnapshotKey(range));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DashboardSnapshot | null;
+    if (!parsed || typeof parsed.fetchedAt !== 'number') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeDashboardSnapshot(range: DashboardDateRange, payload: DashboardSnapshot) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(dashboardSnapshotKey(range), JSON.stringify(payload));
+  } catch {
+    // Ignore storage quota and privacy mode failures.
+  }
+}
 
 export function NabisSalesDashboard() {
   const [dateRange, setDateRange] = useState<DashboardDateRange>(() => getDefaultDateRange());
@@ -40,11 +80,28 @@ export function NabisSalesDashboard() {
 
   const loadDashboard = async (nextRange: DashboardDateRange, options?: { initial?: boolean; forceRefresh?: boolean }) => {
     const initial = options?.initial ?? false;
+    const snapshot = options?.forceRefresh ? null : readDashboardSnapshot(nextRange);
+    const snapshotIsFresh = snapshot ? Date.now() - snapshot.fetchedAt < DASHBOARD_SNAPSHOT_TTL_MS : false;
 
-    if (initial) {
-      setIsLoading(true);
+    if (snapshot) {
+      setOrders(deserializeOrders(snapshot.orders));
+      setMetadata(snapshot.metadata);
+      setError(null);
     } else {
-      setIsRefreshing(true);
+      if (initial) {
+        setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+    }
+
+    if (snapshotIsFresh && !options?.forceRefresh) {
+      if (initial) {
+        setIsLoading(false);
+      } else {
+        setIsRefreshing(false);
+      }
+      return;
     }
 
     try {
@@ -56,7 +113,7 @@ export function NabisSalesDashboard() {
         params.set('refresh', '1');
       }
 
-      const response = await fetch(`/api/dashboard?${params.toString()}`, { cache: 'no-store' });
+      const response = await fetch(`/api/dashboard?${params.toString()}`);
       const payload = (await response.json()) as NabisDashboardResponse | { error?: string };
 
       if (!response.ok || !('orders' in payload)) {
@@ -67,6 +124,11 @@ export function NabisSalesDashboard() {
       setOrders(deserializeOrders(payload.orders));
       setMetadata(payload.metadata);
       setError(null);
+      writeDashboardSnapshot(nextRange, {
+        fetchedAt: Date.now(),
+        orders: payload.orders,
+        metadata: payload.metadata,
+      });
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Failed to load dashboard data.';
       setError(message);

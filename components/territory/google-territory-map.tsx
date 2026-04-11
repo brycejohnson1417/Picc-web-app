@@ -50,6 +50,8 @@ type RuntimeMapConfigResponse = {
 };
 
 const FALLBACK_CENTER = { lat: 39.8283, lng: -98.5795 };
+let runtimeMapConfigCache: RuntimeMapConfigResponse | null = null;
+const MAP_CONFIG_STORAGE_KEY = 'picc:territory-map-config';
 
 type RoutePoint = { lat: number; lng: number };
 
@@ -392,19 +394,50 @@ export function GoogleTerritoryMap({
       return;
     }
 
+    if (runtimeMapConfigCache?.apiKey) {
+      setRuntimeApiKey((runtimeMapConfigCache.apiKey ?? '').trim());
+      setRuntimeMapId((runtimeMapConfigCache.mapId ?? '').trim());
+      setConfigLoading(false);
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = window.sessionStorage.getItem(MAP_CONFIG_STORAGE_KEY);
+        if (cached) {
+          const payload = JSON.parse(cached) as RuntimeMapConfigResponse;
+          runtimeMapConfigCache = payload;
+          setRuntimeApiKey((payload.apiKey ?? '').trim());
+          setRuntimeMapId((payload.mapId ?? '').trim());
+          setConfigLoading(false);
+          return;
+        }
+      } catch {
+        // Ignore session storage cache failures.
+      }
+    }
+
     let cancelled = false;
 
     async function loadRuntimeMapConfig() {
       setConfigLoading(true);
       setConfigError('');
       try {
-        const response = await fetch('/api/territory/map-config', { cache: 'no-store' });
+        const response = await fetch('/api/territory/map-config');
         const payload = (await response.json().catch(() => ({}))) as RuntimeMapConfigResponse;
         if (!response.ok) {
           throw new Error(payload?.error ?? 'Failed to read Google Maps config');
         }
 
         if (!cancelled) {
+          runtimeMapConfigCache = payload;
+          if (typeof window !== 'undefined') {
+            try {
+              window.sessionStorage.setItem(MAP_CONFIG_STORAGE_KEY, JSON.stringify(payload));
+            } catch {
+              // Ignore session storage cache failures.
+            }
+          }
           setRuntimeApiKey((payload.apiKey ?? '').trim());
           setRuntimeMapId((payload.mapId ?? '').trim());
         }

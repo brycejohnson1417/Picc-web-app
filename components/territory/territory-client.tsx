@@ -47,7 +47,6 @@ export function TerritoryClient() {
       for (const referralSource of selectedReferralSources) params.append('referralSource', referralSource);
 
       const response = await fetch(`/api/territory/stores?${params.toString()}`, {
-        cache: 'no-store',
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -55,9 +54,9 @@ export function TerritoryClient() {
       }
       return (await response.json()) as TerritoryStoresResponse;
     },
-    staleTime: 10000,
-    refetchOnWindowFocus: true,
-    refetchInterval: 15000,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
     retry: 1,
     placeholderData: (previousData) => previousData,
   });

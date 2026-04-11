@@ -43,18 +43,16 @@ export function GoogleUsageBudgetCard({ compact = false }: { compact?: boolean }
   const usageQuery = useQuery({
     queryKey: ['google-usage-summary'],
     queryFn: async () => {
-      const response = await fetch('/api/territory/google-usage', {
-        cache: 'no-store',
-      });
+      const response = await fetch('/api/territory/google-usage');
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload?.error ?? 'Failed to fetch Google usage');
       }
       return payload as GoogleUsageSummary;
     },
-    staleTime: 15000,
-    refetchInterval: 30000,
-    refetchOnWindowFocus: true,
+    staleTime: 1000 * 60 * 10,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
     retry: 1,
   });
 

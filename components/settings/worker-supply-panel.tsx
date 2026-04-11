@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarConnectionProvider, CalendarConnectionStatus, NotificationCategory, WorkerSkillTier } from '@prisma/client';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Textarea } from '@/components/ui';
 import { useAppAccess } from '@/components/auth/app-access-provider';
+import { WorkspacePanel, WorkspacePanelHeader } from '@/components/layout/workspace-page';
 
 type EmployerRecord = {
   id: string;
@@ -189,7 +190,7 @@ function workerToDraft(worker: WorkerRecord | undefined, preferences: Notificati
   };
 }
 
-export function WorkerSupplyPanel() {
+export function WorkerSupplyPanel({ embedded = false }: { embedded?: boolean }) {
   const access = useAppAccess();
   const [payload, setPayload] = useState<SupplyResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -235,11 +236,11 @@ export function WorkerSupplyPanel() {
   }, [payload, selectedWorkerId]);
 
   if (loading) {
-    return <div className="border-t border-[#c7c8ce] bg-white px-4 py-6 text-sm text-[#666b75]">Loading worker supply settings…</div>;
+    return <div className={embedded ? 'rounded-[24px] border border-[#d6dbe4] bg-white px-4 py-6 text-sm text-[#666b75] shadow-[0_16px_40px_rgba(24,33,45,0.08)]' : 'border-t border-[#c7c8ce] bg-white px-4 py-6 text-sm text-[#666b75]'}>Loading worker supply settings…</div>;
   }
 
   if (!payload || !selectedWorker || !draft) {
-    return <div className="border-t border-[#c7c8ce] bg-white px-4 py-6 text-sm text-[#666b75]">No worker profile found yet.</div>;
+    return <div className={embedded ? 'rounded-[24px] border border-[#d6dbe4] bg-white px-4 py-6 text-sm text-[#666b75] shadow-[0_16px_40px_rgba(24,33,45,0.08)]' : 'border-t border-[#c7c8ce] bg-white px-4 py-6 text-sm text-[#666b75]'}>No worker profile found yet.</div>;
   }
 
   async function saveProfile() {
@@ -325,35 +326,66 @@ export function WorkerSupplyPanel() {
   }
 
   return (
-    <div className="space-y-4 border-t border-[#c7c8ce] bg-[#eef0f4] px-4 py-5">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#c93412]">Supply System</p>
-        <h2 className="mt-1 text-[22px] font-semibold text-[#1d1f23]">Worker profile, availability, gear, and notification controls</h2>
-        <p className="mt-1 text-[14px] text-[#666b75]">
-          Keep Brand Ambassador supply data current so dispatch can use proximity, availability, training, and readiness instead of guessing.
-        </p>
-      </div>
+    <div className={embedded ? '' : 'space-y-4 border-t border-[#c7c8ce] bg-[#eef0f4] px-4 py-5'}>
+      {embedded ? (
+        <WorkspacePanel className="space-y-4">
+          <WorkspacePanelHeader
+            eyebrow="Supply system"
+            title="Worker profile, availability, gear, and notification controls"
+            description="Keep Brand Ambassador supply data current so dispatch can use proximity, availability, training, and readiness instead of guessing."
+          />
+          {message ? <div className="rounded-2xl border border-[#efd4c9] bg-[#fff3ee] px-4 py-3 text-[14px] text-[#a23b22]">{message}</div> : null}
+          {canManageAllWorkers ? (
+            <Card className="border-[#d6dae2]">
+              <CardContent className="p-4">
+                <label className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] text-[#6b7280]">Selected Worker</label>
+                <select
+                  className="h-11 w-full rounded-xl border border-[#c9d0dc] bg-white px-3 text-[15px] text-[#1d1f23]"
+                  value={selectedWorkerId}
+                  onChange={(event) => setSelectedWorkerId(event.target.value)}
+                >
+                  {payload.workers.map((worker) => (
+                    <option key={worker.id} value={worker.id}>
+                      {worker.displayName} {worker.email ? `· ${worker.email}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </CardContent>
+            </Card>
+          ) : null}
+        </WorkspacePanel>
+      ) : (
+        <>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#c93412]">Supply System</p>
+            <h2 className="mt-1 text-[22px] font-semibold text-[#1d1f23]">Worker profile, availability, gear, and notification controls</h2>
+            <p className="mt-1 text-[14px] text-[#666b75]">
+              Keep Brand Ambassador supply data current so dispatch can use proximity, availability, training, and readiness instead of guessing.
+            </p>
+          </div>
 
-      {message ? <div className="rounded-2xl border border-[#efd4c9] bg-[#fff3ee] px-4 py-3 text-[14px] text-[#a23b22]">{message}</div> : null}
+          {message ? <div className="rounded-2xl border border-[#efd4c9] bg-[#fff3ee] px-4 py-3 text-[14px] text-[#a23b22]">{message}</div> : null}
 
-      {canManageAllWorkers ? (
-        <Card className="border-[#d6dae2]">
-          <CardContent className="p-4">
-            <label className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] text-[#6b7280]">Selected Worker</label>
-            <select
-              className="h-11 w-full rounded-xl border border-[#c9d0dc] bg-white px-3 text-[15px] text-[#1d1f23]"
-              value={selectedWorkerId}
-              onChange={(event) => setSelectedWorkerId(event.target.value)}
-            >
-              {payload.workers.map((worker) => (
-                <option key={worker.id} value={worker.id}>
-                  {worker.displayName} {worker.email ? `· ${worker.email}` : ''}
-                </option>
-              ))}
-            </select>
-          </CardContent>
-        </Card>
-      ) : null}
+          {canManageAllWorkers ? (
+            <Card className="border-[#d6dae2]">
+              <CardContent className="p-4">
+                <label className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] text-[#6b7280]">Selected Worker</label>
+                <select
+                  className="h-11 w-full rounded-xl border border-[#c9d0dc] bg-white px-3 text-[15px] text-[#1d1f23]"
+                  value={selectedWorkerId}
+                  onChange={(event) => setSelectedWorkerId(event.target.value)}
+                >
+                  {payload.workers.map((worker) => (
+                    <option key={worker.id} value={worker.id}>
+                      {worker.displayName} {worker.email ? `· ${worker.email}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </CardContent>
+            </Card>
+          ) : null}
+        </>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card className="border-[#d6dae2]">

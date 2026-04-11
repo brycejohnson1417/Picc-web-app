@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
 import { toast } from 'sonner';
 import { useAppAccess } from '@/components/auth/app-access-provider';
-import { MobileHeader } from '@/components/mobile/mobile-header';
+import { WorkspacePanel, WorkspacePanelHeader } from '@/components/layout/workspace-page';
 import { Button, Input, Textarea } from '@/components/ui';
 import { GoogleUsageBudgetCard } from '@/components/territory/google-usage-budget-card';
 
@@ -86,7 +86,7 @@ interface OperationalInvitesResponse {
   invites: OperationalInviteRecord[];
 }
 
-export function SettingsMobile() {
+export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
   const { signOut } = useClerk();
   const appAccess = useAppAccess();
@@ -422,13 +422,23 @@ export function SettingsMobile() {
   }
 
   return (
-    <div className="min-h-[calc(100dvh-92px)] bg-[#e6e6e9]">
-      <MobileHeader title="Settings" />
-      <div className="border-y border-[#c7c8ce] bg-white px-4 py-3">
-        <GoogleUsageBudgetCard compact />
-      </div>
+    <div className={embedded ? 'space-y-5' : 'min-h-[calc(100dvh-92px)] bg-[linear-gradient(180deg,#f7f9fc_0%,#eef2f7_100%)]'}>
+      {embedded ? (
+        <WorkspacePanel className="space-y-4">
+          <WorkspacePanelHeader
+            eyebrow="Access and usage"
+            title="Keep support controls and connected services in one place."
+            description="This section stays inside the internal app frame and focuses on the controls operators actually need."
+          />
+          <GoogleUsageBudgetCard compact />
+        </WorkspacePanel>
+      ) : (
+        <div className="border-y border-[#c7c8ce] bg-white px-4 py-3">
+          <GoogleUsageBudgetCard compact />
+        </div>
+      )}
       {appAccess.isAdmin ? (
-        <div className="border-b border-[#c7c8ce] bg-white px-4 py-4">
+        <div className={embedded ? 'rounded-[24px] border border-[#d6dbe4] bg-white px-4 py-4 shadow-[0_16px_40px_rgba(24,33,45,0.08)]' : 'border-b border-[#c7c8ce] bg-white px-4 py-4'}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[18px] font-semibold text-[#1d1f23]">Admin Preview</p>
@@ -657,7 +667,7 @@ export function SettingsMobile() {
         </div>
       ) : null}
       {canViewTeamActivity ? (
-        <div className="border-b border-[#c7c8ce] bg-white px-4 py-4">
+        <div className={embedded ? 'rounded-[24px] border border-[#d6dbe4] bg-white px-4 py-4 shadow-[0_16px_40px_rgba(24,33,45,0.08)]' : 'border-b border-[#c7c8ce] bg-white px-4 py-4'}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[18px] font-semibold text-[#1d1f23]">Team Activity</p>
@@ -711,7 +721,7 @@ export function SettingsMobile() {
         ) : null}
         </div>
       ) : null}
-      <div className="border-t border-[#c7c8ce] bg-white">
+      <div className={embedded ? 'rounded-[24px] border border-[#d6dbe4] bg-white shadow-[0_16px_40px_rgba(24,33,45,0.08)]' : 'border-t border-[#c7c8ce] bg-white'}>
         <div className="border-b border-[#d6d8df] px-4 py-3">
           <p className="text-[13px] font-semibold uppercase tracking-wide text-[#7a7f89]">Settings</p>
         </div>

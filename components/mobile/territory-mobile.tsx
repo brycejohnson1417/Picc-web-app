@@ -34,6 +34,7 @@ const TerritoryMapMobile = dynamic(
     loading: () => <div className="h-full w-full animate-pulse bg-[#d8d8dc]" />,
   },
 );
+const TERRITORY_UI_STORAGE_KEY = 'picc-territory-ui-state';
 
 function firstLetter(name: string) {
   const normalized = String(name ?? '').trim().toUpperCase();
@@ -116,6 +117,50 @@ export function TerritoryMobile() {
   const [lassoDrawingMode, setLassoDrawingMode] = useState(false);
   const [lassoSelectedIds, setLassoSelectedIds] = useState<string[]>([]);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(TERRITORY_UI_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        view?: 'map' | 'list';
+        focusedId?: string | null;
+        detailStoreId?: string | null;
+        mapSearch?: string;
+      };
+      if (saved.view === 'map' || saved.view === 'list') {
+        setView(saved.view);
+      }
+      if (typeof saved.focusedId === 'string') {
+        setFocusedId(saved.focusedId);
+      }
+      if (typeof saved.detailStoreId === 'string') {
+        setDetailStoreId(saved.detailStoreId);
+      }
+      if (typeof saved.mapSearch === 'string') {
+        setMapSearch(saved.mapSearch);
+        setDebouncedMapSearch(saved.mapSearch.trim());
+      }
+    } catch {
+      // Ignore session storage parse failures.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        TERRITORY_UI_STORAGE_KEY,
+        JSON.stringify({
+          view,
+          focusedId,
+          detailStoreId,
+          mapSearch,
+        }),
+      );
+    } catch {
+      // Ignore session storage write failures.
+    }
+  }, [detailStoreId, focusedId, mapSearch, view]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
