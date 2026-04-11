@@ -458,6 +458,12 @@ export function NabisSalesDashboard() {
               The NY feed is scanned incrementally from newest to oldest. If a broader date range looks incomplete, narrow the window and reload.
             </Banner>
           ) : null}
+
+          {orders.length === 0 ? (
+            <Banner tone="info">
+              The local order cache is still warming up. This dashboard reads saved Postgres data first for speed, and only refreshes Nabis when you explicitly ask it to or when the production cron runs.
+            </Banner>
+          ) : null}
         </div>
 
         <div className="space-y-6 px-4 py-5 sm:px-6">
@@ -605,7 +611,7 @@ export function NabisSalesDashboard() {
                           <td className="whitespace-nowrap px-5 py-4 text-sm font-semibold text-[#1d5eea]">#{order.orderNumber}</td>
                           <td className="px-5 py-4 text-sm text-[#243040]">
                             {order.matchedAccountId ? (
-                              <Link href={`/accounts/${order.matchedAccountId}`} className="font-semibold text-[#1d5eea] hover:underline">
+                              <Link href={`/accounts?storeId=${encodeURIComponent(order.matchedAccountId)}`} className="font-semibold text-[#1d5eea] hover:underline">
                                 {order.customerName}
                               </Link>
                             ) : (

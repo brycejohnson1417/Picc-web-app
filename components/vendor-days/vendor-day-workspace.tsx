@@ -701,19 +701,19 @@ export function VendorDayWorkspace({ initialView }: { initialView?: string }) {
   return (
     <div className="min-h-[calc(100dvh-84px)] bg-[linear-gradient(180deg,#f7f9fc_0%,#eef2f7_100%)] px-4 py-4 sm:px-6">
       <div className="mx-auto flex max-w-[var(--app-shell-max)] flex-col gap-5">
-        <section className="overflow-hidden rounded-[30px] border border-[#d5dbe5] bg-[linear-gradient(135deg,#172230_0%,#163c74_44%,#cc3814_100%)] p-5 text-white shadow-[0_24px_60px_rgba(24,33,45,0.18)]">
+        <section className="overflow-hidden rounded-[30px] border border-[#d5dbe5] bg-[linear-gradient(135deg,#16202b_0%,#1d5eea_58%,#4f86f3_100%)] p-5 text-white shadow-[0_24px_60px_rgba(24,33,45,0.18)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
                 {isBrandAmbassador ? 'Brand Ambassador Workflow' : 'Vendor Day Control'}
               </p>
               <h1 className="mt-2 text-[30px] font-semibold leading-tight">
-                {isBrandAmbassador ? 'Run the event without digging through ops screens.' : 'Manage dispatch, field execution, proof, and pay from one place.'}
+                {isBrandAmbassador ? 'Run the event cleanly from one focused field workflow.' : 'Manage dispatch, field execution, proof, and pay from one operating surface.'}
               </h1>
               <p className="mt-2 text-sm text-white/82">
                 {isBrandAmbassador
-                  ? 'Offers, today’s events, uploads, check-in, check-out, and pay are all grouped into the order you actually use them.'
-                  : 'Requests, rep approvals, concurrent offers, field status, settlement, and archive sync stay visible without dropping into old spreadsheet workflows.'}
+                  ? 'Offers, today, proof, check-in, check-out, pay, and history stay in one place so the flow feels like a field app instead of an ops dashboard.'
+                  : 'Requests, approvals, concurrent offers, field status, settlement, and archive sync stay visible without dropping into separate tools.'}
               </p>
             </div>
             <div className="grid min-w-[280px] grid-cols-2 gap-3">
@@ -723,10 +723,10 @@ export function VendorDayWorkspace({ initialView }: { initialView?: string }) {
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="border-white/20 bg-white/10 text-white">
+            <Badge variant="outline" className="border-white/18 bg-white/12 text-white">
               {requests.length} requests
             </Badge>
-            <Badge variant="outline" className="border-white/20 bg-white/10 text-white">
+            <Badge variant="outline" className="border-white/18 bg-white/12 text-white">
               {assignments.length} assignments
             </Badge>
             <Badge variant={isOnline ? 'success' : 'warning'}>{isOnline ? 'Online' : 'Offline'}</Badge>
@@ -734,8 +734,8 @@ export function VendorDayWorkspace({ initialView }: { initialView?: string }) {
             {fieldExceptions.length > 0 ? <Badge variant="danger">{fieldExceptions.length} need review</Badge> : null}
           </div>
 
-          <div className="mt-5">
-            <SegmentedControl value={activeView} options={viewOptions} onChange={handleViewChange} className="grid-cols-5 bg-white/15" />
+          <div className="mt-5 rounded-[24px] border border-white/15 bg-white/10 p-2 backdrop-blur-sm">
+            <SegmentedControl value={activeView} options={viewOptions} onChange={handleViewChange} className="grid-cols-5 bg-white/20" />
           </div>
         </section>
 

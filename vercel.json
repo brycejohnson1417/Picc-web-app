@@ -4,6 +4,10 @@
   "outputDirectory": ".next",
   "crons": [
     {
+      "path": "/api/cron/nabis-sync",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/notion-sync",
       "schedule": "0 4 * * *"
     }

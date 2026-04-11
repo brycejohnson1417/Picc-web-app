@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { prisma } from '@/lib/db/prisma';
+import { isExcludedInternalTransferRetailerName } from '@/lib/nabis/internal-transfers';
 import { AUTH_BYPASS_MODE, DEMO_ORG_ID } from '@/lib/config/runtime';
 import {
   getSyncTtlMinutes,
@@ -2234,7 +2235,7 @@ export async function loadTerritoryStores(input?: {
       await syncTerritoryStoresReadModel(snapshot.stores);
       readModel = await loadTerritoryStoresFromReadModel({});
     }
-    const mergedStores = readModel.stores.map(mergeSnapshotStore);
+    const mergedStores = readModel.stores.map(mergeSnapshotStore).filter((store) => !isExcludedInternalTransferRetailerName(store.name));
     const filtered = filterTerritoryPins(mergedStores, selection);
     stores = filtered.stores;
     filters = {
@@ -2251,7 +2252,7 @@ export async function loadTerritoryStores(input?: {
     console.error('territory_read_model_fallback', {
       message: error instanceof Error ? error.message : String(error),
     });
-    const fallback = filterTerritoryPins(snapshot.stores, selection);
+    const fallback = filterTerritoryPins(snapshot.stores.filter((store) => !isExcludedInternalTransferRetailerName(store.name)), selection);
     stores = fallback.stores;
     filters = {
       ...fallback.filters,

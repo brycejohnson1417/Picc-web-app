@@ -2,6 +2,7 @@ import 'server-only';
 
 import { prisma } from '@/lib/db/prisma';
 import { getNabisSyncFreshness, syncNabisRetailersAndOrders } from '@/lib/server/nabis-sync';
+import { excludedInternalTransferRetailers } from '@/lib/nabis/internal-transfers';
 import type { NabisDashboardMetadata, NabisDashboardResponse, SerializedNabisOrder } from '@/lib/dashboard/nabis-types';
 
 const CANCELED_STATUSES = new Set(['CANCELED', 'CANCELLED', 'VOID', 'VOIDED', 'REJECTED', 'REFUNDED']);
@@ -65,7 +66,7 @@ export async function getDashboardPayload(input: {
   actor?: { clerkUserId?: string | null; email?: string | null };
 }) {
   if (input.forceRefresh) {
-    await syncNabisRetailersAndOrders(input.orgId, input.actor);
+    await syncNabisRetailersAndOrders(input.orgId, input.actor, { syncCrm: false });
   }
 
   const rows = await prisma.nabisOrder.findMany({
@@ -75,6 +76,12 @@ export async function getDashboardPayload(input: {
         gte: startOfDayUtc(input.start),
         lte: endOfDayUtc(input.end),
       },
+      NOT: excludedInternalTransferRetailers.map((value) => ({
+        licensedLocationName: {
+          equals: value,
+          mode: 'insensitive' as const,
+        },
+      })),
     },
     select: {
       id: true,

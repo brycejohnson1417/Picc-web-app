@@ -6,6 +6,7 @@ import { ensureAccountIdentityMappings, resolveCanonicalAccountByIdentifiers } f
 import { appendAuditEvent } from '@/lib/server/audit-log';
 import { upsertDispensaryCrmPageFromRetailer } from '@/lib/server/notion-crm-sync';
 import { ensureActivePolicySnapshot } from '@/lib/server/policy-snapshots';
+import { excludedInternalTransferRetailers, isExcludedInternalTransferRetailerName } from '@/lib/nabis/internal-transfers';
 
 const DEFAULT_API_BASE_URL = 'https://platform-api.nabis.pro';
 const PAGE_SIZE = 500;
@@ -13,6 +14,7 @@ const MAX_RETAILER_PAGES = 40;
 const MAX_ORDER_PAGES = 220;
 const RECENT_ORDER_SYNC_DAYS = 120;
 const RECONCILIATION_ORDER_SYNC_DAYS = 400;
+const ORDER_UPSERT_BATCH_SIZE = 50;
 
 type SyncActor = {
   clerkUserId?: string | null;
@@ -115,6 +117,14 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function chunkArray<T>(items: T[], chunkSize: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
 function compactString(value: unknown) {
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -212,6 +222,10 @@ function parseRetailerRow(row: NabisRetailerApiRow): ParsedRetailer | null {
     return null;
   }
 
+  if (isExcludedInternalTransferRetailerName(name)) {
+    return null;
+  }
+
   return {
     licensedLocationId,
     externalRetailerId: compactString(row.retailerId ?? row.id),
@@ -234,6 +248,11 @@ function parseOrderRow(row: NabisOrderApiRow): ParsedOrder | null {
     return null;
   }
 
+  const licensedLocationName = compactString(row.retailer);
+  if (isExcludedInternalTransferRetailerName(licensedLocationName)) {
+    return null;
+  }
+
   const createdDate = parseDate(row.createdTimestamp ?? row.createdDate ?? null);
   const deliveryDate = parseDate(row.deliveryDate ?? null);
 
@@ -242,7 +261,7 @@ function parseOrderRow(row: NabisOrderApiRow): ParsedOrder | null {
     orderNumber: compactString(row.order),
     licensedLocationId: compactString(row.licensedLocationId ?? row.retailerId),
     nabisRetailerId: compactString(row.retailerId ?? row.licensedLocationId),
-    licensedLocationName: compactString(row.retailer),
+    licensedLocationName,
     orderCreatedDate: createdDate,
     deliveryDate,
     status: compactString(row.status)?.toUpperCase() ?? null,
@@ -559,7 +578,13 @@ function retailerSystemFieldsChanged(
   );
 }
 
-async function upsertLocalAccountFromRetailer(orgId: string, retailer: ParsedRetailer, hasOrders: boolean, actor?: SyncActor) {
+async function upsertLocalAccountFromRetailer(
+  orgId: string,
+  retailer: ParsedRetailer,
+  hasOrders: boolean,
+  actor?: SyncActor,
+  options?: { syncCrm?: boolean },
+) {
   const resolved =
     (await resolveCanonicalAccountByIdentifiers({
       orgId,
@@ -626,7 +651,9 @@ async function upsertLocalAccountFromRetailer(orgId: string, retailer: ParsedRet
       });
 
   let notionPageId = account.notionPageId;
-  if (changed || !account.notionPageId) {
+  const shouldSyncCrm = options?.syncCrm === true;
+
+  if (shouldSyncCrm && (changed || !account.notionPageId)) {
     const notion = await upsertDispensaryCrmPageFromRetailer({
       licensedLocationId: retailer.licensedLocationId,
       nabisRetailerId: retailer.externalRetailerId,
@@ -850,6 +877,10 @@ async function refreshRetailerRollups(orgId: string, licensedLocationIds: string
 }
 
 export async function syncNabisRetailers(orgId: string, actor?: SyncActor) {
+  return syncNabisRetailersWithOptions(orgId, actor, { syncCrm: true });
+}
+
+export async function syncNabisRetailersWithOptions(orgId: string, actor?: SyncActor, options?: { syncCrm?: boolean }) {
   await ensureActivePolicySnapshot(orgId, actor);
   const integration = await ensureNabisIntegration(orgId);
   const existingOrderIds = await prisma.nabisOrder.findMany({
@@ -860,10 +891,27 @@ export async function syncNabisRetailers(orgId: string, actor?: SyncActor) {
 
   return withSyncRun({ orgId, integrationId: integration.id, module: 'retailers', actor }, async () => {
     const retailers = await loadRetailersFromNabis();
+    await prisma.nabisRetailer.deleteMany({
+      where: {
+        orgId,
+        OR: excludedInternalTransferRetailers.map((value) => ({
+          name: {
+            equals: value,
+            mode: 'insensitive' as const,
+          },
+        })),
+      },
+    });
     let upserted = 0;
 
     for (const retailer of retailers) {
-      const account = await upsertLocalAccountFromRetailer(orgId, retailer, orderBackedStores.has(retailer.licensedLocationId), actor);
+      const account = await upsertLocalAccountFromRetailer(
+        orgId,
+        retailer,
+        orderBackedStores.has(retailer.licensedLocationId),
+        actor,
+        { syncCrm: options?.syncCrm === true },
+      );
 
       await prisma.nabisRetailer.upsert({
         where: {
@@ -919,6 +967,7 @@ export async function syncNabisRetailers(orgId: string, actor?: SyncActor) {
       recordsUpserted: upserted,
       metadata: {
         retailers: retailers.length,
+        crmMirrored: options?.syncCrm === true,
       },
     };
   });
@@ -930,6 +979,20 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
 
   return withSyncRun({ orgId, integrationId: integration.id, module: options?.reconciliation ? 'orders_reconcile' : 'orders', actor }, async () => {
     const orders = await loadOrdersFromNabis({ reconciliation: options?.reconciliation });
+    await prisma.nabisOrder.deleteMany({
+      where: {
+        orgId,
+        OR: [
+          { isInternalTransfer: true },
+          ...excludedInternalTransferRetailers.map((value) => ({
+            licensedLocationName: {
+              equals: value,
+              mode: 'insensitive' as const,
+            },
+          })),
+        ],
+      },
+    });
     const accounts = await prisma.account.findMany({
       where: { orgId },
       select: {
@@ -946,6 +1009,25 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
 
     let upserted = 0;
     const touchedLicensedLocationIds = new Set<string>();
+    const orderRows: Array<{
+      externalOrderId: string;
+      data: {
+        accountId: string | null;
+        externalOrderId: string;
+        orderNumber: string | null;
+        licensedLocationId: string | null;
+        nabisRetailerId: string | null;
+        licensedLocationName: string | null;
+        orderCreatedDate: Date | null;
+        status: string | null;
+        isInternalTransfer: boolean;
+        orderTotal: Prisma.Decimal;
+        paymentStatus: string | null;
+        deliveryDate: Date | null;
+        salesRep: string | null;
+        poSoNumber: string | null;
+      };
+    }> = [];
 
     for (const order of orders) {
       const matchedAccount =
@@ -976,25 +1058,35 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
         salesRep: order.salesRep,
         poSoNumber: null,
       };
-
-      await prisma.nabisOrder.upsert({
-        where: {
-          orgId_externalOrderId: {
-            orgId,
-            externalOrderId: order.externalOrderId,
-          },
-        },
-        update: orderData,
-        create: {
-          orgId,
-          ...orderData,
-        },
+      orderRows.push({
+        externalOrderId: order.externalOrderId,
+        data: orderData,
       });
-      upserted += 1;
 
       if (order.licensedLocationId) {
         touchedLicensedLocationIds.add(order.licensedLocationId);
       }
+    }
+
+    for (const batch of chunkArray(orderRows, ORDER_UPSERT_BATCH_SIZE)) {
+      await Promise.all(
+        batch.map((row) =>
+          prisma.nabisOrder.upsert({
+            where: {
+              orgId_externalOrderId: {
+                orgId,
+                externalOrderId: row.externalOrderId,
+              },
+            },
+            update: row.data,
+            create: {
+              orgId,
+              ...row.data,
+            },
+          }),
+        ),
+      );
+      upserted += batch.length;
     }
 
     const metricRows = await rebuildDailyMetrics(orgId, [...touchedLicensedLocationIds]);
@@ -1029,8 +1121,8 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
   });
 }
 
-export async function syncNabisRetailersAndOrders(orgId: string, actor?: SyncActor, options?: { reconciliation?: boolean }) {
-  const retailerResult = await syncNabisRetailers(orgId, actor);
+export async function syncNabisRetailersAndOrders(orgId: string, actor?: SyncActor, options?: { reconciliation?: boolean; syncCrm?: boolean }) {
+  const retailerResult = await syncNabisRetailersWithOptions(orgId, actor, { syncCrm: options?.syncCrm === true });
   const orderResult = await syncNabisOrders(orgId, actor, options);
 
   return {

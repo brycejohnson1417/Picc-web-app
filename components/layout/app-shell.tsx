@@ -88,9 +88,12 @@ export function AppShell({
               : 'max-w-[var(--app-shell-max)] md:min-h-[calc(100dvh-24px)] md:overflow-hidden md:rounded-[28px] md:shadow-[0_20px_60px_rgba(31,35,43,0.18)]',
           )}
         >
-          <header className="flex items-center justify-between border-b border-[#c8c9ce] bg-[#f0f1f4] px-3 py-1.5 text-[#1f232b]">
+          <header className="sticky top-0 z-[3000] flex items-center justify-between border-b border-[#d7dde7] bg-[linear-gradient(180deg,rgba(249,251,255,0.96)_0%,rgba(241,245,250,0.94)_100%)] px-3 py-2 text-[#1f232b] backdrop-blur-xl">
             <div className="flex items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em]">PICC Internal Platform</p>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6a7583]">PICC</p>
+                <p className="text-[12px] font-semibold tracking-[0.02em] text-[#18212d]">Internal Platform</p>
+              </div>
               <span className="rounded-full border border-[#c7cfde] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#304153]">
                 {roleLabel(access.role)}
               </span>
@@ -117,7 +120,7 @@ export function AppShell({
                 </Link>
               ) : null}
               <details className="relative">
-                <summary className="flex list-none cursor-pointer items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#2f3640]">
+                <summary className="flex list-none cursor-pointer items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-1 text-[11px] font-semibold text-[#2f3640]">
                   Profile
                 </summary>
                 <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[170px] rounded-xl border border-[#d3d9e2] bg-white p-1.5 shadow-[0_18px_45px_rgba(31,35,43,0.18)]">
@@ -149,7 +152,7 @@ export function AppShell({
         <nav className="fixed bottom-0 left-0 right-0 z-[4000] text-white" aria-label="Primary navigation">
           <div
             className={cn(
-              'mx-auto grid h-[84px] grid-cols-5 border-t border-[#2f3540] bg-[#1f232b] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5',
+              'mx-auto grid h-[84px] grid-cols-5 border-t border-[#243041] bg-[linear-gradient(180deg,#1f2631_0%,#171d26_100%)] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5',
               isTerritoryRoute
                 ? 'max-w-none md:mb-0 md:rounded-none md:border-l-0 md:border-r-0 md:shadow-none'
                 : 'max-w-[var(--app-shell-max)] md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]',
