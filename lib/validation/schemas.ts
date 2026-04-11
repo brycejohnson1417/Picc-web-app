@@ -8,7 +8,7 @@ export const accountSchema = z.object({
   state: z.string().min(2).max(30),
   zipcode: z.string().min(3).max(12),
   phone: z.string().max(30).optional().nullable(),
-  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+  status: z.enum(['ACTIVE', 'INACTIVE']),
 });
 
 export const contactSchema = z.object({
@@ -18,7 +18,17 @@ export const contactSchema = z.object({
   roleTitle: z.string().min(1).max(120),
   email: z.string().email().optional().nullable(),
   phone: z.string().max(30).optional().nullable(),
-  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+  status: z.enum(['ACTIVE', 'INACTIVE']),
+});
+
+export const taskSchema = z.object({
+  accountId: z.string().cuid(),
+  contactId: z.string().cuid().optional().nullable(),
+  opportunityId: z.string().cuid().optional().nullable(),
+  title: z.string().min(2),
+  description: z.string().optional().nullable(),
+  dueDate: z.string().optional().nullable(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']),
 });
 
 export const quickLogSchema = z.object({

@@ -1,34 +1,22 @@
 import { NextResponse } from 'next/server';
 import { ActivityType } from '@prisma/client';
-import { parseJsonBody, routeErrorResponse } from '@/lib/api/route-errors';
-import { guard } from '@/lib/auth/api-guard';
-import { prisma } from '@/lib/db/prisma';
+import { createApiHandler } from '@/lib/api/handler';
 import { contactSchema } from '@/lib/validation/schemas';
+import { getContacts, createContact } from '@/lib/data/contacts';
 import { writeActivity } from '@/lib/activity-log/write';
 
-export async function GET() {
-  const ctx = await guard();
-  if ('error' in ctx) return ctx.error;
+export const GET = createApiHandler(async (_req, ctx) => {
+  const contacts = await getContacts(ctx.orgId);
+  return NextResponse.json(contacts);
+});
 
-  try {
-    const contacts = await prisma.contact.findMany({ where: { orgId: ctx.orgId }, include: { account: true }, orderBy: { updatedAt: 'desc' } });
-    return NextResponse.json(contacts);
-  } catch (error) {
-    return routeErrorResponse(error, { fallbackMessage: 'Failed to load contacts' });
-  }
-}
-
-export async function POST(req: Request) {
-  const ctx = await guard(['ADMIN', 'OPS_TEAM', 'SALES_REP', 'BRAND_AMBASSADOR']);
-  if ('error' in ctx) return ctx.error;
-
-  try {
-    const payload = await parseJsonBody(req, contactSchema);
-    const contact = await prisma.contact.create({ data: { orgId: ctx.orgId, ...payload } });
+export const POST = createApiHandler(
+  async (_req, ctx, data) => {
+    const contact = await createContact(ctx.orgId, data);
 
     await writeActivity({
       orgId: ctx.orgId,
-      accountId: payload.accountId,
+      accountId: data.accountId,
       contactId: contact.id,
       actorClerkUserId: ctx.userId,
       type: ActivityType.CONTACT_UPDATED,
@@ -37,10 +25,9 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(contact, { status: 201 });
-  } catch (error) {
-    return routeErrorResponse(error, {
-      fallbackMessage: 'Failed to create contact',
-      zodMessage: 'Invalid contact payload',
-    });
-  }
-}
+  },
+  {
+    allowedRoles: ['ADMIN', 'OPS_TEAM', 'SALES_REP', 'BRAND_AMBASSADOR'],
+    schema: contactSchema,
+  },
+);

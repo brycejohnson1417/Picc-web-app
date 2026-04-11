@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import { prisma } from '@/lib/db/prisma';
+import { accountSchema } from '@/lib/validation/schemas';
 
 export async function getAccounts(orgId: string) {
   return prisma.account.findMany({
@@ -31,6 +33,15 @@ export async function getAccountDetail(orgId: string, accountId: string) {
       pennyBundles: { orderBy: { createdAt: 'desc' }, take: 20 },
       sampleBoxRequests: { orderBy: { createdAt: 'desc' }, take: 20 },
       overdueSnapshots: { orderBy: { snapshotDate: 'desc' }, take: 20 },
+    },
+  });
+}
+
+export async function createAccount(orgId: string, data: z.infer<typeof accountSchema>) {
+  return prisma.account.create({
+    data: {
+      orgId,
+      ...data,
     },
   });
 }
