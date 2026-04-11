@@ -484,8 +484,8 @@ export function VendorDayWorkspace({ initialView }: { initialView?: string }) {
     setDidInitializeDefaultView(false);
   }, [access.role, initialView]);
 
-  const requests = payload?.requests ?? [];
-  const assignments = payload?.assignments ?? [];
+  const requests = useMemo(() => payload?.requests ?? [], [payload?.requests]);
+  const assignments = useMemo(() => payload?.assignments ?? [], [payload?.assignments]);
 
   const openOffers = useMemo(() => {
     if (!payload?.viewerWorkerProfileId) return [];
@@ -1455,7 +1455,7 @@ export function VendorDayWorkspace({ initialView }: { initialView?: string }) {
                           <Badge variant={statusVariant(assignment.status)}>{readableStatus(assignment.status)}</Badge>
                         </div>
                         <p className="mt-1 text-sm text-[#5d6672]">{formatShortDate(assignment.scheduledStart)}</p>
-                        <p className="mt-1 text-sm text-[#5d6672']">{assignment.request?.account.city ?? '—'}</p>
+                        <p className="mt-1 text-sm text-[#5d6672]">{assignment.request?.account.city ?? '—'}</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Badge variant={proofState.hasCheckInPhoto ? 'success' : 'secondary'}>Setup</Badge>
                           <Badge variant={proofState.hasCheckOutPhoto ? 'success' : 'secondary'}>End</Badge>

@@ -44,13 +44,13 @@ function actionForRole(role: Role) {
 
   if (role === Role.ADMIN || role === Role.OPS_TEAM || role === Role.FINANCE) {
     return {
-      primary: { href: '/dashboard', label: 'Open Dashboard' },
-      secondary: { href: '/vendor-days', label: 'Review Vendor Days' },
+      primary: { href: '/vendor-days?view=queue', label: 'Open Queue' },
+      secondary: { href: '/dashboard', label: 'Open Dashboard' },
     };
   }
 
   return {
-    primary: { href: '/vendor-days', label: 'Open Vendor Days' },
+    primary: { href: '/vendor-days?view=queue', label: 'Open Queue' },
     secondary: { href: '/accounts', label: 'Review Accounts' },
   };
 }
@@ -60,7 +60,7 @@ function cardsForRole(role: Role): QuickCard[] {
     return [
       { href: '/vendor-days?view=offers', title: 'Offers', body: 'Review open offers and accept or decline without hunting for settings.' },
       { href: '/vendor-days?view=today', title: 'Today', body: 'See today’s assignments, store context, and what is coming next.' },
-      { href: '/vendor-days?view=checkin', title: 'Check In / Out', body: 'Start and finish the day-of flow from the same execution surface.' },
+      { href: '/vendor-days?view=today', title: 'Check In / Out', body: 'Open the focused assignment detail and run arrival, proof, and checkout from one screen.' },
       { href: '/vendor-days?view=uploads', title: 'Uploads', body: 'Add setup photos, POS proof, and recap files in one place.' },
       { href: '/vendor-days?view=pay', title: 'Pay', body: 'Check your running balance and completed event pay status.' },
       { href: '/vendor-days?view=history', title: 'History', body: 'Review completed vendor days, recaps, and prior field activity.' },
@@ -70,14 +70,14 @@ function cardsForRole(role: Role): QuickCard[] {
   if (role === Role.ADMIN || role === Role.OPS_TEAM || role === Role.FINANCE) {
     return [
       { href: '/dashboard', title: 'Dashboard', body: 'Monitor synced Nabis order activity and freshness from local Postgres data.' },
-      { href: '/vendor-days', title: 'Vendor Days', body: 'Review the queue, archive, and execution records in one place.' },
+      { href: '/vendor-days?view=queue', title: 'Vendor Days', body: 'Review the queue, archive, and execution records in one place.' },
       { href: '/accounts', title: 'Accounts', body: 'Inspect CRM-linked stores, sync coverage, and downstream account context.' },
       { href: '/reports', title: 'Reports', body: 'Review ROI, pay, utilization, and settlement summaries without leaving the app.' },
     ];
   }
 
   return [
-    { href: '/vendor-days', title: 'Approvals', body: 'Review vendor-day requests, approvals, and dispatch decisions from the queue.' },
+    { href: '/vendor-days?view=queue', title: 'Approvals', body: 'Review vendor-day requests, approvals, and dispatch decisions from the queue.' },
     { href: '/accounts', title: 'Accounts', body: 'Work through dispensary context, notes, and relationship follow-up.' },
     { href: '/route', title: 'Route', body: 'See territory routing and the next stops that matter most today.' },
     { href: '/dashboard', title: 'Dashboard', body: 'Check recent order velocity, account activity, and overall territory signal.' },
@@ -285,7 +285,7 @@ export default async function HomePage() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6a7583]">Live Status Board</p>
               <h2 className="mt-1 text-xl font-semibold text-[#18212d]">Who is out in the field right now</h2>
             </div>
-            <Link href="/vendor-days" className="text-sm font-medium text-[#1d5eea]">
+            <Link href={isAmbassador ? '/vendor-days?view=today' : '/vendor-days?view=queue'} className="text-sm font-medium text-[#1d5eea]">
               Open vendor days
             </Link>
           </div>

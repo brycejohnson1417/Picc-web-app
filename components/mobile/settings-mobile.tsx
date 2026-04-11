@@ -16,7 +16,6 @@ type SettingsLink = {
 };
 
 const settingsLinks: SettingsLink[] = [
-  { label: 'Profile', value: '/settings' },
   { label: 'Notion Connection', value: '/settings#integrations' },
   { label: 'Google API Budget', value: '/settings#google-budget' },
   { label: 'Team Access', value: '/settings#team-roles' },

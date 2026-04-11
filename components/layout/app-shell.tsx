@@ -33,6 +33,14 @@ function roleLabel(role: AppAccessState['role']) {
   return RoleDisplayNames[role];
 }
 
+function vendorDaysHref(role: AppAccessState['role']) {
+  if (role === 'BRAND_AMBASSADOR') {
+    return '/vendor-days?view=today';
+  }
+
+  return '/vendor-days?view=queue';
+}
+
 export function AppShell({
   children,
   access,
@@ -46,6 +54,7 @@ export function AppShell({
   const { signOut } = useClerk();
   const [commandMounted, setCommandMounted] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const fieldHref = vendorDaysHref(access.role);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -97,31 +106,42 @@ export function AppShell({
                 </span>
               ) : null}
             </div>
-            <details className="relative">
-              <summary className="flex list-none cursor-pointer items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#2f3640]">
-                Profile
-              </summary>
-              <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[170px] rounded-xl border border-[#d3d9e2] bg-white p-1.5 shadow-[0_18px_45px_rgba(31,35,43,0.18)]">
-                <Link href="/vendor-days" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
-                  <CalendarDays className="h-4 w-4" />
-                  Vendor Days
-                </Link>
-                <Link href="/settings" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
-                  <Settings className="h-4 w-4" />
-                  Settings
-                </Link>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]"
-                  onClick={() => {
-                    void signOut({ redirectUrl: '/sign-in' });
-                  }}
+            <div className="flex items-center gap-2">
+              {!access.isGuestViewer ? (
+                <Link
+                  href={fieldHref}
+                  className="inline-flex items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#2f3640] hover:bg-[#f6f8fb]"
                 >
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </button>
-              </div>
-            </details>
+                  <CalendarDays className="h-4 w-4" />
+                  {access.role === 'BRAND_AMBASSADOR' ? 'Field Hub' : 'Vendor Days'}
+                </Link>
+              ) : null}
+              <details className="relative">
+                <summary className="flex list-none cursor-pointer items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#2f3640]">
+                  Profile
+                </summary>
+                <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[170px] rounded-xl border border-[#d3d9e2] bg-white p-1.5 shadow-[0_18px_45px_rgba(31,35,43,0.18)]">
+                  <Link href={fieldHref} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
+                    <CalendarDays className="h-4 w-4" />
+                    {access.role === 'BRAND_AMBASSADOR' ? 'Field Hub' : 'Vendor Days'}
+                  </Link>
+                  <Link href="/settings" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
+                    <Settings className="h-4 w-4" />
+                    Settings
+                  </Link>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]"
+                    onClick={() => {
+                      void signOut({ redirectUrl: '/sign-in' });
+                    }}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign Out
+                  </button>
+                </div>
+              </details>
+            </div>
           </header>
           <main className={cn(isTerritoryRoute ? 'pb-[84px] md:pb-[92px]' : 'pb-[84px]')}>{children}</main>
         </div>
