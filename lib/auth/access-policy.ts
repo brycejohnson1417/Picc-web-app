@@ -2,6 +2,7 @@ import 'server-only';
 
 import { isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
 import { getActiveGuestInviteByEmail } from '@/lib/auth/guest-invites';
+import { getActiveOperationalInviteByEmail } from '@/lib/auth/operational-invites';
 import { hasNotionWorkspaceUser } from '@/lib/server/notion-workspace-users';
 
 const REQUIRED_EMAIL_DOMAIN = 'piccplatform.com';
@@ -14,6 +15,7 @@ export interface AccessPolicyResult {
   email?: string;
   accessType?: 'workspace' | 'guest';
   workspaceOrgId?: string;
+  invitedRole?: 'ADMIN' | 'OPS_TEAM' | 'SALES_REP' | 'FINANCE' | 'BRAND_AMBASSADOR' | 'GUEST_VIEWER';
   error?: string;
 }
 
@@ -44,6 +46,18 @@ export async function evaluateUserAccess(email: string | null | undefined): Prom
       email: normalizedEmail,
       accessType: 'guest',
       workspaceOrgId: guestInvite.orgId,
+    };
+  }
+
+  const operationalInvite = await getActiveOperationalInviteByEmail(normalizedEmail);
+  if (operationalInvite) {
+    return {
+      ok: true,
+      status: 200,
+      email: normalizedEmail,
+      accessType: 'workspace',
+      workspaceOrgId: operationalInvite.orgId,
+      invitedRole: operationalInvite.role,
     };
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
 import { ensureDateRange, getDashboardPayload } from '@/lib/dashboard/nabis-server';
+import { getUserRole } from '@/lib/rbac/guards';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,11 +27,29 @@ export async function GET(request: Request) {
       end: searchParams.get('end'),
     });
     const forceRefresh = searchParams.get('refresh') === '1';
+
+    if (forceRefresh) {
+      const role = await getUserRole(ctx.orgId, ctx.userId);
+      if (!['ADMIN', 'OPS_TEAM', 'FINANCE'].includes(role)) {
+        return NextResponse.json(
+          { error: 'Only admin, ops, or finance can trigger a Nabis refresh.' },
+          {
+            status: 403,
+            headers: responseHeaders(),
+          },
+        );
+      }
+    }
+
     const payload = await getDashboardPayload({
       orgId: ctx.orgId,
       start,
       end,
       forceRefresh,
+      actor: {
+        clerkUserId: ctx.userId,
+        email: ctx.email,
+      },
     });
     return NextResponse.json(payload, { headers: responseHeaders() });
   } catch (error) {

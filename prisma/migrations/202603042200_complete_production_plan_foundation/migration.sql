@@ -1,0 +1,5 @@
+-- Historical placeholder migration.
+-- This migration exists in the Neon _prisma_migrations table but was missing
+-- from the local checkout. The database schema already includes its effects.
+-- The file is intentionally a no-op so local migration history matches the
+-- deployed database lineage.

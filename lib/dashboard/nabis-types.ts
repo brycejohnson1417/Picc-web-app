@@ -1,5 +1,6 @@
 export interface NabisDashboardMetadata {
   fetchedAt: string;
+  dataSource: 'local-postgres';
   range: {
     startCreatedAt: string;
     endCreatedAt: string;
@@ -13,6 +14,11 @@ export interface NabisDashboardMetadata {
   pagesScanned: number;
   partialScan: boolean;
   cacheHit: boolean;
+  lastOrderSyncAt: string | null;
+  lastRetailerSyncAt: string | null;
+  lastReconciliationAt: string | null;
+  syncLagSeconds: number | null;
+  staleWarning: string | null;
 }
 
 export interface SerializedNabisOrder {

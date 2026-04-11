@@ -1,0 +1,1092 @@
+import 'server-only';
+
+import { IntegrationProvider, IntegrationSyncStatus, Prisma } from '@prisma/client';
+import { prisma } from '@/lib/db/prisma';
+import { ensureAccountIdentityMappings, resolveCanonicalAccountByIdentifiers } from '@/lib/server/account-identity';
+import { appendAuditEvent } from '@/lib/server/audit-log';
+import { upsertDispensaryCrmPageFromRetailer } from '@/lib/server/notion-crm-sync';
+import { ensureActivePolicySnapshot } from '@/lib/server/policy-snapshots';
+
+const DEFAULT_API_BASE_URL = 'https://platform-api.nabis.pro';
+const PAGE_SIZE = 500;
+const MAX_RETAILER_PAGES = 40;
+const MAX_ORDER_PAGES = 220;
+const RECENT_ORDER_SYNC_DAYS = 120;
+const RECONCILIATION_ORDER_SYNC_DAYS = 400;
+
+type SyncActor = {
+  clerkUserId?: string | null;
+  email?: string | null;
+};
+
+type NabisRetailerApiRow = {
+  id?: string | number | null;
+  retailerId?: string | number | null;
+  licensedLocationId?: string | number | null;
+  name?: string | null;
+  doingBusinessAs?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  zipcode?: string | null;
+  siteLicenseNumber?: string | null;
+  lat?: string | number | null;
+  lng?: string | number | null;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+};
+
+type NabisOrderApiRow = {
+  id?: string | number | null;
+  order?: string | number | null;
+  createdDate?: string | null;
+  createdTimestamp?: string | null;
+  status?: string | null;
+  retailer?: string | null;
+  soldBy?: string | null;
+  orderTotal?: string | number | null;
+  orderSubtotal?: string | number | null;
+  wholesaleValue?: string | number | null;
+  creditMemo?: string | number | null;
+  lineItemSubtotalAfterDiscount?: string | number | null;
+  lineItemSubtotal?: string | number | null;
+  orderAction?: string | null;
+  orderName?: string | null;
+  notes?: string | null;
+  licensedLocationId?: string | null;
+  retailerId?: string | null;
+  siteLicenseNumber?: string | null;
+  deliveryDate?: string | null;
+};
+
+type NabisPagedResponse<T> = {
+  data?: T[];
+  nextPage?: number | null;
+  totalCount?: number;
+  totalNumPages?: number;
+};
+
+type ParsedRetailer = {
+  licensedLocationId: string;
+  externalRetailerId: string | null;
+  licenseNumber: string | null;
+  name: string;
+  doingBusinessAs: string | null;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  state: string | null;
+  zipcode: string | null;
+  geoLat: number | null;
+  geoLng: number | null;
+};
+
+type ParsedOrder = {
+  externalOrderId: string;
+  orderNumber: string | null;
+  licensedLocationId: string | null;
+  nabisRetailerId: string | null;
+  licensedLocationName: string | null;
+  orderCreatedDate: Date | null;
+  deliveryDate: Date | null;
+  status: string | null;
+  isInternalTransfer: boolean;
+  salesRep: string | null;
+  orderTotal: number;
+  paymentStatus: string | null;
+  licenseNumber: string | null;
+};
+
+function requiredApiKey() {
+  const apiKey = process.env.NABIS_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('NABIS_API_KEY is required');
+  }
+  return apiKey;
+}
+
+function getApiBaseUrl() {
+  return process.env.NABIS_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function compactString(value: unknown) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+}
+
+function normalizeIdentity(value: string | null | undefined) {
+  return value?.trim().toUpperCase() || null;
+}
+
+function parseCurrency(value: unknown) {
+  const numeric = Number.parseFloat(String(value ?? '0').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function parseNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const numeric = Number.parseFloat(value.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+  return null;
+}
+
+function parseDate(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getRetryDelayMs(response: Response, attempt: number) {
+  const retryAfterHeader = response.headers.get('retry-after');
+  const retryAfterSeconds = Number.parseInt(retryAfterHeader || '', 10);
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return retryAfterSeconds * 1000;
+  }
+  return Math.min(1000 * 2 ** attempt, 10000);
+}
+
+function titleCase(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function normalizeRepName(soldBy: string | null | undefined) {
+  if (!soldBy || typeof soldBy !== 'string') {
+    return null;
+  }
+
+  const normalized = soldBy.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const candidate = normalized.includes('@') ? normalized.split('@')[0] : normalized;
+  return titleCase(candidate.replace(/[._-]+/g, ' '));
+}
+
+function getNetSales(row: NabisOrderApiRow) {
+  const orderTotal = parseCurrency(row.orderTotal);
+  const orderSubtotal = parseCurrency(row.orderSubtotal);
+  const wholesaleValue = parseCurrency(row.wholesaleValue);
+  const creditMemo = parseCurrency(row.creditMemo);
+
+  if (orderTotal > 0) {
+    return Math.max(0, orderTotal - creditMemo);
+  }
+
+  if (orderSubtotal > 0) {
+    return Math.max(0, orderSubtotal - creditMemo);
+  }
+
+  if (wholesaleValue > 0) {
+    return Math.max(0, wholesaleValue - creditMemo);
+  }
+
+  return Math.max(0, parseCurrency(row.lineItemSubtotalAfterDiscount || row.lineItemSubtotal));
+}
+
+function parseRetailerRow(row: NabisRetailerApiRow): ParsedRetailer | null {
+  const licensedLocationId = compactString(row.licensedLocationId ?? row.retailerId ?? row.id);
+  const name = compactString(row.name);
+
+  if (!licensedLocationId || !name) {
+    return null;
+  }
+
+  return {
+    licensedLocationId,
+    externalRetailerId: compactString(row.retailerId ?? row.id),
+    licenseNumber: compactString(row.siteLicenseNumber),
+    name,
+    doingBusinessAs: compactString(row.doingBusinessAs),
+    address1: compactString(row.address1),
+    address2: compactString(row.address2),
+    city: compactString(row.city),
+    state: compactString(row.state),
+    zipcode: compactString(row.zip ?? row.zipcode),
+    geoLat: parseNumber(row.lat ?? row.latitude),
+    geoLng: parseNumber(row.lng ?? row.longitude),
+  };
+}
+
+function parseOrderRow(row: NabisOrderApiRow): ParsedOrder | null {
+  const externalOrderId = compactString(row.id ?? row.order);
+  if (!externalOrderId) {
+    return null;
+  }
+
+  const createdDate = parseDate(row.createdTimestamp ?? row.createdDate ?? null);
+  const deliveryDate = parseDate(row.deliveryDate ?? null);
+
+  return {
+    externalOrderId,
+    orderNumber: compactString(row.order),
+    licensedLocationId: compactString(row.licensedLocationId ?? row.retailerId),
+    nabisRetailerId: compactString(row.retailerId ?? row.licensedLocationId),
+    licensedLocationName: compactString(row.retailer),
+    orderCreatedDate: createdDate,
+    deliveryDate,
+    status: compactString(row.status)?.toUpperCase() ?? null,
+    isInternalTransfer: isInternalTransferRow(row),
+    salesRep: normalizeRepName(row.soldBy),
+    orderTotal: getNetSales(row),
+    paymentStatus: compactString(row.status),
+    licenseNumber: compactString(row.siteLicenseNumber),
+  };
+}
+
+const INTERNAL_TRANSFER_ACTIONS = new Set(['PICKUP_FROM_NABIS', 'DROPOFF_TO_NABIS', 'INTERNAL_TRANSFER', 'TRANSFER']);
+const INTERNAL_TRANSFER_PATTERNS = [/\binternal transfer\b/i, /\btransfer to nabis\b/i, /\btransfer from nabis\b/i];
+
+function isInternalTransferRow(row: NabisOrderApiRow) {
+  const action = String(row.orderAction || '').toUpperCase().trim();
+  if (INTERNAL_TRANSFER_ACTIONS.has(action)) {
+    return true;
+  }
+
+  const searchableText = [row.orderName, row.notes, row.retailer]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join(' ');
+
+  return INTERNAL_TRANSFER_PATTERNS.some((pattern) => pattern.test(searchableText));
+}
+
+async function fetchNabisPage<T>(path: string, page: number) {
+  const apiKey = requiredApiKey();
+  const url = new URL(path, getApiBaseUrl());
+  url.searchParams.set('page', String(page));
+  url.searchParams.set('limit', String(PAGE_SIZE));
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'x-nabis-access-token': apiKey,
+        },
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+
+      clearTimeout(timeout);
+
+      if (response.status === 429 && attempt < 5) {
+        await wait(getRetryDelayMs(response, attempt));
+        continue;
+      }
+
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Nabis request failed (${response.status}) ${path}: ${body}`);
+      }
+
+      return (await response.json()) as NabisPagedResponse<T>;
+    } catch (error) {
+      clearTimeout(timeout);
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt < 5 && (((error as Error)?.name ?? '') === 'AbortError' || /fetch failed/i.test(message))) {
+        await wait(500 * (attempt + 1));
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error(`Nabis request exhausted retries for ${path}`);
+}
+
+async function loadRetailersFromNabis() {
+  const rows: ParsedRetailer[] = [];
+  let page = 0;
+
+  while (page < MAX_RETAILER_PAGES) {
+    if (page > 0) {
+      await wait(150);
+    }
+
+    const payload = await fetchNabisPage<NabisRetailerApiRow>('/v2/ny/retailer', page);
+    const pageRows = (payload.data ?? []).map(parseRetailerRow).filter((row): row is ParsedRetailer => Boolean(row));
+    rows.push(...pageRows);
+
+    if (!pageRows.length || payload.nextPage == null || payload.nextPage <= page) {
+      break;
+    }
+
+    page = payload.nextPage;
+  }
+
+  return rows;
+}
+
+function pageIsOlderThanCutoff(rows: NabisOrderApiRow[], cutoff: Date) {
+  const validDates = rows
+    .map((row) => parseDate(row.createdTimestamp ?? row.createdDate ?? null))
+    .filter((date): date is Date => Boolean(date))
+    .sort((left, right) => left.getTime() - right.getTime());
+
+  if (validDates.length === 0) {
+    return false;
+  }
+
+  return validDates[validDates.length - 1].getTime() < cutoff.getTime();
+}
+
+async function loadOrdersFromNabis(options?: { reconciliation?: boolean }) {
+  const rows: ParsedOrder[] = [];
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - (options?.reconciliation ? RECONCILIATION_ORDER_SYNC_DAYS : RECENT_ORDER_SYNC_DAYS));
+  let page = 0;
+
+  while (page < MAX_ORDER_PAGES) {
+    if (page > 0) {
+      await wait(175);
+    }
+
+    const payload = await fetchNabisPage<NabisOrderApiRow>('/v2/ny/order', page);
+    const pageRows = payload.data ?? [];
+    rows.push(...pageRows.map(parseOrderRow).filter((row): row is ParsedOrder => Boolean(row)));
+
+    if (!pageRows.length || payload.nextPage == null || payload.nextPage <= page) {
+      break;
+    }
+
+    if (pageIsOlderThanCutoff(pageRows, cutoff)) {
+      break;
+    }
+
+    page = payload.nextPage;
+  }
+
+  return rows;
+}
+
+async function ensureNabisIntegration(orgId: string) {
+  return prisma.integrationConnection.upsert({
+    where: {
+      id: `nabis-${orgId}`,
+    },
+    update: {
+      enabled: true,
+      provider: IntegrationProvider.NABIS,
+      name: 'Nabis',
+      config: {},
+    },
+    create: {
+      id: `nabis-${orgId}`,
+      orgId,
+      provider: IntegrationProvider.NABIS,
+      name: 'Nabis',
+      config: {},
+      enabled: true,
+    },
+  });
+}
+
+async function markSyncCheckpoint(input: {
+  orgId: string;
+  integrationId: string;
+  module: string;
+  status: IntegrationSyncStatus;
+  metadata?: Record<string, unknown>;
+}) {
+  const metadata = input.metadata as Prisma.InputJsonValue | undefined;
+
+  await prisma.syncCheckpoint.upsert({
+    where: {
+      integrationId_module: {
+        integrationId: input.integrationId,
+        module: input.module,
+      },
+    },
+    update: {
+      status: input.status,
+      metadata,
+      cursor: null,
+      checksum: null,
+      updatedAt: new Date(),
+    },
+    create: {
+      orgId: input.orgId,
+      integrationId: input.integrationId,
+      module: input.module,
+      status: input.status,
+      metadata,
+    },
+  });
+}
+
+async function withSyncRun<T>(
+  input: { orgId: string; integrationId: string; module: string; actor?: SyncActor },
+  fn: (runId: string) => Promise<{ result: T; recordsIn: number; recordsUpserted: number; metadata?: Record<string, unknown> }>,
+) {
+  const run = await prisma.syncRun.create({
+    data: {
+      orgId: input.orgId,
+      integrationId: input.integrationId,
+      module: input.module,
+      status: IntegrationSyncStatus.RUNNING,
+      metadata: (input.actor?.email ? { requestedBy: input.actor.email } : undefined) as Prisma.InputJsonValue | undefined,
+    },
+  });
+
+  try {
+    const outcome = await fn(run.id);
+    await prisma.syncRun.update({
+      where: { id: run.id },
+      data: {
+        status: IntegrationSyncStatus.SUCCESS,
+        finishedAt: new Date(),
+        recordsIn: outcome.recordsIn,
+        recordsUpserted: outcome.recordsUpserted,
+        metadata: outcome.metadata as Prisma.InputJsonValue | undefined,
+      },
+    });
+    await prisma.integrationConnection.update({
+      where: { id: input.integrationId },
+      data: {
+        status: IntegrationSyncStatus.SUCCESS,
+        lastSyncedAt: new Date(),
+      },
+    });
+    await markSyncCheckpoint({
+      orgId: input.orgId,
+      integrationId: input.integrationId,
+      module: input.module,
+      status: IntegrationSyncStatus.SUCCESS,
+      metadata: {
+        ...outcome.metadata,
+        lastSuccessfulSyncAt: new Date().toISOString(),
+      },
+    });
+
+    return outcome.result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await prisma.syncRun.update({
+      where: { id: run.id },
+      data: {
+        status: IntegrationSyncStatus.ERROR,
+        finishedAt: new Date(),
+        error: message,
+      },
+    });
+    await prisma.integrationConnection.update({
+      where: { id: input.integrationId },
+      data: {
+        status: IntegrationSyncStatus.ERROR,
+      },
+    });
+    await markSyncCheckpoint({
+      orgId: input.orgId,
+      integrationId: input.integrationId,
+      module: input.module,
+      status: IntegrationSyncStatus.ERROR,
+      metadata: {
+        error: message,
+      },
+    });
+    await appendAuditEvent({
+      orgId: input.orgId,
+      action: 'NABIS_SYNC_FAILED',
+      entityType: 'SyncRun',
+      entityId: run.id,
+      actorClerkUserId: input.actor?.clerkUserId ?? null,
+      actorEmail: input.actor?.email ?? null,
+      reason: message,
+      metadata: {
+        module: input.module,
+      },
+    });
+    throw error;
+  }
+}
+
+function retailerSystemFieldsChanged(
+  account: {
+    name: string;
+    licensedLocationId: string | null;
+    nabisRetailerId: string | null;
+    licenseNumber: string;
+    address1: string;
+    address2: string | null;
+    city: string;
+    state: string;
+    zipcode: string;
+    geoLat: number | null;
+    geoLng: number | null;
+    notionPageId: string | null;
+  } | null,
+  retailer: ParsedRetailer,
+) {
+  if (!account) {
+    return true;
+  }
+
+  return (
+    account.name !== retailer.name ||
+    normalizeIdentity(account.licensedLocationId) !== normalizeIdentity(retailer.licensedLocationId) ||
+    normalizeIdentity(account.nabisRetailerId) !== normalizeIdentity(retailer.externalRetailerId) ||
+    normalizeIdentity(account.licenseNumber) !== normalizeIdentity(retailer.licenseNumber ?? retailer.licensedLocationId) ||
+    account.address1 !== (retailer.address1 ?? '') ||
+    (account.address2 ?? '') !== (retailer.address2 ?? '') ||
+    account.city !== (retailer.city ?? '') ||
+    account.state !== (retailer.state ?? '') ||
+    account.zipcode !== (retailer.zipcode ?? '') ||
+    account.geoLat !== retailer.geoLat ||
+    account.geoLng !== retailer.geoLng
+  );
+}
+
+async function upsertLocalAccountFromRetailer(orgId: string, retailer: ParsedRetailer, hasOrders: boolean, actor?: SyncActor) {
+  const resolved =
+    (await resolveCanonicalAccountByIdentifiers({
+      orgId,
+      licensedLocationId: retailer.licensedLocationId,
+      nabisRetailerId: retailer.externalRetailerId,
+      licenseNumber: retailer.licenseNumber,
+      alias: retailer.name,
+    })) ??
+    (await prisma.account.findFirst({
+      where: {
+        orgId,
+        OR: [
+          { licensedLocationId: retailer.licensedLocationId },
+          ...(retailer.externalRetailerId ? [{ nabisRetailerId: retailer.externalRetailerId }] : []),
+          ...(retailer.licenseNumber ? [{ licenseNumber: retailer.licenseNumber }] : []),
+          { name: retailer.name },
+        ],
+      },
+    }));
+
+  const existingAccount = resolved
+    ? await prisma.account.findUnique({
+        where: { id: resolved.id },
+      })
+    : null;
+
+  const defaultLicenseNumber = retailer.licenseNumber ?? retailer.licensedLocationId;
+  const changed = retailerSystemFieldsChanged(existingAccount, retailer);
+
+  const account = existingAccount
+    ? await prisma.account.update({
+        where: { id: existingAccount.id },
+        data: {
+          name: retailer.name,
+          licensedLocationId: retailer.licensedLocationId,
+          nabisRetailerId: retailer.externalRetailerId,
+          licenseNumber: defaultLicenseNumber,
+          address1: retailer.address1 ?? '',
+          address2: retailer.address2 ?? null,
+          city: retailer.city ?? '',
+          state: retailer.state ?? '',
+          zipcode: retailer.zipcode ?? '',
+          geoLat: retailer.geoLat,
+          geoLng: retailer.geoLng,
+        },
+      })
+    : await prisma.account.create({
+        data: {
+          orgId,
+          name: retailer.name,
+          notionPageId: null,
+          licensedLocationId: retailer.licensedLocationId,
+          nabisRetailerId: retailer.externalRetailerId,
+          licenseNumber: defaultLicenseNumber,
+          address1: retailer.address1 ?? '',
+          address2: retailer.address2 ?? null,
+          city: retailer.city ?? '',
+          state: retailer.state ?? '',
+          zipcode: retailer.zipcode ?? '',
+          phone: null,
+          geoLat: retailer.geoLat,
+          geoLng: retailer.geoLng,
+        },
+      });
+
+  let notionPageId = account.notionPageId;
+  if (changed || !account.notionPageId) {
+    const notion = await upsertDispensaryCrmPageFromRetailer({
+      licensedLocationId: retailer.licensedLocationId,
+      nabisRetailerId: retailer.externalRetailerId,
+      licenseNumber: retailer.licenseNumber,
+      name: retailer.name,
+      doingBusinessAs: retailer.doingBusinessAs,
+      address1: retailer.address1,
+      address2: retailer.address2,
+      city: retailer.city,
+      state: retailer.state,
+      zipcode: retailer.zipcode,
+      hasOrders,
+      notionPageId: account.notionPageId,
+    });
+    notionPageId = notion.pageId;
+
+    await prisma.account.update({
+      where: { id: account.id },
+      data: {
+        notionPageId,
+      },
+    });
+
+    await appendAuditEvent({
+      orgId,
+      action: notion.created ? 'CRM_ACCOUNT_CREATED_FROM_NABIS' : 'CRM_ACCOUNT_UPDATED_FROM_NABIS',
+      entityType: 'Account',
+      entityId: account.id,
+      actorClerkUserId: actor?.clerkUserId ?? null,
+      actorEmail: actor?.email ?? null,
+      metadata: {
+        licensedLocationId: retailer.licensedLocationId,
+        notionPageId,
+      },
+    });
+  }
+
+  await ensureAccountIdentityMappings({
+    orgId,
+    accountId: account.id,
+    notionPageId,
+    licensedLocationId: retailer.licensedLocationId,
+    nabisRetailerId: retailer.externalRetailerId,
+    licenseNumber: retailer.licenseNumber ?? defaultLicenseNumber,
+    aliases: [retailer.name, retailer.doingBusinessAs].filter((value): value is string => Boolean(value)),
+    source: 'NABIS_SYNC',
+    actorClerkUserId: actor?.clerkUserId ?? null,
+    actorEmail: actor?.email ?? null,
+  });
+
+  return { ...account, notionPageId };
+}
+
+async function rebuildDailyMetrics(orgId: string, licensedLocationIds: string[]) {
+  const uniqueIds = [...new Set(licensedLocationIds.filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    return 0;
+  }
+
+  const rows = await prisma.nabisOrder.findMany({
+    where: {
+      orgId,
+      licensedLocationId: {
+        in: uniqueIds,
+      },
+    },
+    select: {
+      licensedLocationId: true,
+      accountId: true,
+      orderCreatedDate: true,
+      deliveryDate: true,
+      orderTotal: true,
+    },
+  });
+
+  const metrics = new Map<
+    string,
+    {
+      orgId: string;
+      accountId: string | null;
+      licensedLocationId: string;
+      metricDate: Date;
+      orderCount: number;
+      revenue: Prisma.Decimal;
+      firstOrderAt: Date | null;
+      lastOrderAt: Date | null;
+      lastSyncedAt: Date;
+    }
+  >();
+
+  for (const row of rows) {
+    if (!row.licensedLocationId) continue;
+    const effectiveDate = row.deliveryDate ?? row.orderCreatedDate;
+    if (!effectiveDate) continue;
+
+    const metricDate = new Date(Date.UTC(effectiveDate.getUTCFullYear(), effectiveDate.getUTCMonth(), effectiveDate.getUTCDate()));
+    const key = `${row.licensedLocationId}:${metricDate.toISOString()}`;
+    const current = metrics.get(key) ?? {
+      orgId,
+      accountId: row.accountId ?? null,
+      licensedLocationId: row.licensedLocationId,
+      metricDate,
+      orderCount: 0,
+      revenue: new Prisma.Decimal(0),
+      firstOrderAt: null,
+      lastOrderAt: null,
+      lastSyncedAt: new Date(),
+    };
+
+    current.orderCount += 1;
+    current.revenue = current.revenue.plus(row.orderTotal ?? 0);
+    current.firstOrderAt =
+      !current.firstOrderAt || effectiveDate.getTime() < current.firstOrderAt.getTime() ? effectiveDate : current.firstOrderAt;
+    current.lastOrderAt =
+      !current.lastOrderAt || effectiveDate.getTime() > current.lastOrderAt.getTime() ? effectiveDate : current.lastOrderAt;
+    if (row.accountId) {
+      current.accountId = row.accountId;
+    }
+
+    metrics.set(key, current);
+  }
+
+  await prisma.$transaction([
+    prisma.nabisStoreMetricDaily.deleteMany({
+      where: {
+        orgId,
+        licensedLocationId: {
+          in: uniqueIds,
+        },
+      },
+    }),
+    prisma.nabisStoreMetricDaily.createMany({
+      data: [...metrics.values()].map((row) => ({
+        orgId: row.orgId,
+        accountId: row.accountId,
+        licensedLocationId: row.licensedLocationId,
+        metricDate: row.metricDate,
+        orderCount: row.orderCount,
+        revenue: row.revenue,
+        firstOrderAt: row.firstOrderAt,
+        lastOrderAt: row.lastOrderAt,
+        lastSyncedAt: row.lastSyncedAt,
+      })),
+    }),
+  ]);
+
+  return metrics.size;
+}
+
+async function refreshRetailerRollups(orgId: string, licensedLocationIds: string[]) {
+  const uniqueIds = [...new Set(licensedLocationIds.filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    return;
+  }
+
+  const rows = await prisma.nabisOrder.findMany({
+    where: {
+      orgId,
+      licensedLocationId: {
+        in: uniqueIds,
+      },
+    },
+    select: {
+      licensedLocationId: true,
+      orderCreatedDate: true,
+      deliveryDate: true,
+      orderTotal: true,
+    },
+  });
+
+  const aggregates = new Map<
+    string,
+    {
+      orderCount: number;
+      lifetimeRevenue: Prisma.Decimal;
+      firstOrderAt: Date | null;
+      lastOrderAt: Date | null;
+    }
+  >();
+
+  for (const row of rows) {
+    if (!row.licensedLocationId) continue;
+    const effectiveDate = row.deliveryDate ?? row.orderCreatedDate;
+    const current = aggregates.get(row.licensedLocationId) ?? {
+      orderCount: 0,
+      lifetimeRevenue: new Prisma.Decimal(0),
+      firstOrderAt: null,
+      lastOrderAt: null,
+    };
+
+    current.orderCount += 1;
+    current.lifetimeRevenue = current.lifetimeRevenue.plus(row.orderTotal ?? 0);
+    if (effectiveDate) {
+      current.firstOrderAt =
+        !current.firstOrderAt || effectiveDate.getTime() < current.firstOrderAt.getTime() ? effectiveDate : current.firstOrderAt;
+      current.lastOrderAt =
+        !current.lastOrderAt || effectiveDate.getTime() > current.lastOrderAt.getTime() ? effectiveDate : current.lastOrderAt;
+    }
+
+    aggregates.set(row.licensedLocationId, current);
+  }
+
+  await Promise.all(
+    uniqueIds.map((licensedLocationId) => {
+      const aggregate = aggregates.get(licensedLocationId);
+      return prisma.nabisRetailer.updateMany({
+        where: {
+          orgId,
+          licensedLocationId,
+        },
+        data: {
+          orderCount: aggregate?.orderCount ?? 0,
+          lifetimeRevenue: aggregate?.lifetimeRevenue ?? new Prisma.Decimal(0),
+          firstOrderAt: aggregate?.firstOrderAt ?? null,
+          lastOrderAt: aggregate?.lastOrderAt ?? null,
+          lastSyncedAt: new Date(),
+        },
+      });
+    }),
+  );
+}
+
+export async function syncNabisRetailers(orgId: string, actor?: SyncActor) {
+  await ensureActivePolicySnapshot(orgId, actor);
+  const integration = await ensureNabisIntegration(orgId);
+  const existingOrderIds = await prisma.nabisOrder.findMany({
+    where: { orgId },
+    select: { licensedLocationId: true },
+  });
+  const orderBackedStores = new Set(existingOrderIds.map((row) => row.licensedLocationId).filter((value): value is string => Boolean(value)));
+
+  return withSyncRun({ orgId, integrationId: integration.id, module: 'retailers', actor }, async () => {
+    const retailers = await loadRetailersFromNabis();
+    let upserted = 0;
+
+    for (const retailer of retailers) {
+      const account = await upsertLocalAccountFromRetailer(orgId, retailer, orderBackedStores.has(retailer.licensedLocationId), actor);
+
+      await prisma.nabisRetailer.upsert({
+        where: {
+          orgId_licensedLocationId: {
+            orgId,
+            licensedLocationId: retailer.licensedLocationId,
+          },
+        },
+        update: {
+          accountId: account.id,
+          notionPageId: account.notionPageId,
+          externalRetailerId: retailer.externalRetailerId,
+          licenseNumber: retailer.licenseNumber,
+          name: retailer.name,
+          doingBusinessAs: retailer.doingBusinessAs,
+          address1: retailer.address1,
+          address2: retailer.address2,
+          city: retailer.city,
+          state: retailer.state,
+          zipcode: retailer.zipcode,
+          geoLat: retailer.geoLat,
+          geoLng: retailer.geoLng,
+          lastSyncedAt: new Date(),
+        },
+        create: {
+          orgId,
+          accountId: account.id,
+          notionPageId: account.notionPageId,
+          licensedLocationId: retailer.licensedLocationId,
+          externalRetailerId: retailer.externalRetailerId,
+          licenseNumber: retailer.licenseNumber,
+          name: retailer.name,
+          doingBusinessAs: retailer.doingBusinessAs,
+          address1: retailer.address1,
+          address2: retailer.address2,
+          city: retailer.city,
+          state: retailer.state,
+          zipcode: retailer.zipcode,
+          geoLat: retailer.geoLat,
+          geoLng: retailer.geoLng,
+          lastSyncedAt: new Date(),
+        },
+      });
+      upserted += 1;
+    }
+
+    return {
+      result: {
+        retailers: retailers.length,
+        upserted,
+      },
+      recordsIn: retailers.length,
+      recordsUpserted: upserted,
+      metadata: {
+        retailers: retailers.length,
+      },
+    };
+  });
+}
+
+export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?: { reconciliation?: boolean }) {
+  await ensureActivePolicySnapshot(orgId, actor);
+  const integration = await ensureNabisIntegration(orgId);
+
+  return withSyncRun({ orgId, integrationId: integration.id, module: options?.reconciliation ? 'orders_reconcile' : 'orders', actor }, async () => {
+    const orders = await loadOrdersFromNabis({ reconciliation: options?.reconciliation });
+    const accounts = await prisma.account.findMany({
+      where: { orgId },
+      select: {
+        id: true,
+        licensedLocationId: true,
+        nabisRetailerId: true,
+        licenseNumber: true,
+      },
+    });
+
+    const accountByLicensedLocationId = new Map(accounts.map((account) => [normalizeIdentity(account.licensedLocationId) ?? '', account]));
+    const accountByNabisRetailerId = new Map(accounts.map((account) => [normalizeIdentity(account.nabisRetailerId) ?? '', account]));
+    const accountByLicenseNumber = new Map(accounts.map((account) => [normalizeIdentity(account.licenseNumber) ?? '', account]));
+
+    let upserted = 0;
+    const touchedLicensedLocationIds = new Set<string>();
+
+    for (const order of orders) {
+      const matchedAccount =
+        (order.licensedLocationId ? accountByLicensedLocationId.get(normalizeIdentity(order.licensedLocationId) ?? '') : null) ||
+        (order.nabisRetailerId ? accountByNabisRetailerId.get(normalizeIdentity(order.nabisRetailerId) ?? '') : null) ||
+        (order.licenseNumber ? accountByLicenseNumber.get(normalizeIdentity(order.licenseNumber) ?? '') : null) ||
+        (await resolveCanonicalAccountByIdentifiers({
+          orgId,
+          licensedLocationId: order.licensedLocationId,
+          nabisRetailerId: order.nabisRetailerId,
+          licenseNumber: order.licenseNumber,
+          alias: order.licensedLocationName,
+        }));
+
+      const orderData = {
+        accountId: matchedAccount?.id ?? null,
+        externalOrderId: order.externalOrderId,
+        orderNumber: order.orderNumber,
+        licensedLocationId: order.licensedLocationId,
+        nabisRetailerId: order.nabisRetailerId,
+        licensedLocationName: order.licensedLocationName,
+        orderCreatedDate: order.orderCreatedDate,
+        status: order.status,
+        isInternalTransfer: order.isInternalTransfer,
+        orderTotal: new Prisma.Decimal(order.orderTotal),
+        paymentStatus: order.paymentStatus,
+        deliveryDate: order.deliveryDate,
+        salesRep: order.salesRep,
+        poSoNumber: null,
+      };
+
+      await prisma.nabisOrder.upsert({
+        where: {
+          orgId_externalOrderId: {
+            orgId,
+            externalOrderId: order.externalOrderId,
+          },
+        },
+        update: orderData,
+        create: {
+          orgId,
+          ...orderData,
+        },
+      });
+      upserted += 1;
+
+      if (order.licensedLocationId) {
+        touchedLicensedLocationIds.add(order.licensedLocationId);
+      }
+    }
+
+    const metricRows = await rebuildDailyMetrics(orgId, [...touchedLicensedLocationIds]);
+    await refreshRetailerRollups(orgId, [...touchedLicensedLocationIds]);
+
+    await prisma.nabisRetailer.updateMany({
+      where: {
+        orgId,
+        licensedLocationId: {
+          in: [...touchedLicensedLocationIds],
+        },
+      },
+      data: {
+        lastSyncedAt: new Date(),
+      },
+    });
+
+    return {
+      result: {
+        orders: orders.length,
+        upserted,
+        metricRows,
+      },
+      recordsIn: orders.length,
+      recordsUpserted: upserted,
+      metadata: {
+        orders: orders.length,
+        metricRows,
+        reconciliation: Boolean(options?.reconciliation),
+      },
+    };
+  });
+}
+
+export async function syncNabisRetailersAndOrders(orgId: string, actor?: SyncActor, options?: { reconciliation?: boolean }) {
+  const retailerResult = await syncNabisRetailers(orgId, actor);
+  const orderResult = await syncNabisOrders(orgId, actor, options);
+
+  return {
+    retailers: retailerResult,
+    orders: orderResult,
+  };
+}
+
+export async function getNabisSyncFreshness(orgId: string) {
+  const integration = await prisma.integrationConnection.findFirst({
+    where: {
+      orgId,
+      provider: IntegrationProvider.NABIS,
+    },
+    select: {
+      lastSyncedAt: true,
+      status: true,
+      checkpoints: {
+        where: {
+          module: {
+            in: ['retailers', 'orders', 'orders_reconcile'],
+          },
+        },
+        select: {
+          module: true,
+          status: true,
+          metadata: true,
+          updatedAt: true,
+        },
+      },
+    },
+  });
+
+  const byModule = new Map((integration?.checkpoints ?? []).map((checkpoint) => [checkpoint.module, checkpoint]));
+
+  const retailerCheckpoint = byModule.get('retailers');
+  const orderCheckpoint = byModule.get('orders');
+  const reconcileCheckpoint = byModule.get('orders_reconcile');
+
+  const orderSyncAt =
+    ((orderCheckpoint?.metadata as Record<string, unknown> | null)?.lastSuccessfulSyncAt as string | undefined) ??
+    orderCheckpoint?.updatedAt.toISOString() ??
+    null;
+  const retailerSyncAt =
+    ((retailerCheckpoint?.metadata as Record<string, unknown> | null)?.lastSuccessfulSyncAt as string | undefined) ??
+    retailerCheckpoint?.updatedAt.toISOString() ??
+    null;
+
+  return {
+    integrationStatus: integration?.status ?? IntegrationSyncStatus.IDLE,
+    lastSyncAt: integration?.lastSyncedAt?.toISOString() ?? null,
+    lastOrderSyncAt: orderSyncAt,
+    lastRetailerSyncAt: retailerSyncAt,
+    lastReconciliationAt:
+      ((reconcileCheckpoint?.metadata as Record<string, unknown> | null)?.lastSuccessfulSyncAt as string | undefined) ??
+      reconcileCheckpoint?.updatedAt.toISOString() ??
+      null,
+  };
+}

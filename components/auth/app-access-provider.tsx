@@ -5,6 +5,7 @@ import type { AppRole } from '@/lib/types/rbac';
 
 export type AppAccessState = {
   role: AppRole;
+  availableRoles: AppRole[];
   testModeEnabled: boolean;
   isAdmin: boolean;
   isGuestViewer: boolean;

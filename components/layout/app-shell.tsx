@@ -4,11 +4,13 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
-import { BarChart3, CalendarDays, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
+import { BarChart3, CalendarDays, House, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AppAccessProvider, type AppAccessState } from '@/components/auth/app-access-provider';
+import { RoleSwitcher } from '@/components/layout/role-switcher';
 import { cn } from '@/lib/utils';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
+import { RoleDisplayNames } from '@/lib/types/rbac';
 
 const CommandPalette = dynamic(
   () => import('@/components/crm/command-palette').then((mod) => mod.CommandPalette),
@@ -16,18 +18,19 @@ const CommandPalette = dynamic(
 );
 
 const tabs = [
+  { href: '/home', label: 'Home', icon: House },
   { href: '/territory', label: 'Map', icon: MapPinned },
   { href: '/accounts', label: 'Accounts', icon: UserRound },
   { href: '/route', label: 'Route', icon: Route },
-  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
 ];
 
 function isActive(pathname: string, href: string) {
-  if (href === '/territory') {
-    return pathname === '/territory' || pathname === '/';
-  }
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function roleLabel(role: AppAccessState['role']) {
+  return RoleDisplayNames[role];
 }
 
 export function AppShell({
@@ -78,7 +81,11 @@ export function AppShell({
         >
           <header className="flex items-center justify-between border-b border-[#c8c9ce] bg-[#f0f1f4] px-3 py-1.5 text-[#1f232b]">
             <div className="flex items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em]">piccnewyork.org</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em]">PICC Internal Platform</p>
+              <span className="rounded-full border border-[#c7cfde] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#304153]">
+                {roleLabel(access.role)}
+              </span>
+              <RoleSwitcher activeRole={access.role} availableRoles={access.availableRoles} />
               {access.testModeEnabled ? (
                 <span className="rounded-full border border-[#d9a696] bg-[#fff2ec] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#b33a1d]">
                   Test Mode
@@ -90,30 +97,31 @@ export function AppShell({
                 </span>
               ) : null}
             </div>
-            <div className="flex items-center gap-2">
-              <Link
-                href="/dashboard"
-                className={cn(
-                  'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold',
-                  pathname === '/dashboard' ? 'border-[#1d5eea] bg-[#edf4ff] text-[#1d5eea]' : 'border-[#c5c8ce] bg-white text-[#2f3640]',
-                )}
-                aria-current={pathname === '/dashboard' ? 'page' : undefined}
-              >
-                <BarChart3 className="h-3.5 w-3.5" />
-                Dashboard
-              </Link>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#2f3640]"
-                onClick={() => {
-                  void signOut({ redirectUrl: '/sign-in' });
-                }}
-                aria-label="Sign out"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                Sign Out
-              </button>
-            </div>
+            <details className="relative">
+              <summary className="flex list-none cursor-pointer items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#2f3640]">
+                Profile
+              </summary>
+              <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[170px] rounded-xl border border-[#d3d9e2] bg-white p-1.5 shadow-[0_18px_45px_rgba(31,35,43,0.18)]">
+                <Link href="/vendor-days" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
+                  <CalendarDays className="h-4 w-4" />
+                  Vendor Days
+                </Link>
+                <Link href="/settings" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </Link>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]"
+                  onClick={() => {
+                    void signOut({ redirectUrl: '/sign-in' });
+                  }}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </button>
+              </div>
+            </details>
           </header>
           <main className={cn(isTerritoryRoute ? 'pb-[84px] md:pb-[92px]' : 'pb-[84px]')}>{children}</main>
         </div>

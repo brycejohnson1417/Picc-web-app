@@ -16,3 +16,12 @@ export const WriteEnabledRoles: AppRole[] = [
   AppRoles.FINANCE,
   AppRoles.BRAND_AMBASSADOR,
 ];
+
+export const RoleDisplayNames: Record<AppRole, string> = {
+  ADMIN: 'Admin',
+  OPS_TEAM: 'Ops',
+  SALES_REP: 'Sales Rep',
+  FINANCE: 'Finance',
+  BRAND_AMBASSADOR: 'Brand Ambassador',
+  GUEST_VIEWER: 'Read Only',
+};

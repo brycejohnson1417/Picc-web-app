@@ -10,22 +10,16 @@ import { MobileHeader } from '@/components/mobile/mobile-header';
 import { Button, Input, Textarea } from '@/components/ui';
 import { GoogleUsageBudgetCard } from '@/components/territory/google-usage-budget-card';
 
-type SettingsItem = {
+type SettingsLink = {
   label: string;
-  action: 'route' | 'mailto' | 'signout';
   value: string;
 };
 
-const items: SettingsItem[] = [
-  { label: 'Profile', action: 'route', value: '/settings' },
-  { label: 'Notion Connection', action: 'route', value: '/settings#integrations' },
-  { label: 'Map Preferences', action: 'route', value: '/territory' },
-  { label: 'Google API Budget', action: 'route', value: '/settings#google-budget' },
-  { label: 'Route Defaults', action: 'route', value: '/route' },
-  { label: 'Vendor Days', action: 'route', value: '/vendor-days' },
-  { label: 'Team Access', action: 'route', value: '/settings#team-roles' },
-  { label: 'Support', action: 'mailto', value: 'support@picc.co' },
-  { label: 'Sign Out', action: 'signout', value: '' },
+const settingsLinks: SettingsLink[] = [
+  { label: 'Profile', value: '/settings' },
+  { label: 'Notion Connection', value: '/settings#integrations' },
+  { label: 'Google API Budget', value: '/settings#google-budget' },
+  { label: 'Team Access', value: '/settings#team-roles' },
 ];
 
 interface TeamActivityResponse {
@@ -75,6 +69,24 @@ interface GuestInvitesResponse {
   invites: GuestInviteRecord[];
 }
 
+interface OperationalInviteRecord {
+  id: string;
+  email: string;
+  role: 'ADMIN' | 'OPS_TEAM' | 'SALES_REP' | 'FINANCE' | 'BRAND_AMBASSADOR' | 'GUEST_VIEWER';
+  active: boolean;
+  note: string | null;
+  invitedByEmail: string | null;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  inviteLink: string;
+}
+
+interface OperationalInvitesResponse {
+  invites: OperationalInviteRecord[];
+}
+
 export function SettingsMobile() {
   const router = useRouter();
   const { signOut } = useClerk();
@@ -87,10 +99,15 @@ export function SettingsMobile() {
   const [updatingTestMode, setUpdatingTestMode] = useState(false);
   const [loadingAdminAccess, setLoadingAdminAccess] = useState(appAccess.isAdmin);
   const [guestInvites, setGuestInvites] = useState<GuestInviteRecord[]>([]);
+  const [operationalInvites, setOperationalInvites] = useState<OperationalInviteRecord[]>([]);
   const [guestInviteError, setGuestInviteError] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteNote, setInviteNote] = useState('');
+  const [operationalInviteEmail, setOperationalInviteEmail] = useState('');
+  const [operationalInviteRole, setOperationalInviteRole] = useState<OperationalInviteRecord['role']>('BRAND_AMBASSADOR');
+  const [operationalInviteNote, setOperationalInviteNote] = useState('');
   const [submittingInvite, setSubmittingInvite] = useState(false);
+  const [submittingOperationalInvite, setSubmittingOperationalInvite] = useState(false);
   const [updatingInviteId, setUpdatingInviteId] = useState<string | null>(null);
 
   const latestInvite = useMemo(() => guestInvites[0] ?? null, [guestInvites]);
@@ -147,12 +164,16 @@ export function SettingsMobile() {
       setLoadingAdminAccess(true);
       setGuestInviteError(null);
       try {
-        const [testModeResponse, guestInvitesResponse] = await Promise.all([
+        const [testModeResponse, guestInvitesResponse, operationalInvitesResponse] = await Promise.all([
           fetch('/api/settings/test-mode', {
             signal: controller.signal,
             cache: 'no-store',
           }),
           fetch('/api/settings/guest-invites', {
+            signal: controller.signal,
+            cache: 'no-store',
+          }),
+          fetch('/api/settings/operational-invites', {
             signal: controller.signal,
             cache: 'no-store',
           }),
@@ -168,12 +189,19 @@ export function SettingsMobile() {
           throw new Error(payload?.error ?? 'Unable to load guest invites');
         }
 
+        if (!operationalInvitesResponse.ok) {
+          const payload = await operationalInvitesResponse.json().catch(() => ({}));
+          throw new Error(payload?.error ?? 'Unable to load operational invites');
+        }
+
         const testModePayload = (await testModeResponse.json()) as TestModeResponse;
         const guestInvitesPayload = (await guestInvitesResponse.json()) as GuestInvitesResponse;
+        const operationalInvitesPayload = (await operationalInvitesResponse.json()) as OperationalInvitesResponse;
 
         if (!controller.signal.aborted) {
           setTestModeEnabled(Boolean(testModePayload.testModeEnabled));
           setGuestInvites(guestInvitesPayload.invites ?? []);
+          setOperationalInvites(operationalInvitesPayload.invites ?? []);
         }
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -292,6 +320,91 @@ export function SettingsMobile() {
     }
   }
 
+  async function handleCreateOperationalInvite() {
+    if (!appAccess.isAdmin || submittingOperationalInvite) return;
+
+    setSubmittingOperationalInvite(true);
+    setGuestInviteError(null);
+    try {
+      const response = await fetch('/api/settings/operational-invites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: operationalInviteEmail,
+          role: operationalInviteRole,
+          note: operationalInviteNote || null,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'Unable to create operational invite');
+      }
+
+      const invite = payload?.invite as OperationalInviteRecord;
+      setOperationalInvites((current) => [invite, ...current.filter((entry) => entry.id !== invite.id)]);
+      setOperationalInviteEmail('');
+      setOperationalInviteRole('BRAND_AMBASSADOR');
+      setOperationalInviteNote('');
+      try {
+        await navigator.clipboard.writeText(invite.inviteLink);
+        toast.success('Operational invite created and link copied.');
+      } catch {
+        toast.success('Operational invite created.');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to create operational invite');
+    } finally {
+      setSubmittingOperationalInvite(false);
+    }
+  }
+
+  async function handleRevokeOperationalInvite(inviteId: string) {
+    if (!appAccess.isAdmin || updatingInviteId) return;
+
+    setUpdatingInviteId(inviteId);
+    try {
+      const response = await fetch('/api/settings/operational-invites', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inviteId,
+          action: 'revoke',
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'Unable to revoke operational invite');
+      }
+
+      setOperationalInvites((current) =>
+        current.map((invite) =>
+          invite.id === inviteId
+            ? {
+                ...invite,
+                active: false,
+                revokedAt: new Date().toISOString(),
+              }
+            : invite,
+        ),
+      );
+      toast.success('Operational invite revoked.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to revoke operational invite');
+    } finally {
+      setUpdatingInviteId(null);
+    }
+  }
+
+  function handleEmailOperationalInvite(invite: OperationalInviteRecord) {
+    const subject = encodeURIComponent('PICC internal platform access');
+    const body = encodeURIComponent(
+      `You have been invited to access the PICC internal platform as ${invite.role.replaceAll('_', ' ')}.\n\nSign in here:\n${invite.inviteLink}${invite.note ? `\n\nNote:\n${invite.note}` : ''}`,
+    );
+    window.location.href = `mailto:${invite.email}?subject=${subject}&body=${body}`;
+  }
+
   async function handleCopyInviteLink(inviteLink: string) {
     try {
       await navigator.clipboard.writeText(inviteLink);
@@ -307,24 +420,6 @@ export function SettingsMobile() {
       `You have been invited to view piccnewyork.org in read-only mode.\n\nSign in here:\n${invite.inviteLink}${invite.note ? `\n\nNote:\n${invite.note}` : ''}`,
     );
     window.location.href = `mailto:${invite.email}?subject=${subject}&body=${body}`;
-  }
-
-  async function handleItemClick(item: SettingsItem) {
-    if (item.action === 'route') {
-      router.push(item.value);
-      return;
-    }
-
-    if (item.action === 'mailto') {
-      window.open(`mailto:${item.value}?subject=PICC%20Support`, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    try {
-      await signOut({ redirectUrl: '/sign-in' });
-    } catch {
-      toast.error('Sign out failed. Please try again.');
-    }
   }
 
   return (
@@ -462,6 +557,104 @@ export function SettingsMobile() {
               ))}
             </div>
           </div>
+
+          <div className="mt-4 rounded-2xl border border-[#d5d7de] bg-[#f7f7fa] px-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-[#eef8f1] p-2 text-[#20734a]">
+                <UserPlus className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[15px] font-semibold text-[#1d1f23]">Operational Access</p>
+                <p className="mt-1 text-[14px] text-[#666b75]">Invite outsourced BAs or other non-company users into the internal app with a real operational role.</p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-[#7a7f89]">Operational Email</label>
+                <Input
+                  type="email"
+                  value={operationalInviteEmail}
+                  onChange={(event) => setOperationalInviteEmail(event.target.value)}
+                  placeholder="ba@example.com"
+                  className="h-11 border-[#c6c8d0] text-[15px] text-[#1d1f23]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-[#7a7f89]">Role</label>
+                <select
+                  value={operationalInviteRole}
+                  onChange={(event) => setOperationalInviteRole(event.target.value as OperationalInviteRecord['role'])}
+                  className="h-11 w-full rounded-lg border border-[#c6c8d0] bg-white px-3 text-[15px] text-[#1d1f23]"
+                >
+                  <option value="BRAND_AMBASSADOR">Brand Ambassador</option>
+                  <option value="SALES_REP">Sales Rep</option>
+                  <option value="OPS_TEAM">Ops Team</option>
+                  <option value="FINANCE">Finance</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[13px] font-semibold uppercase tracking-wide text-[#7a7f89]">Invite Note</label>
+                <Textarea
+                  value={operationalInviteNote}
+                  onChange={(event) => setOperationalInviteNote(event.target.value)}
+                  placeholder="Optional onboarding note..."
+                  className="min-h-[96px] border-[#c6c8d0] bg-white text-[15px] text-[#1d1f23] placeholder:text-[#7c8089]"
+                />
+              </div>
+              <Button
+                type="button"
+                className="h-11 w-full bg-[#1b5e3d] text-white hover:bg-[#184f35]"
+                onClick={handleCreateOperationalInvite}
+                disabled={submittingOperationalInvite || !operationalInviteEmail.trim()}
+              >
+                {submittingOperationalInvite ? 'Creating Invite...' : 'Create Operational Invite'}
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <p className="text-[13px] font-semibold uppercase tracking-wide text-[#7a7f89]">Operational Invites</p>
+              {!loadingAdminAccess && operationalInvites.length === 0 ? <p className="text-[14px] text-[#666b75]">No operational invites yet.</p> : null}
+              {operationalInvites.map((invite) => (
+                <div key={invite.id} className="rounded-2xl border border-[#d6d8df] bg-white px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[15px] font-semibold text-[#1d1f23]">{invite.email}</p>
+                      <p className="mt-1 text-[13px] text-[#666b75]">{invite.role.replaceAll('_', ' ')}</p>
+                      <p className="mt-1 text-[13px] text-[#666b75]">
+                        {invite.acceptedAt
+                          ? `Accepted ${new Date(invite.acceptedAt).toLocaleString()}`
+                          : invite.revokedAt
+                            ? `Revoked ${new Date(invite.revokedAt).toLocaleString()}`
+                            : `Pending since ${new Date(invite.createdAt).toLocaleString()}`}
+                      </p>
+                      {invite.note ? <p className="mt-2 text-[13px] text-[#4f5661]">{invite.note}</p> : null}
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${invite.revokedAt ? 'bg-[#f4f5f7] text-[#6d7380]' : invite.acceptedAt ? 'bg-[#e8f7ee] text-[#25784e]' : 'bg-[#eef8f1] text-[#20734a]'}`}>
+                      {invite.revokedAt ? 'revoked' : invite.acceptedAt ? 'accepted' : 'pending'}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <Button type="button" variant="secondary" className="h-10 text-[13px]" onClick={() => handleCopyInviteLink(invite.inviteLink)}>
+                      Copy
+                    </Button>
+                    <Button type="button" variant="secondary" className="h-10 text-[13px]" onClick={() => handleEmailOperationalInvite(invite)}>
+                      Email
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 text-[13px]"
+                      onClick={() => handleRevokeOperationalInvite(invite.id)}
+                      disabled={Boolean(invite.revokedAt) || updatingInviteId === invite.id}
+                    >
+                      {updatingInviteId === invite.id ? '...' : 'Revoke'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       ) : null}
       {canViewTeamActivity ? (
@@ -519,13 +712,16 @@ export function SettingsMobile() {
         ) : null}
         </div>
       ) : null}
-      <div className="border-t border-[#c7c8ce]">
-        {items.map((item) => (
+      <div className="border-t border-[#c7c8ce] bg-white">
+        <div className="border-b border-[#d6d8df] px-4 py-3">
+          <p className="text-[13px] font-semibold uppercase tracking-wide text-[#7a7f89]">Settings</p>
+        </div>
+        {settingsLinks.map((item) => (
           <button
             key={item.label}
             type="button"
             onClick={() => {
-              void handleItemClick(item);
+              router.push(item.value);
             }}
             className="grid w-full grid-cols-[1fr_24px] items-center border-b border-[#c9cad0] px-5 py-4 text-left"
           >
@@ -533,6 +729,31 @@ export function SettingsMobile() {
             <ChevronRight className="h-7 w-7 text-[#bcc0c7]" />
           </button>
         ))}
+        <div className="border-b border-[#d6d8df] px-4 py-3">
+          <p className="text-[13px] font-semibold uppercase tracking-wide text-[#7a7f89]">Support</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            window.open('mailto:support@picc.co?subject=PICC%20Support', '_blank', 'noopener,noreferrer');
+          }}
+          className="grid w-full grid-cols-[1fr_24px] items-center border-b border-[#c9cad0] px-5 py-4 text-left"
+        >
+          <span className="text-[23px] text-[#2a2c31]">Support</span>
+          <ChevronRight className="h-7 w-7 text-[#bcc0c7]" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            signOut({ redirectUrl: '/sign-in' }).catch(() => {
+              toast.error('Sign out failed. Please try again.');
+            });
+          }}
+          className="grid w-full grid-cols-[1fr_24px] items-center px-5 py-4 text-left"
+        >
+          <span className="text-[23px] text-[#2a2c31]">Sign Out</span>
+          <ChevronRight className="h-7 w-7 text-[#bcc0c7]" />
+        </button>
       </div>
     </div>
   );

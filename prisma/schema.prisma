@@ -86,6 +86,7 @@ enum IntegrationProvider {
   GOOGLE_SHEETS
   GMAIL
   GHL
+  NABIS
 }
 
 enum IntegrationSyncStatus {
@@ -95,71 +96,236 @@ enum IntegrationSyncStatus {
   ERROR
 }
 
+enum AccountIdentityType {
+  ACCOUNT_ID
+  NOTION_PAGE_ID
+  LICENSED_LOCATION_ID
+  NABIS_RETAILER_ID
+  LICENSE_NUMBER
+  ALIAS
+}
+
+enum VendorDayRequestSource {
+  STORE_REQUESTED
+  REP_REQUESTED
+  BA_REQUESTED
+  OPS_REQUESTED
+  ADMIN_REQUESTED
+  AUTO_GENERATED
+}
+
+enum VendorDayRequestStatus {
+  PROPOSED
+  REQUESTED
+  AWAITING_REP_APPROVAL
+  READY_FOR_DISPATCH
+  OFFER_PENDING
+  ASSIGNED
+  PASSED_OFF
+  NO_SHOW
+  EXCEPTION
+  DISPUTED
+  COMPLETED
+  CANCELLED
+}
+
+enum VendorDayOfferStatus {
+  OPEN
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum VendorDayAssignmentStatus {
+  ASSIGNED
+  PASSED_OFF
+  NO_SHOW
+  CHECKED_IN
+  CHECKED_OUT
+  COMPLETED
+  EXCEPTION
+  DISPUTED
+  CANCELLED
+}
+
+enum VendorDayArtifactType {
+  CHECK_IN_PHOTO
+  CHECK_OUT_PHOTO
+  POS_REPORT
+  SCREENSHOT
+  EXTRA
+}
+
+enum WorkerSkillTier {
+  TRAINEE
+  STANDARD
+  ALL_STAR
+}
+
+enum CalendarConnectionProvider {
+  GOOGLE
+  APPLE
+}
+
+enum CalendarConnectionStatus {
+  ACTIVE
+  STALE
+  ERROR
+  REVOKED
+  MANUAL_ONLY
+}
+
+enum PayrollBatchStatus {
+  OPEN
+  CLOSED
+  EXPORTED
+  PAID
+}
+
+enum PayrollLineStatus {
+  PENDING
+  DISPUTED
+  APPROVED
+  PAID
+  VOID
+}
+
+enum NotificationCategory {
+  OFFERS
+  ASSIGNMENTS
+  APPROVALS
+  PAYROLL
+  SYSTEM_ALERTS
+  EVENT_RECAPS
+  EXCEPTIONS
+}
+
 model OrganizationWorkspace {
-  id              String                  @id @default(cuid())
-  clerkOrgId      String                  @unique
-  name            String
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  memberships     Membership[]
-  accounts        Account[]
-  contacts        Contact[]
-  tags            Tag[]
-  pipelines       Pipeline[]
-  opportunities   Opportunity[]
-  tasks           Task[]
-  appointments    Appointment[]
-  conversations   Conversation[]
-  messages        Message[]
-  activityLogs    ActivityLog[]
-  savedViews      SavedView[]
-  notifications   Notification[]
-  templates       Template[]
-  customFields    CustomFieldDefinition[]
-  customFieldOptions CustomFieldOption[]
-  accountCustomFieldValues AccountCustomFieldValue[]
-  contactCustomFieldValues ContactCustomFieldValue[]
-  editSuggestions EditSuggestion[]
-  stages          Stage[]
-  referrals       ReferralRecord[]
-  pennyBundles    PennyBundleCreditSubmission[]
-  overdueSnaps    OverdueSnapshot[]
-  vendorDayEvents VendorDayEvent[]
-  sampleRequests  SampleBoxRequest[]
-  nabisOrders     NabisOrder[]
-  nabisLines      NabisOrderLine[]
-  integrations    IntegrationConnection[]
-  externalMaps    ExternalRecordMap[]
-  checkpoints     SyncCheckpoint[]
-  syncRuns        SyncRun[]
-  importJobs      ImportJob[]
-  exportJobs      ExportJob[]
-  salesRoutes     SalesRoute[]
-  territories     Territory[]
-  territoryMarkers TerritoryMarker[]
-  checkIns        CheckIn[]
-  territoryCheckInMirrors TerritoryCheckInMirror[]
-  territorySyncJobs TerritoryStoreSyncJob[]
-  territoryStores TerritoryStoreReadModel[]
-  territoryFilterPresets TerritoryFilterPreset[]
-  appSessionAudits AppSessionAudit[]
-  guestAccessInvites GuestAccessInvite[]
+  id                        String                        @id @default(cuid())
+  clerkOrgId                String                        @unique
+  name                      String
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
+  memberships               Membership[]
+  accounts                  Account[]
+  contacts                  Contact[]
+  tags                      Tag[]
+  pipelines                 Pipeline[]
+  opportunities             Opportunity[]
+  tasks                     Task[]
+  appointments              Appointment[]
+  conversations             Conversation[]
+  messages                  Message[]
+  activityLogs              ActivityLog[]
+  savedViews                SavedView[]
+  notifications             Notification[]
+  templates                 Template[]
+  customFields              CustomFieldDefinition[]
+  customFieldOptions        CustomFieldOption[]
+  accountCustomFieldValues  AccountCustomFieldValue[]
+  contactCustomFieldValues  ContactCustomFieldValue[]
+  editSuggestions           EditSuggestion[]
+  stages                    Stage[]
+  referrals                 ReferralRecord[]
+  pennyBundles              PennyBundleCreditSubmission[]
+  overdueSnaps              OverdueSnapshot[]
+  vendorDayEvents           VendorDayEvent[]
+  sampleRequests            SampleBoxRequest[]
+  nabisOrders               NabisOrder[]
+  nabisLines                NabisOrderLine[]
+  nabisRetailers            NabisRetailer[]
+  nabisMetrics              NabisStoreMetricDaily[]
+  identityMappings          AccountIdentityMapping[]
+  workerProfiles            WorkerProfile[]
+  employers                 Employer[]
+  workerAvailabilityRules   WorkerAvailabilityRule[]
+  workerAvailabilityBlocks  WorkerAvailabilityBlock[]
+  workerCalendarConnections WorkerCalendarConnection[]
+  workerGearItems           WorkerGearItem[]
+  workerCertifications      WorkerCertification[]
+  workerBrandTrainings      WorkerBrandTraining[]
+  workerSkillTags           WorkerSkillTag[]
+  workerReviews             WorkerReview[]
+  roleGrants                MembershipRoleGrant[]
+  operationalInvites        OperationalAccessInvite[]
+  vendorDayRequests         VendorDayRequest[]
+  vendorDayOffers           VendorDayOffer[]
+  vendorDayAssignments      VendorDayAssignment[]
+  vendorDayExecutions       VendorDayExecution[]
+  vendorDayArtifacts        VendorDayArtifact[]
+  payrollBatches            PayrollBatch[]
+  payrollLineItems          PayrollLineItem[]
+  vendorDayRoiSnapshots     VendorDayRoiSnapshot[]
+  notificationPreferences   NotificationPreference[]
+  integrations              IntegrationConnection[]
+  externalMaps              ExternalRecordMap[]
+  checkpoints               SyncCheckpoint[]
+  syncRuns                  SyncRun[]
+  importJobs                ImportJob[]
+  exportJobs                ExportJob[]
+  salesRoutes               SalesRoute[]
+  territories               Territory[]
+  territoryMarkers          TerritoryMarker[]
+  checkIns                  CheckIn[]
+  territoryCheckInMirrors   TerritoryCheckInMirror[]
+  territorySyncJobs         TerritoryStoreSyncJob[]
+  territoryStores           TerritoryStoreReadModel[]
+  territoryFilterPresets    TerritoryFilterPreset[]
+  appSessionAudits          AppSessionAudit[]
+  guestAccessInvites        GuestAccessInvite[]
+  auditEvents               AuditEvent[]
+  policySnapshots           PolicySnapshot[]
 }
 
 model Membership {
-  id            String                @id @default(cuid())
-  orgId         String
-  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  clerkUserId   String
-  role          Role
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clerkUserId     String
+  role            Role
   testModeEnabled Boolean               @default(false)
-  source        String                @default("NOTION_SYNC")
-  active        Boolean               @default(true)
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  source          String                @default("NOTION_SYNC")
+  active          Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   @@unique([orgId, clerkUserId])
   @@index([orgId, role])
+}
+
+model MembershipRoleGrant {
+  id          String                @id @default(cuid())
+  orgId       String
+  org         OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clerkUserId String
+  role        Role
+  active      Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@unique([orgId, clerkUserId, role])
+  @@index([orgId, clerkUserId, active])
+}
+
+model OperationalAccessInvite {
+  id                    String                @id @default(cuid())
+  orgId                 String
+  org                   OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  email                 String
+  role                  Role                  @default(BRAND_AMBASSADOR)
+  active                Boolean               @default(true)
+  invitedByClerkUserId  String
+  invitedByEmail        String?
+  note                  String?
+  acceptedAt            DateTime?
+  acceptedByClerkUserId String?
+  revokedAt             DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([orgId, email])
+  @@index([email, active])
 }
 
 model GuestAccessInvite {
@@ -183,76 +349,109 @@ model GuestAccessInvite {
 }
 
 model Account {
-  id                    String                           @id @default(cuid())
-  orgId                 String
-  org                   OrganizationWorkspace            @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  name                  String
-  notionPageId          String?
-  licenseNumber         String
-  address1              String
-  address2              String?
-  city                  String
-  state                 String
-  zipcode               String
-  phone                 String?
-  geoLat                Float?
-  geoLng                Float?
-  geoPoint              Unsupported("geometry(Point,4326)")?
-  status                RecordStatus                     @default(ACTIVE)
-  lastContactedAt       DateTime?
-  createdAt             DateTime                         @default(now())
-  updatedAt             DateTime                         @updatedAt
-  contacts              Contact[]
-  accountTags           AccountTag[]
-  accountFieldValues    AccountCustomFieldValue[]
-  opportunities         Opportunity[]
-  tasks                 Task[]
-  appointments          Appointment[]
-  conversations         Conversation[]
-  messages              Message[]
-  activityLogs          ActivityLog[]
-  referrals             ReferralRecord[]
-  pennyBundles          PennyBundleCreditSubmission[]
-  overdueSnapshots      OverdueSnapshot[]
-  vendorDayEvents       VendorDayEvent[]
-  sampleBoxRequests     SampleBoxRequest[]
-  nabisOrders           NabisOrder[]
-  editSuggestions       EditSuggestion[]
+  id                         String                               @id @default(cuid())
+  orgId                      String
+  org                        OrganizationWorkspace                @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name                       String
+  notionPageId               String?
+  licensedLocationId         String?
+  nabisRetailerId            String?
+  licenseNumber              String
+  address1                   String
+  address2                   String?
+  city                       String
+  state                      String
+  zipcode                    String
+  phone                      String?
+  geoLat                     Float?
+  geoLng                     Float?
+  geoPoint                   Unsupported("geometry(Point,4326)")?
+  status                     RecordStatus                         @default(ACTIVE)
+  vendorDaySuppressed        Boolean                              @default(false)
+  vendorDaySuppressionReason String?
+  lastContactedAt            DateTime?
+  createdAt                  DateTime                             @default(now())
+  updatedAt                  DateTime                             @updatedAt
+  contacts                   Contact[]
+  accountTags                AccountTag[]
+  accountFieldValues         AccountCustomFieldValue[]
+  opportunities              Opportunity[]
+  tasks                      Task[]
+  appointments               Appointment[]
+  conversations              Conversation[]
+  messages                   Message[]
+  activityLogs               ActivityLog[]
+  referrals                  ReferralRecord[]
+  pennyBundles               PennyBundleCreditSubmission[]
+  overdueSnapshots           OverdueSnapshot[]
+  vendorDayEvents            VendorDayEvent[]
+  vendorDayRequests          VendorDayRequest[]
+  workerReviews              WorkerReview[]
+  roiSnapshots               VendorDayRoiSnapshot[]
+  sampleBoxRequests          SampleBoxRequest[]
+  nabisOrders                NabisOrder[]
+  nabisRetailers             NabisRetailer[]
+  dailyNabisMetrics          NabisStoreMetricDaily[]
+  identityMappings           AccountIdentityMapping[]
+  editSuggestions            EditSuggestion[]
 
   @@unique([orgId, licenseNumber])
   @@unique([orgId, notionPageId])
+  @@unique([orgId, licensedLocationId])
+  @@unique([orgId, nabisRetailerId])
   @@index([orgId, name])
   @@index([orgId, status])
   @@index([orgId, notionPageId])
+  @@index([orgId, licensedLocationId])
+  @@index([orgId, nabisRetailerId])
+}
+
+model Employer {
+  id                   String                 @id @default(cuid())
+  orgId                String
+  org                  OrganizationWorkspace  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name                 String
+  isServiceCompany     Boolean                @default(false)
+  flatEventRateDollars Decimal?               @db.Decimal(10, 2)
+  mileageRateDollars   Decimal?               @db.Decimal(10, 2)
+  notes                String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  workers              WorkerProfile[]
+  payrollLineItems     PayrollLineItem[]
+  roiSnapshots         VendorDayRoiSnapshot[]
+
+  @@unique([orgId, name])
+  @@index([orgId, isServiceCompany])
 }
 
 model Contact {
-  id                  String                    @id @default(cuid())
-  orgId               String
-  org                 OrganizationWorkspace     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  accountId           String
-  account             Account                   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  firstName           String
-  lastName            String
-  roleTitle           String
-  email               String?
-  phone               String?
-  geoLat              Float?
-  geoLng              Float?
-  geoPoint            Unsupported("geometry(Point,4326)")?
-  status              RecordStatus              @default(ACTIVE)
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-  contactTags         ContactTag[]
-  contactFieldValues  ContactCustomFieldValue[]
-  opportunities       Opportunity[]
-  tasks               Task[]
-  appointments        Appointment[]
-  conversations       Conversation[]
-  messages            Message[]
-  activityLogs        ActivityLog[]
-  editSuggestions     EditSuggestion[]
-  sampleBoxRequests   SampleBoxRequest[]
+  id                 String                               @id @default(cuid())
+  orgId              String
+  org                OrganizationWorkspace                @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId          String
+  account            Account                              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  firstName          String
+  lastName           String
+  roleTitle          String
+  email              String?
+  phone              String?
+  geoLat             Float?
+  geoLng             Float?
+  geoPoint           Unsupported("geometry(Point,4326)")?
+  status             RecordStatus                         @default(ACTIVE)
+  createdAt          DateTime                             @default(now())
+  updatedAt          DateTime                             @updatedAt
+  contactTags        ContactTag[]
+  contactFieldValues ContactCustomFieldValue[]
+  opportunities      Opportunity[]
+  tasks              Task[]
+  appointments       Appointment[]
+  conversations      Conversation[]
+  messages           Message[]
+  activityLogs       ActivityLog[]
+  editSuggestions    EditSuggestion[]
+  sampleBoxRequests  SampleBoxRequest[]
 
   @@index([orgId, accountId])
   @@index([orgId, status])
@@ -291,15 +490,15 @@ model ContactTag {
 }
 
 model CustomFieldDefinition {
-  id          String                @id @default(cuid())
+  id          String                    @id @default(cuid())
   orgId       String
-  org         OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org         OrganizationWorkspace     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   entityType  String
   key         String
   label       String
   dataType    String
-  required    Boolean               @default(false)
-  createdAt   DateTime              @default(now())
+  required    Boolean                   @default(false)
+  createdAt   DateTime                  @default(now())
   options     CustomFieldOption[]
   accountVals AccountCustomFieldValue[]
   contactVals ContactCustomFieldValue[]
@@ -308,71 +507,71 @@ model CustomFieldDefinition {
 }
 
 model CustomFieldOption {
-  id              String                @id @default(cuid())
-  orgId           String
-  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  definitionId    String
-  definition      CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
-  value           String
-  label           String
-  sortOrder       Int                   @default(0)
+  id           String                @id @default(cuid())
+  orgId        String
+  org          OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  definitionId String
+  definition   CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  value        String
+  label        String
+  sortOrder    Int                   @default(0)
 
   @@index([definitionId, sortOrder])
 }
 
 model AccountCustomFieldValue {
-  id            String                @id @default(cuid())
-  orgId         String
-  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  accountId     String
-  account       Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  definitionId  String
-  definition    CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
-  value         Json
-  updatedAt     DateTime              @updatedAt
+  id           String                @id @default(cuid())
+  orgId        String
+  org          OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId    String
+  account      Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  definitionId String
+  definition   CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  value        Json
+  updatedAt    DateTime              @updatedAt
 
   @@unique([accountId, definitionId])
 }
 
 model ContactCustomFieldValue {
-  id            String                @id @default(cuid())
-  orgId         String
-  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  contactId     String
-  contact       Contact               @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  definitionId  String
-  definition    CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
-  value         Json
-  updatedAt     DateTime              @updatedAt
+  id           String                @id @default(cuid())
+  orgId        String
+  org          OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contactId    String
+  contact      Contact               @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  definitionId String
+  definition   CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  value        Json
+  updatedAt    DateTime              @updatedAt
 
   @@unique([contactId, definitionId])
 }
 
 model Pipeline {
-  id             String                @id @default(cuid())
-  orgId          String
-  org            OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  name           String
-  description    String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  stages         Stage[]
-  opportunities  Opportunity[]
+  id            String                @id @default(cuid())
+  orgId         String
+  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  stages        Stage[]
+  opportunities Opportunity[]
 
   @@unique([orgId, name])
 }
 
 model Stage {
-  id             String                @id @default(cuid())
-  orgId          String
-  org            OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  pipelineId     String
-  pipeline       Pipeline              @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  name           String
-  color          String                @default("#3b82f6")
-  probability    Int                   @default(10)
-  sortOrder      Int                   @default(0)
-  opportunities  Opportunity[]
+  id            String                @id @default(cuid())
+  orgId         String
+  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  pipelineId    String
+  pipeline      Pipeline              @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name          String
+  color         String                @default("#3b82f6")
+  probability   Int                   @default(10)
+  sortOrder     Int                   @default(0)
+  opportunities Opportunity[]
 
   @@unique([pipelineId, name])
   @@index([pipelineId, sortOrder])
@@ -435,6 +634,30 @@ model Task {
 }
 
 model Appointment {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId       String
+  account         Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contactId       String?
+  contact         Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  opportunityId   String?
+  opportunity     Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  title           String
+  description     String?
+  startsAt        DateTime
+  endsAt          DateTime
+  reminderMinutes Int?
+  createdByUserId String
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  activityLogs    ActivityLog[]
+
+  @@index([orgId, accountId])
+  @@index([orgId, startsAt])
+}
+
+model Conversation {
   id               String                @id @default(cuid())
   orgId            String
   org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -442,39 +665,15 @@ model Appointment {
   account          Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
   contactId        String?
   contact          Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  opportunityId    String?
-  opportunity      Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
-  title            String
-  description      String?
-  startsAt         DateTime
-  endsAt           DateTime
-  reminderMinutes  Int?
-  createdByUserId  String
+  channel          Channel
+  subject          String?
+  assignedToUserId String?
+  unreadCount      Int                   @default(0)
+  lastMessageAt    DateTime?
+  isMock           Boolean               @default(false)
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
-  activityLogs     ActivityLog[]
-
-  @@index([orgId, accountId])
-  @@index([orgId, startsAt])
-}
-
-model Conversation {
-  id                String                @id @default(cuid())
-  orgId             String
-  org               OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  accountId         String
-  account           Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  contactId         String?
-  contact           Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  channel           Channel
-  subject           String?
-  assignedToUserId  String?
-  unreadCount       Int                   @default(0)
-  lastMessageAt     DateTime?
-  isMock            Boolean               @default(false)
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  messages          Message[]
+  messages         Message[]
 
   @@index([orgId, accountId])
   @@index([orgId, channel])
@@ -506,28 +705,28 @@ model Message {
 }
 
 model ActivityLog {
-  id               String           @id @default(cuid())
+  id               String                @id @default(cuid())
   orgId            String
   org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
   accountId        String
-  account          Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account          Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
   contactId        String?
-  contact          Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contact          Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
   opportunityId    String?
-  opportunity      Opportunity?     @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  opportunity      Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
   taskId           String?
-  task             Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  task             Task?                 @relation(fields: [taskId], references: [id], onDelete: SetNull)
   appointmentId    String?
-  appointment      Appointment?     @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  appointment      Appointment?          @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   messageId        String?
-  message          Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  message          Message?              @relation(fields: [messageId], references: [id], onDelete: SetNull)
   actorClerkUserId String
   type             ActivityType
   title            String
   description      String?
   channel          Channel?
   metadata         Json?
-  createdAt        DateTime         @default(now())
+  createdAt        DateTime              @default(now())
 
   @@index([orgId, accountId, createdAt])
   @@index([orgId, type, createdAt])
@@ -548,67 +747,67 @@ model SavedView {
 }
 
 model Notification {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  userClerkId      String
-  title            String
-  body             String?
-  readAt           DateTime?
-  metadata         Json?
-  createdAt        DateTime              @default(now())
+  id          String                @id @default(cuid())
+  orgId       String
+  org         OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userClerkId String
+  title       String
+  body        String?
+  readAt      DateTime?
+  metadata    Json?
+  createdAt   DateTime              @default(now())
 
   @@index([orgId, userClerkId, createdAt])
 }
 
 model Template {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  channel          Channel
-  name             String
-  content          String
-  createdByUserId  String
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  channel         Channel
+  name            String
+  content         String
+  createdByUserId String
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   @@index([orgId, channel])
 }
 
 model EditSuggestion {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  accountId        String
-  account          Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  contactId        String?
-  contact          Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  suggestedBy      String
-  approvedBy       String?
-  status           WorkflowStatus        @default(SUBMITTED)
-  patch            Json
-  reason           String?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  id          String                @id @default(cuid())
+  orgId       String
+  org         OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contactId   String?
+  contact     Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  suggestedBy String
+  approvedBy  String?
+  status      WorkflowStatus        @default(SUBMITTED)
+  patch       Json
+  reason      String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
 
   @@index([orgId, status, createdAt])
 }
 
 model ReferralRecord {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  accountId        String
-  account          Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  opportunityId    String?
-  opportunity      Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
-  source           String
-  referredBy       String
-  orderNumber      String?
-  orderTotal       Decimal?              @db.Decimal(12, 2)
-  status           WorkflowStatus        @default(SUBMITTED)
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  id            String                @id @default(cuid())
+  orgId         String
+  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  opportunityId String?
+  opportunity   Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  source        String
+  referredBy    String
+  orderNumber   String?
+  orderTotal    Decimal?              @db.Decimal(12, 2)
+  status        WorkflowStatus        @default(SUBMITTED)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
   @@index([orgId, status, createdAt])
 }
@@ -634,202 +833,752 @@ model PennyBundleCreditSubmission {
 }
 
 model OverdueSnapshot {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  accountId        String
-  account          Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  sourceLicenseId  String?
-  creditStatus     String?
-  overdueOrders    Int                   @default(0)
-  daysOverdue1     Int                   @default(0)
-  daysOverdue2     Int                   @default(0)
-  daysOverdue3     Int                   @default(0)
-  amountOverdue    Decimal?              @db.Decimal(12, 2)
-  snapshotDate     DateTime              @default(now())
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId       String
+  account         Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  sourceLicenseId String?
+  creditStatus    String?
+  overdueOrders   Int                   @default(0)
+  daysOverdue1    Int                   @default(0)
+  daysOverdue2    Int                   @default(0)
+  daysOverdue3    Int                   @default(0)
+  amountOverdue   Decimal?              @db.Decimal(12, 2)
+  snapshotDate    DateTime              @default(now())
 
   @@index([orgId, snapshotDate])
   @@index([orgId, accountId])
 }
 
 model VendorDayEvent {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  accountId        String
-  account          Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  eventDate        DateTime
-  status           WorkflowStatus        @default(SUBMITTED)
-  repName          String?
-  ambassadorName   String?
-  vdContact        String?
-  vdContactEmail   String?
-  vdContactPhone   String?
-  promoStatus      String?
-  notes            String?
-  createdBy        String
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  pennyBundles     PennyBundleCreditSubmission[]
+  id             String                        @id @default(cuid())
+  orgId          String
+  org            OrganizationWorkspace         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account                       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  eventDate      DateTime
+  status         WorkflowStatus                @default(SUBMITTED)
+  repName        String?
+  ambassadorName String?
+  vdContact      String?
+  vdContactEmail String?
+  vdContactPhone String?
+  promoStatus    String?
+  notes          String?
+  createdBy      String
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+  pennyBundles   PennyBundleCreditSubmission[]
 
   @@index([orgId, eventDate])
   @@index([orgId, status])
 }
 
+model PolicySnapshot {
+  id                   String                @id @default(cuid())
+  orgId                String
+  org                  OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name                 String
+  values               Json
+  effectiveFrom        DateTime              @default(now())
+  createdByClerkUserId String?
+  createdByEmail       String?
+  reason               String?
+  createdAt            DateTime              @default(now())
+  vendorDayRequests    VendorDayRequest[]
+  vendorDayAssignments VendorDayAssignment[]
+
+  @@index([orgId, effectiveFrom])
+  @@index([orgId, createdAt])
+}
+
+model WorkerProfile {
+  id                      String                     @id @default(cuid())
+  orgId                   String
+  org                     OrganizationWorkspace      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clerkUserId             String?
+  email                   String?
+  displayName             String
+  phone                   String?
+  photoUrl                String?
+  homeAddress             String?
+  homeLat                 Float?
+  homeLng                 Float?
+  maxTravelMinutes        Int                        @default(60)
+  travelRadiusMiles       Float?
+  hasVehicle              Boolean                    @default(false)
+  vehicleType             String?
+  employerName            String?
+  employerId              String?
+  employer                Employer?                  @relation(fields: [employerId], references: [id], onDelete: SetNull)
+  tier                    WorkerSkillTier            @default(STANDARD)
+  active                  Boolean                    @default(true)
+  canAcceptOffers         Boolean                    @default(true)
+  notes                   String?
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+  offers                  VendorDayOffer[]
+  assignments             VendorDayAssignment[]
+  availabilityRules       WorkerAvailabilityRule[]
+  availabilityBlocks      WorkerAvailabilityBlock[]
+  calendarConnections     WorkerCalendarConnection[]
+  gearItems               WorkerGearItem[]
+  certifications          WorkerCertification[]
+  brandTrainings          WorkerBrandTraining[]
+  skillTags               WorkerSkillTag[]
+  reviews                 WorkerReview[]
+  payrollLineItems        PayrollLineItem[]
+  roiSnapshots            VendorDayRoiSnapshot[]
+  notificationPreferences NotificationPreference[]
+  preferredForRequests    VendorDayRequest[]         @relation("PreferredWorker")
+
+  @@unique([orgId, clerkUserId])
+  @@index([orgId, active, canAcceptOffers])
+  @@index([orgId, email])
+}
+
+model WorkerAvailabilityRule {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workerProfileId String
+  workerProfile   WorkerProfile         @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  dayOfWeek       Int
+  startMinute     Int
+  endMinute       Int
+  timezone        String                @default("America/New_York")
+  active          Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([orgId, workerProfileId, dayOfWeek, active])
+}
+
+model WorkerAvailabilityBlock {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workerProfileId String
+  workerProfile   WorkerProfile         @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  startsAt        DateTime
+  endsAt          DateTime
+  reason          String?
+  source          String                @default("manual")
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([orgId, workerProfileId, startsAt, endsAt])
+}
+
+model WorkerCalendarConnection {
+  id                   String                     @id @default(cuid())
+  orgId                String
+  org                  OrganizationWorkspace      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workerProfileId      String
+  workerProfile        WorkerProfile              @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  provider             CalendarConnectionProvider
+  calendarEmail        String?
+  status               CalendarConnectionStatus   @default(MANUAL_ONLY)
+  lastSuccessfulSyncAt DateTime?
+  lastAttemptAt        DateTime?
+  accessTokenExpiresAt DateTime?
+  revokedAt            DateTime?
+  lastError            String?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+
+  @@unique([workerProfileId, provider])
+  @@index([orgId, status, updatedAt])
+}
+
+model WorkerGearItem {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workerProfileId String
+  workerProfile   WorkerProfile         @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  name            String
+  quantity        Int                   @default(1)
+  notes           String?
+  needsRestock    Boolean               @default(false)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@unique([workerProfileId, name])
+  @@index([orgId, workerProfileId, needsRestock])
+}
+
+model WorkerCertification {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workerProfileId String
+  workerProfile   WorkerProfile         @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  code            String
+  label           String
+  certifiedAt     DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@unique([workerProfileId, code])
+  @@index([orgId, workerProfileId, code])
+}
+
+model WorkerBrandTraining {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workerProfileId String
+  workerProfile   WorkerProfile         @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  brandName       String
+  level           String?
+  trainedAt       DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@unique([workerProfileId, brandName])
+  @@index([orgId, workerProfileId, brandName])
+}
+
+model WorkerSkillTag {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workerProfileId String
+  workerProfile   WorkerProfile         @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  tag             String
+  label           String?
+  createdAt       DateTime              @default(now())
+
+  @@unique([workerProfileId, tag])
+  @@index([orgId, workerProfileId, tag])
+}
+
+model WorkerReview {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workerProfileId String
+  workerProfile   WorkerProfile         @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  accountId       String?
+  account         Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  rating          Int
+  reviewerName    String?
+  notes           String?
+  createdAt       DateTime              @default(now())
+
+  @@index([orgId, workerProfileId, createdAt])
+  @@index([orgId, accountId, createdAt])
+}
+
+model VendorDayRequest {
+  id                       String                 @id @default(cuid())
+  orgId                    String
+  org                      OrganizationWorkspace  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId                String
+  account                  Account                @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  source                   VendorDayRequestSource
+  status                   VendorDayRequestStatus @default(REQUESTED)
+  requestedStart           DateTime
+  requestedEnd             DateTime
+  alternateStart           DateTime?
+  alternateEnd             DateTime?
+  requestedDurationHours   Int                    @default(3)
+  pennyBundleRequested     Boolean                @default(false)
+  repApprovalRequired      Boolean                @default(false)
+  repApprovedAt            DateTime?
+  repApprovedByClerkUserId String?
+  preferredWorkerProfileId String?
+  preferredWorkerProfile   WorkerProfile?         @relation("PreferredWorker", fields: [preferredWorkerProfileId], references: [id], onDelete: SetNull)
+  override60DayWindow      Boolean                @default(false)
+  overrideReason           String?
+  requiresAdminApproval    Boolean                @default(false)
+  requestedByClerkUserId   String?
+  requestedByRole          Role?
+  requestedByEmail         String?
+  approvedByClerkUserId    String?
+  approvedAt               DateTime?
+  priorityScore            Float                  @default(0)
+  priorityBreakdown        Json?
+  notes                    String?
+  policySnapshotId         String?
+  policySnapshot           PolicySnapshot?        @relation(fields: [policySnapshotId], references: [id], onDelete: SetNull)
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  offers                   VendorDayOffer[]
+  assignments              VendorDayAssignment[]
+
+  @@index([orgId, status, requestedStart])
+  @@index([orgId, accountId, status])
+  @@index([orgId, preferredWorkerProfileId])
+}
+
+model VendorDayOffer {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  requestId       String
+  request         VendorDayRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  workerProfileId String
+  workerProfile   WorkerProfile         @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  status          VendorDayOfferStatus  @default(OPEN)
+  offeredAt       DateTime              @default(now())
+  expiresAt       DateTime
+  respondedAt     DateTime?
+  rankScore       Float                 @default(0)
+  rankReason      String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  assignment      VendorDayAssignment?
+
+  @@unique([requestId, workerProfileId])
+  @@index([orgId, status, expiresAt])
+}
+
+model VendorDayAssignment {
+  id                       String                    @id @default(cuid())
+  orgId                    String
+  org                      OrganizationWorkspace     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  requestId                String
+  request                  VendorDayRequest          @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  workerProfileId          String
+  workerProfile            WorkerProfile             @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  acceptedOfferId          String?                   @unique
+  acceptedOffer            VendorDayOffer?           @relation(fields: [acceptedOfferId], references: [id], onDelete: SetNull)
+  status                   VendorDayAssignmentStatus @default(ASSIGNED)
+  scheduledStart           DateTime
+  scheduledEnd             DateTime
+  travelMinutesOneWay      Int?
+  travelMilesOneWay        Float?
+  eventPayRateDollars      Decimal?                  @db.Decimal(10, 2)
+  travelPayRateDollars     Decimal?                  @db.Decimal(10, 2)
+  oneWayTravelThresholdMin Int?
+  eventPayAmount           Decimal?                  @db.Decimal(10, 2)
+  travelPayAmount          Decimal?                  @db.Decimal(10, 2)
+  override60DayWindow      Boolean                   @default(false)
+  overrideReason           String?
+  passOffRequestedAt       DateTime?
+  passOffReason            String?
+  policySnapshotId         String?
+  policySnapshot           PolicySnapshot?           @relation(fields: [policySnapshotId], references: [id], onDelete: SetNull)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  execution                VendorDayExecution?
+  payrollLineItem          PayrollLineItem?
+  roiSnapshot              VendorDayRoiSnapshot?
+
+  @@unique([requestId, workerProfileId])
+  @@index([orgId, status, scheduledStart])
+}
+
+model VendorDayExecution {
+  id                       String                @id @default(cuid())
+  orgId                    String
+  org                      OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignmentId             String                @unique
+  assignment               VendorDayAssignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  checkInAt                DateTime?
+  checkOutAt               DateTime?
+  checkInGeoLat            Float?
+  checkInGeoLng            Float?
+  checkInAccuracyMeters    Float?
+  checkOutGeoLat           Float?
+  checkOutGeoLng           Float?
+  checkOutAccuracyMeters   Float?
+  locationUnavailable      Boolean               @default(false)
+  distanceFlagged          Boolean               @default(false)
+  pendingArtifactSync      Boolean               @default(false)
+  pennyBundleStatus        String?
+  trafficLevel             String?
+  budtenderEngagementScore Int?
+  checkInNotes             String?
+  checkOutNotes            String?
+  restockNeeded            String?
+  objections               String?
+  bestConversation         String?
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  artifacts                VendorDayArtifact[]
+}
+
+model VendorDayArtifact {
+  id           String                @id @default(cuid())
+  orgId        String
+  org          OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  executionId  String
+  execution    VendorDayExecution    @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  type         VendorDayArtifactType
+  storageUrl   String
+  originalName String?
+  mimeType     String?
+  sizeBytes    Int?
+  syncStatus   String                @default("synced")
+  createdAt    DateTime              @default(now())
+
+  @@index([orgId, executionId, type])
+}
+
 model SampleBoxRequest {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  accountId        String
-  account          Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  contactId        String?
-  contact          Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  requestedBy      String
-  status           WorkflowStatus        @default(SUBMITTED)
-  requestReason    String
-  approvedBy       String?
-  fulfilledAt      DateTime?
-  shippingNotes    String?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  id            String                @id @default(cuid())
+  orgId         String
+  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contactId     String?
+  contact       Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  requestedBy   String
+  status        WorkflowStatus        @default(SUBMITTED)
+  requestReason String
+  approvedBy    String?
+  fulfilledAt   DateTime?
+  shippingNotes String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
   @@index([orgId, status, createdAt])
 }
 
 model NabisOrder {
-  id                String                @id @default(cuid())
-  orgId             String
-  org               OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  accountId         String?
-  account           Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  externalOrderId   String
-  orderNumber       String?
-  licensedLocationId String?
+  id                   String                @id @default(cuid())
+  orgId                String
+  org                  OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId            String?
+  account              Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  externalOrderId      String
+  orderNumber          String?
+  licensedLocationId   String?
+  nabisRetailerId      String?
   licensedLocationName String?
-  orderTotal        Decimal?              @db.Decimal(12, 2)
-  paymentStatus     String?
-  deliveryDate      DateTime?
-  salesRep          String?
-  poSoNumber        String?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  lines             NabisOrderLine[]
+  orderCreatedDate     DateTime?
+  status               String?
+  isInternalTransfer   Boolean               @default(false)
+  orderTotal           Decimal?              @db.Decimal(12, 2)
+  paymentStatus        String?
+  deliveryDate         DateTime?
+  salesRep             String?
+  poSoNumber           String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  lines                NabisOrderLine[]
 
   @@unique([orgId, externalOrderId])
   @@index([orgId, orderNumber])
+  @@index([orgId, licensedLocationId])
+  @@index([orgId, nabisRetailerId])
+  @@index([orgId, orderCreatedDate])
+  @@index([orgId, deliveryDate])
 }
 
 model NabisOrderLine {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  nabisOrderId     String
-  nabisOrder       NabisOrder            @relation(fields: [nabisOrderId], references: [id], onDelete: Cascade)
-  externalOrderId  String
-  productName      String
-  quantity         Decimal?              @db.Decimal(10, 2)
-  unitPrice        Decimal?              @db.Decimal(12, 4)
-  isSample         Boolean               @default(false)
-  itemStrain       String?
-  itemCategory     String?
-  itemClass        String?
-  createdAt        DateTime              @default(now())
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  nabisOrderId    String
+  nabisOrder      NabisOrder            @relation(fields: [nabisOrderId], references: [id], onDelete: Cascade)
+  externalOrderId String
+  productName     String
+  quantity        Decimal?              @db.Decimal(10, 2)
+  unitPrice       Decimal?              @db.Decimal(12, 4)
+  isSample        Boolean               @default(false)
+  itemStrain      String?
+  itemCategory    String?
+  itemClass       String?
+  createdAt       DateTime              @default(now())
 
   @@index([orgId, externalOrderId])
 }
 
-model IntegrationConnection {
+model NabisRetailer {
+  id                 String                @id @default(cuid())
+  orgId              String
+  org                OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId          String?
+  account            Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  notionPageId       String?
+  licensedLocationId String
+  externalRetailerId String?
+  licenseNumber      String?
+  name               String
+  doingBusinessAs    String?
+  address1           String?
+  address2           String?
+  city               String?
+  state              String?
+  zipcode            String?
+  geoLat             Float?
+  geoLng             Float?
+  orderCount         Int                   @default(0)
+  lifetimeRevenue    Decimal?              @db.Decimal(12, 2)
+  firstOrderAt       DateTime?
+  lastOrderAt        DateTime?
+  lastSyncedAt       DateTime              @default(now())
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([orgId, licensedLocationId])
+  @@unique([orgId, externalRetailerId])
+  @@index([orgId, accountId])
+  @@index([orgId, notionPageId])
+}
+
+model NabisStoreMetricDaily {
+  id                 String                @id @default(cuid())
+  orgId              String
+  org                OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId          String?
+  account            Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  licensedLocationId String
+  metricDate         DateTime
+  orderCount         Int                   @default(0)
+  revenue            Decimal               @default(0) @db.Decimal(12, 2)
+  firstOrderAt       DateTime?
+  lastOrderAt        DateTime?
+  lastSyncedAt       DateTime              @default(now())
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([orgId, licensedLocationId, metricDate])
+  @@index([orgId, accountId, metricDate])
+  @@index([orgId, licensedLocationId, metricDate])
+}
+
+model PayrollBatch {
+  id                   String                @id @default(cuid())
+  orgId                String
+  org                  OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  startsOn             DateTime
+  endsOn               DateTime
+  status               PayrollBatchStatus    @default(OPEN)
+  exportedAt           DateTime?
+  paidAt               DateTime?
+  createdByClerkUserId String?
+  createdByEmail       String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  lineItems            PayrollLineItem[]
+
+  @@unique([orgId, startsOn, endsOn])
+  @@index([orgId, status, startsOn])
+}
+
+model PayrollLineItem {
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignmentId    String                @unique
+  assignment      VendorDayAssignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  workerProfileId String
+  workerProfile   WorkerProfile         @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  employerId      String?
+  employer        Employer?             @relation(fields: [employerId], references: [id], onDelete: SetNull)
+  batchId         String?
+  batch           PayrollBatch?         @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  status          PayrollLineStatus     @default(PENDING)
+  eventMinutes    Int                   @default(0)
+  travelMinutes   Int                   @default(0)
+  eventPayAmount  Decimal               @default(0) @db.Decimal(10, 2)
+  travelPayAmount Decimal               @default(0) @db.Decimal(10, 2)
+  totalPayAmount  Decimal               @default(0) @db.Decimal(10, 2)
+  disputedReason  String?
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([orgId, workerProfileId, status])
+  @@index([orgId, batchId, status])
+}
+
+model VendorDayRoiSnapshot {
+  id                        String                @id @default(cuid())
+  orgId                     String
+  org                       OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignmentId              String                @unique
+  assignment                VendorDayAssignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  accountId                 String
+  account                   Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  workerProfileId           String?
+  workerProfile             WorkerProfile?        @relation(fields: [workerProfileId], references: [id], onDelete: SetNull)
+  employerId                String?
+  employer                  Employer?             @relation(fields: [employerId], references: [id], onDelete: SetNull)
+  windowDays                Int                   @default(30)
+  preOrderCount             Int                   @default(0)
+  postOrderCount            Int                   @default(0)
+  preRevenue                Decimal               @default(0) @db.Decimal(12, 2)
+  postRevenue               Decimal               @default(0) @db.Decimal(12, 2)
+  revenueLift               Decimal               @default(0) @db.Decimal(12, 2)
+  orderCountLift            Int                   @default(0)
+  firstReorderLagDays       Int?
+  pennyBundleCreditExposure Decimal               @default(0) @db.Decimal(12, 2)
+  laborCost                 Decimal               @default(0) @db.Decimal(12, 2)
+  travelCost                Decimal               @default(0) @db.Decimal(12, 2)
+  serviceCompanyCost        Decimal               @default(0) @db.Decimal(12, 2)
+  roiMultiple               Decimal?              @db.Decimal(10, 4)
+  territoryLabel            String?
+  brandLabel                String?
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+
+  @@index([orgId, accountId, createdAt])
+  @@index([orgId, workerProfileId, createdAt])
+}
+
+model NotificationPreference {
+  id                    String                @id @default(cuid())
+  orgId                 String
+  org                   OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workerProfileId       String?
+  workerProfile         WorkerProfile?        @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  clerkUserId           String?
+  email                 String?
+  category              NotificationCategory
+  emailEnabled          Boolean               @default(true)
+  inAppEnabled          Boolean               @default(true)
+  quietHoursEnabled     Boolean               @default(true)
+  quietHoursStartMinute Int                   @default(1320)
+  quietHoursEndMinute   Int                   @default(420)
+  timezone              String                @default("America/New_York")
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([orgId, clerkUserId, category])
+  @@index([orgId, workerProfileId, category])
+}
+
+model AccountIdentityMapping {
+  id                   String                @id @default(cuid())
+  orgId                String
+  org                  OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId            String?
+  account              Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  identityType         AccountIdentityType
+  identityValue        String
+  normalizedValue      String
+  source               String                @default("SYSTEM")
+  isOverride           Boolean               @default(false)
+  active               Boolean               @default(true)
+  createdByClerkUserId String?
+  createdByEmail       String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@unique([orgId, identityType, normalizedValue])
+  @@index([orgId, accountId, active])
+  @@index([orgId, identityType, active])
+}
+
+model AuditEvent {
   id               String                @id @default(cuid())
   orgId            String
   org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  provider         IntegrationProvider
-  name             String
-  status           IntegrationSyncStatus @default(IDLE)
-  config           Json
-  enabled          Boolean               @default(true)
-  lastSyncedAt     DateTime?
+  actorClerkUserId String?
+  actorEmail       String?
+  action           String
+  entityType       String
+  entityId         String?
+  reason           String?
+  metadata         Json?
   createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  checkpoints      SyncCheckpoint[]
-  syncRuns         SyncRun[]
-  externalMaps     ExternalRecordMap[]
+
+  @@index([orgId, createdAt])
+  @@index([orgId, actorClerkUserId, createdAt])
+  @@index([orgId, entityType, entityId, createdAt])
+}
+
+model IntegrationConnection {
+  id           String                @id @default(cuid())
+  orgId        String
+  org          OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  provider     IntegrationProvider
+  name         String
+  status       IntegrationSyncStatus @default(IDLE)
+  config       Json
+  enabled      Boolean               @default(true)
+  lastSyncedAt DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  checkpoints  SyncCheckpoint[]
+  syncRuns     SyncRun[]
+  externalMaps ExternalRecordMap[]
 
   @@index([orgId, provider])
 }
 
 model ExternalRecordMap {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  integrationId    String
-  integration      IntegrationConnection @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  provider         IntegrationProvider
-  externalId       String
-  localModel       String
-  localId          String
-  createdAt        DateTime              @default(now())
+  id            String                @id @default(cuid())
+  orgId         String
+  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  integrationId String
+  integration   IntegrationConnection @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  provider      IntegrationProvider
+  externalId    String
+  localModel    String
+  localId       String
+  createdAt     DateTime              @default(now())
 
   @@unique([orgId, provider, externalId, localModel])
   @@index([orgId, localModel, localId])
 }
 
 model SyncCheckpoint {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  integrationId    String
-  integration      IntegrationConnection @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  module           String
-  cursor           String?
-  checksum         String?
-  status           IntegrationSyncStatus @default(IDLE)
-  metadata         Json?
-  updatedAt        DateTime              @updatedAt
+  id            String                @id @default(cuid())
+  orgId         String
+  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  integrationId String
+  integration   IntegrationConnection @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  module        String
+  cursor        String?
+  checksum      String?
+  status        IntegrationSyncStatus @default(IDLE)
+  metadata      Json?
+  updatedAt     DateTime              @updatedAt
 
   @@unique([integrationId, module])
 }
 
 model SyncRun {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  integrationId    String
-  integration      IntegrationConnection @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  module           String
-  status           IntegrationSyncStatus @default(RUNNING)
-  startedAt        DateTime              @default(now())
-  finishedAt       DateTime?
-  recordsIn        Int                   @default(0)
-  recordsUpserted  Int                   @default(0)
-  recordsErrored   Int                   @default(0)
-  error            String?
-  metadata         Json?
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  integrationId   String
+  integration     IntegrationConnection @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  module          String
+  status          IntegrationSyncStatus @default(RUNNING)
+  startedAt       DateTime              @default(now())
+  finishedAt      DateTime?
+  recordsIn       Int                   @default(0)
+  recordsUpserted Int                   @default(0)
+  recordsErrored  Int                   @default(0)
+  error           String?
+  metadata        Json?
 
   @@index([integrationId, startedAt])
 }
 
 model ImportJob {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  entity           String
-  filename         String
-  status           WorkflowStatus        @default(SUBMITTED)
-  rowsProcessed    Int                   @default(0)
-  rowsErrored      Int                   @default(0)
-  createdBy        String
-  createdAt        DateTime              @default(now())
+  id            String                @id @default(cuid())
+  orgId         String
+  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  entity        String
+  filename      String
+  status        WorkflowStatus        @default(SUBMITTED)
+  rowsProcessed Int                   @default(0)
+  rowsErrored   Int                   @default(0)
+  createdBy     String
+  createdAt     DateTime              @default(now())
 }
 
 model ExportJob {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  entity           String
-  status           WorkflowStatus        @default(SUBMITTED)
-  recordCount      Int                   @default(0)
-  createdBy        String
-  createdAt        DateTime              @default(now())
+  id          String                @id @default(cuid())
+  orgId       String
+  org         OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  entity      String
+  status      WorkflowStatus        @default(SUBMITTED)
+  recordCount Int                   @default(0)
+  createdBy   String
+  createdAt   DateTime              @default(now())
 }
 
 model SpatialGeocodeCache {
@@ -843,186 +1592,186 @@ model SpatialGeocodeCache {
 }
 
 model NotionCacheSnapshot {
-  key                     String   @id
+  key                     String    @id
   payload                 Json
-  recordsRead             Int      @default(0)
-  unresolvedLocationCount Int      @default(0)
+  recordsRead             Int       @default(0)
+  unresolvedLocationCount Int       @default(0)
   lastEditedMax           DateTime?
-  syncedAt                DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  syncedAt                DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 }
 
 model Territory {
-  id            String                @id @default(cuid())
-  orgId         String
-  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  name          String
-  description   String?
-  color         String                @default("#ef4444")
-  borderWidth   Int                   @default(2)
-  isVisibleByDefault Boolean          @default(true)
-  geojson       Json?
-  createdByEmail String?
-  updatedByEmail String?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  id                 String                @id @default(cuid())
+  orgId              String
+  org                OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  color              String                @default("#ef4444")
+  borderWidth        Int                   @default(2)
+  isVisibleByDefault Boolean               @default(true)
+  geojson            Json?
+  createdByEmail     String?
+  updatedByEmail     String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
   @@index([orgId, name])
 }
 
 model TerritoryMarker {
-  id               String                @id @default(cuid())
-  orgId            String
-  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  name             String
-  description      String?
-  address          String?
-  lat              Float
-  lng              Float
-  color            String                @default("#0f172a")
-  kind             String                @default("home")
-  isVisibleByDefault Boolean             @default(true)
-  createdByEmail   String?
-  updatedByEmail   String?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  id                 String                @id @default(cuid())
+  orgId              String
+  org                OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  address            String?
+  lat                Float
+  lng                Float
+  color              String                @default("#0f172a")
+  kind               String                @default("home")
+  isVisibleByDefault Boolean               @default(true)
+  createdByEmail     String?
+  updatedByEmail     String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
   @@index([orgId, kind, name])
 }
 
 model SalesRoute {
-  id                  String                @id @default(cuid())
-  orgId               String
-  org                 OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  name                String
-  mode                String                @default("car")
-  orderedStopIds      String[]              @default([])
-  totalDistanceMeters Int                   @default(0)
-  totalDurationSeconds Int                  @default(0)
-  geometry            Unsupported("geometry(LineString,4326)")?
-  createdBy           String?
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  id                   String                                    @id @default(cuid())
+  orgId                String
+  org                  OrganizationWorkspace                     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name                 String
+  mode                 String                                    @default("car")
+  orderedStopIds       String[]                                  @default([])
+  totalDistanceMeters  Int                                       @default(0)
+  totalDurationSeconds Int                                       @default(0)
+  geometry             Unsupported("geometry(LineString,4326)")?
+  createdBy            String?
+  createdAt            DateTime                                  @default(now())
+  updatedAt            DateTime                                  @updatedAt
 
   @@index([orgId, createdAt])
 }
 
 model CheckIn {
-  id            String                @id @default(cuid())
-  orgId         String
-  org           OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  storeId       String?
-  contactId     String?
-  happenedAt    DateTime              @default(now())
-  noteText      String?
-  photoUrls     String[]              @default([])
-  mileageMiles  Float?
-  geoLat        Float?
-  geoLng        Float?
-  geoPoint      Unsupported("geometry(Point,4326)")?
+  id             String                               @id @default(cuid())
+  orgId          String
+  org            OrganizationWorkspace                @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  storeId        String?
+  contactId      String?
+  happenedAt     DateTime                             @default(now())
+  noteText       String?
+  photoUrls      String[]                             @default([])
+  mileageMiles   Float?
+  geoLat         Float?
+  geoLng         Float?
+  geoPoint       Unsupported("geometry(Point,4326)")?
   createdByEmail String?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  createdAt      DateTime                             @default(now())
+  updatedAt      DateTime                             @updatedAt
 
   @@index([orgId, storeId, happenedAt])
   @@index([storeId, happenedAt])
 }
 
 model TerritoryCheckInMirror {
-  id                String                @id @default(cuid())
-  orgId             String
-  org               OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  storeId           String
-  notionPageId      String
-  notionCommentId   String                @unique
+  id                 String                @id @default(cuid())
+  orgId              String
+  org                OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  storeId            String
+  notionPageId       String
+  notionCommentId    String                @unique
   notionDiscussionId String?
-  noteText          String?
-  mode              String                @default("unknown")
-  happenedAt        DateTime
-  lastEditedTime    DateTime?
-  createdByLabel    String?
-  createdByEmail    String?
-  source            String                @default("notion-comment")
-  lastSyncedAt      DateTime              @default(now())
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  noteText           String?
+  mode               String                @default("unknown")
+  happenedAt         DateTime
+  lastEditedTime     DateTime?
+  createdByLabel     String?
+  createdByEmail     String?
+  source             String                @default("notion-comment")
+  lastSyncedAt       DateTime              @default(now())
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
   @@index([orgId, storeId, happenedAt])
   @@index([notionPageId, happenedAt])
 }
 
 model TerritoryStoreSyncJob {
-  id             String                @id @default(cuid())
-  orgId          String
-  org            OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  notionPageId   String
-  status         String                @default("pending")
-  reason         String                @default("webhook")
-  attemptCount   Int                   @default(0)
-  queuedAt       DateTime              @default(now())
+  id              String                @id @default(cuid())
+  orgId           String
+  org             OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  notionPageId    String
+  status          String                @default("pending")
+  reason          String                @default("webhook")
+  attemptCount    Int                   @default(0)
+  queuedAt        DateTime              @default(now())
   lastAttemptedAt DateTime?
-  completedAt    DateTime?
-  lastError      String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  completedAt     DateTime?
+  lastError       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   @@unique([orgId, notionPageId])
   @@index([orgId, status, queuedAt])
 }
 
 model AppSessionAudit {
-  id           String                @id @default(cuid())
-  orgId        String
-  org          OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  clerkUserId  String
-  sessionId    String                @unique
-  email        String?
-  displayName  String?
-  firstSeenAt  DateTime              @default(now())
-  lastSeenAt   DateTime              @default(now())
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  id          String                @id @default(cuid())
+  orgId       String
+  org         OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clerkUserId String
+  sessionId   String                @unique
+  email       String?
+  displayName String?
+  firstSeenAt DateTime              @default(now())
+  lastSeenAt  DateTime              @default(now())
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
 
   @@index([orgId, clerkUserId, lastSeenAt])
   @@index([orgId, email, lastSeenAt])
 }
 
 model TerritoryStoreReadModel {
-  id                    String                @id
-  orgId                 String
-  org                   OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  notionPageId          String                @unique
-  name                  String
-  status                String
-  statusKey             String
-  statusColor           String
-  pinKind               String
-  repNames              String[]              @default([])
-  repEmails             String[]              @default([])
-  lat                   Float
-  lng                   Float
-  locationLabel         String?
-  locationAddress       String?
-  locationSource        String
-  locationPrecision     String                @default("address")
-  isApproximate         Boolean               @default(false)
-  lastEditedTime        DateTime
-  licenseNumber         String?
-  city                  String?
-  state                 String?
-  daysOverdue           Int?
-  phoneNumber           String?
-  email                 String?
-  referralSource        String?
-  followUpDate          DateTime?
-  notes                 String?
-  lastCheckIn           DateTime?
-  interactionsScore     Float                 @default(0)
-  purchasesScore        Float                 @default(0)
-  followUpUrgencyScore  Float                 @default(0)
-  geoPoint              Unsupported("geometry(Point,4326)")?
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  id                   String                               @id
+  orgId                String
+  org                  OrganizationWorkspace                @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  notionPageId         String                               @unique
+  name                 String
+  status               String
+  statusKey            String
+  statusColor          String
+  pinKind              String
+  repNames             String[]                             @default([])
+  repEmails            String[]                             @default([])
+  lat                  Float
+  lng                  Float
+  locationLabel        String?
+  locationAddress      String?
+  locationSource       String
+  locationPrecision    String                               @default("address")
+  isApproximate        Boolean                              @default(false)
+  lastEditedTime       DateTime
+  licenseNumber        String?
+  city                 String?
+  state                String?
+  daysOverdue          Int?
+  phoneNumber          String?
+  email                String?
+  referralSource       String?
+  followUpDate         DateTime?
+  notes                String?
+  lastCheckIn          DateTime?
+  interactionsScore    Float                                @default(0)
+  purchasesScore       Float                                @default(0)
+  followUpUrgencyScore Float                                @default(0)
+  geoPoint             Unsupported("geometry(Point,4326)")?
+  createdAt            DateTime                             @default(now())
+  updatedAt            DateTime                             @updatedAt
 
   @@index([orgId, name])
   @@index([orgId, statusKey])

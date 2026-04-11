@@ -27,6 +27,7 @@ const loadWorkspaceContext = cache(async () => {
     email: access.email!,
     accessType: access.accessType ?? 'workspace',
     workspaceOrgId: access.workspaceOrgId,
+    invitedRole: access.invitedRole as never,
   });
   return { userId, orgId: workspaceOrgId };
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
 import { prisma } from '@/lib/db/prisma';
+import { syncNabisRetailersAndOrders } from '@/lib/server/nabis-sync';
 
 export async function POST(req: Request) {
   const ctx = await guard(['ADMIN', 'OPS_TEAM', 'FINANCE']);
@@ -8,6 +9,23 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const syncModule = body.module || 'all';
+
+  if (syncModule === 'all' || syncModule === 'nabis') {
+    const result = await syncNabisRetailersAndOrders(
+      ctx.orgId,
+      {
+        clerkUserId: ctx.userId,
+        email: ctx.email,
+      },
+      { reconciliation: body.reconciliation === true },
+    );
+
+    return NextResponse.json({
+      started: 2,
+      module: 'nabis',
+      result,
+    });
+  }
 
   const integrations = await prisma.integrationConnection.findMany({ where: { orgId: ctx.orgId, enabled: true } });
 

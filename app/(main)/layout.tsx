@@ -8,6 +8,7 @@ import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { recordAppSession } from '@/lib/auth/session-audit';
 import { AUTH_BYPASS_MODE, DEMO_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 import { prisma } from '@/lib/db/prisma';
+import { getUserRole, getUserRoles } from '@/lib/rbac/guards';
 import { AppRoles, type AppRole } from '@/lib/types/rbac';
 
 export const dynamic = 'force-dynamic';
@@ -46,11 +47,12 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     await ensureDemoWorkspace();
     return (
       <AppShell
-        access={{
-          role: AppRoles.ADMIN,
-          testModeEnabled: false,
-          isAdmin: true,
-          isGuestViewer: false,
+      access={{
+        role: AppRoles.ADMIN,
+        availableRoles: [AppRoles.ADMIN],
+        testModeEnabled: false,
+        isAdmin: true,
+        isGuestViewer: false,
           canEdit: true,
         }}
       >
@@ -84,6 +86,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     email: access.email!,
     accessType: access.accessType ?? 'workspace',
     workspaceOrgId: access.workspaceOrgId,
+    invitedRole: access.invitedRole as Role | undefined,
   });
   await recordAppSession({
     orgId: workspaceOrgId,
@@ -101,18 +104,21 @@ export default async function MainLayout({ children }: { children: React.ReactNo
       },
     },
     select: {
-      role: true,
       testModeEnabled: true,
     },
   });
 
-  const role = (membership?.role as AppRole | undefined) ?? AppRoles.SALES_REP;
+  const [role, availableRoles] = await Promise.all([
+    getUserRole(workspaceOrgId, userId).catch(() => AppRoles.SALES_REP as AppRole),
+    getUserRoles(workspaceOrgId, userId).catch(() => [AppRoles.SALES_REP] as AppRole[]),
+  ]);
   const isGuestViewer = role === AppRoles.GUEST_VIEWER;
 
   return (
     <AppShell
       access={{
         role,
+        availableRoles,
         testModeEnabled: Boolean(membership?.testModeEnabled),
         isAdmin: role === AppRoles.ADMIN,
         isGuestViewer,

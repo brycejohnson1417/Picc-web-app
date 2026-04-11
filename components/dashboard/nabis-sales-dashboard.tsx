@@ -325,14 +325,14 @@ export function NabisSalesDashboard() {
                   <TrendingUp className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-semibold text-[#18212d]">Live Nabis Sales Dashboard</h1>
+                  <h1 className="text-xl font-semibold text-[#18212d]">Nabis Sales Dashboard</h1>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#5f6773]">
                     <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
                       <Wifi className="mr-1.5 h-3.5 w-3.5" />
-                      Live NY Orders
+                      Local synced Nabis data
                     </span>
                     {metadata ? <span>Last synced {formatTimestamp(metadata.fetchedAt)}</span> : null}
-                    {metadata?.cacheHit ? <span className="text-[#8a919c]">served from 5-minute cache</span> : null}
+                    {metadata?.lastRetailerSyncAt ? <span>Retailers {formatTimestamp(metadata.lastRetailerSyncAt)}</span> : null}
                   </div>
                 </div>
               </div>
@@ -379,7 +379,7 @@ export function NabisSalesDashboard() {
 
                 <button
                   type="button"
-                  onClick={() => void loadDashboard(dateRange, { forceRefresh: true })}
+                  onClick={() => void loadDashboard(dateRange)}
                   disabled={!rangeIsValid || actionLocked}
                   className="inline-flex items-center justify-center rounded-xl bg-[#18212d] px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-[#c7ccd4]"
                 >
@@ -437,8 +437,9 @@ export function NabisSalesDashboard() {
                   .join(' · ')}
               />
               <InfoCard
-                label="Line Items Scanned"
-                value={`${metadata.lineItems.toLocaleString()} from ${metadata.pagesScanned.toLocaleString()} scanned page${metadata.pagesScanned === 1 ? '' : 's'}`}
+                label="Local Rows Loaded"
+                value={`${metadata.lineItems.toLocaleString()} synced order row${metadata.lineItems === 1 ? '' : 's'}`}
+                note={metadata.syncLagSeconds != null ? `Sync lag ${Math.max(1, Math.round(metadata.syncLagSeconds / 60))} min` : undefined}
               />
             </div>
           ) : null}
@@ -449,6 +450,8 @@ export function NabisSalesDashboard() {
               {error}
             </Banner>
           ) : null}
+
+          {metadata?.staleWarning ? <Banner tone="info">{metadata.staleWarning}</Banner> : null}
 
           {metadata?.partialScan ? (
             <Banner tone="info">

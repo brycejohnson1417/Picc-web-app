@@ -61,6 +61,7 @@ export async function guard(allowedRoles?: AppRole[]) {
         email: access.email!,
         accessType: access.accessType ?? 'workspace',
         workspaceOrgId: access.workspaceOrgId,
+        invitedRole: access.invitedRole as never,
       });
     } catch {
       return { error: NextResponse.json({ error: 'Workspace bootstrap failed' }, { status: 500 }) };

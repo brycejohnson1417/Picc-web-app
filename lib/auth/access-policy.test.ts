@@ -4,22 +4,30 @@ vi.mock('@/lib/auth/guest-invites', () => ({
   getActiveGuestInviteByEmail: vi.fn(),
 }));
 
+vi.mock('@/lib/auth/operational-invites', () => ({
+  getActiveOperationalInviteByEmail: vi.fn(),
+}));
+
 vi.mock('@/lib/server/notion-workspace-users', () => ({
   hasNotionWorkspaceUser: vi.fn(),
 }));
 
 import { getActiveGuestInviteByEmail } from '@/lib/auth/guest-invites';
+import { getActiveOperationalInviteByEmail } from '@/lib/auth/operational-invites';
 import { evaluateUserAccess, isRequiredCompanyEmail } from '@/lib/auth/access-policy';
 import { hasNotionWorkspaceUser } from '@/lib/server/notion-workspace-users';
 
 const mockedGetActiveGuestInviteByEmail = vi.mocked(getActiveGuestInviteByEmail);
+const mockedGetActiveOperationalInviteByEmail = vi.mocked(getActiveOperationalInviteByEmail);
 const mockedHasNotionWorkspaceUser = vi.mocked(hasNotionWorkspaceUser);
 
 describe('access policy', () => {
   beforeEach(() => {
     delete process.env.TERRITORY_ALLOWED_EMAILS;
     mockedGetActiveGuestInviteByEmail.mockReset();
+    mockedGetActiveOperationalInviteByEmail.mockReset();
     mockedHasNotionWorkspaceUser.mockReset();
+    mockedGetActiveOperationalInviteByEmail.mockResolvedValue(null);
   });
 
   it('recognizes company emails', () => {
@@ -88,6 +96,23 @@ describe('access policy', () => {
       status: 200,
       accessType: 'workspace',
       email: 'rep@piccplatform.com',
+    });
+  });
+
+  it('allows operational invites before company-email checks', async () => {
+    mockedGetActiveGuestInviteByEmail.mockResolvedValue(null);
+    mockedGetActiveOperationalInviteByEmail.mockResolvedValue({
+      id: 'op_invite_1',
+      orgId: 'org_internal',
+      role: 'BRAND_AMBASSADOR',
+    } as Awaited<ReturnType<typeof getActiveOperationalInviteByEmail>>);
+
+    await expect(evaluateUserAccess('contractor@gmail.com')).resolves.toMatchObject({
+      ok: true,
+      accessType: 'workspace',
+      workspaceOrgId: 'org_internal',
+      invitedRole: 'BRAND_AMBASSADOR',
+      email: 'contractor@gmail.com',
     });
   });
 });

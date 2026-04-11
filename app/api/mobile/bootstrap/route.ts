@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { evaluateUserAccess } from '@/lib/auth/access-policy';
 import { AUTH_BYPASS_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
+import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
+import { getSharedWorkspaceId } from '@/lib/auth/access-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +48,15 @@ export async function GET() {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
+  const { orgId } = await auth();
+  const workspaceKey = access.workspaceOrgId ?? orgId ?? getSharedWorkspaceId();
+  const workspaceOrgId = await ensureWorkspaceAndMembership(workspaceKey, userId, {
+    email: access.email!,
+    accessType: access.accessType ?? 'workspace',
+    workspaceOrgId: access.workspaceOrgId,
+    invitedRole: access.invitedRole as never,
+  });
+
   return NextResponse.json({
     app: {
       name: 'piccnewyork.org',
@@ -55,7 +66,7 @@ export async function GET() {
     session: {
       authenticated: true,
       userId,
-      orgId: process.env.TERRITORY_ORG_ID ?? null,
+      orgId: workspaceOrgId,
     },
     api: {
       territoryStores: '/api/territory/stores',
