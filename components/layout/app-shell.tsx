@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
-import { CalendarDays, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
+import { BarChart3, CalendarDays, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AppAccessProvider, type AppAccessState } from '@/components/auth/app-access-provider';
 import { cn } from '@/lib/utils';
@@ -90,17 +90,30 @@ export function AppShell({
                 </span>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#2f3640]"
-              onClick={() => {
-                void signOut({ redirectUrl: '/sign-in' });
-              }}
-              aria-label="Sign out"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Sign Out
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard"
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold',
+                  pathname === '/dashboard' ? 'border-[#1d5eea] bg-[#edf4ff] text-[#1d5eea]' : 'border-[#c5c8ce] bg-white text-[#2f3640]',
+                )}
+                aria-current={pathname === '/dashboard' ? 'page' : undefined}
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                Dashboard
+              </Link>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#2f3640]"
+                onClick={() => {
+                  void signOut({ redirectUrl: '/sign-in' });
+                }}
+                aria-label="Sign out"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign Out
+              </button>
+            </div>
           </header>
           <main className={cn(isTerritoryRoute ? 'pb-[84px] md:pb-[92px]' : 'pb-[84px]')}>{children}</main>
         </div>

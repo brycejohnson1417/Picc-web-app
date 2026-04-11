@@ -37,11 +37,12 @@ const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
 const GOOGLE_GEOCODING_BASE = 'https://maps.googleapis.com/maps/api/geocode/json';
 const GEOCODE_THROTTLE_MS = 110;
-const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v1';
+const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v2';
 const DEFAULT_SYNC_TTL_MINUTES = 5;
 const DEFAULT_STALE_SYNC_GEOCODE_LOOKUPS = 12;
 const DEFAULT_FORCE_SYNC_GEOCODE_LOOKUPS = 80;
 const DEFAULT_INCREMENTAL_FRESHNESS_SECONDS = 8;
+const SCHEMA_OPTIONS_TTL_MS = 5 * 60 * 1000;
 
 const REQUIRED_PROPERTIES = [
   { name: 'Dispensary Name', type: 'title' },
@@ -53,6 +54,20 @@ const REQUIRED_PROPERTIES = [
 type NotionPropertySchema = {
   id: string;
   type: string;
+  select?: {
+    options?: Array<{
+      id?: string;
+      name?: string | null;
+      color?: string | null;
+    }>;
+  } | null;
+  multi_select?: {
+    options?: Array<{
+      id?: string;
+      name?: string | null;
+      color?: string | null;
+    }>;
+  } | null;
 };
 
 type NotionDatabaseResponse = {
@@ -176,6 +191,12 @@ const memoryGeocodeCache = new Map<string, GeocodeResult>();
 let territorySyncInFlight: Promise<void> | null = null;
 let territoryQueueSyncInFlight: Promise<void> | null = null;
 let territoryLastSyncError: string | null = null;
+let referralSourceSchemaOptionsCache:
+  | {
+      values: string[];
+      expiresAt: number;
+    }
+  | null = null;
 const CONTACTS_SNAPSHOT_KEY = 'crm-contacts-v1';
 
 function requiredEnv(name: 'NOTION_API_KEY' | 'NOTION_MASTER_LIST_DATABASE_ID') {
@@ -592,6 +613,114 @@ function pickPropertyNameByType(
     }
   }
   return null;
+}
+
+function pickPropertyNameByTypes(
+  properties: Record<string, NotionPropertySchema>,
+  candidates: string[],
+  expectedTypes: string[],
+) {
+  const candidateSet = new Set(candidates.map(normalizePropertyName));
+  const expectedTypeSet = new Set(expectedTypes);
+  for (const [name, schema] of Object.entries(properties)) {
+    if (!expectedTypeSet.has(schema.type)) {
+      continue;
+    }
+    if (candidateSet.has(normalizePropertyName(name))) {
+      return name;
+    }
+  }
+  return null;
+}
+
+function readSchemaSelectOptions(property: NotionPropertySchema | undefined): string[] {
+  if (!property) {
+    return [];
+  }
+
+  const options =
+    property.type === 'select'
+      ? property.select?.options ?? []
+      : property.type === 'multi_select'
+        ? property.multi_select?.options ?? []
+        : [];
+
+  return options
+    .map((option) => option?.name?.trim() ?? '')
+    .filter(Boolean);
+}
+
+async function loadReferralSourceOptionsFromSchema(input?: { refresh?: boolean }) {
+  const now = Date.now();
+  if (!input?.refresh && referralSourceSchemaOptionsCache && referralSourceSchemaOptionsCache.expiresAt > now) {
+    return referralSourceSchemaOptionsCache.values;
+  }
+
+  const schema = await fetchAndValidateDatabaseSchema();
+  const propertyName = pickPropertyNameByTypes(
+    schema.database.properties ?? {},
+    ['Referral Source'],
+    ['select', 'multi_select'],
+  );
+  const values = propertyName
+    ? readSchemaSelectOptions(schema.database.properties?.[propertyName])
+    : [];
+
+  referralSourceSchemaOptionsCache = {
+    values,
+    expiresAt: now + SCHEMA_OPTIONS_TTL_MS,
+  };
+
+  return values;
+}
+
+function mergeFilterCountsWithCanonicalOptions(
+  counts: TerritoryFilterCount[],
+  canonicalValues: string[],
+  selectedValues: string[] = [],
+): TerritoryFilterCount[] {
+  const merged = new Map<string, TerritoryFilterCount>();
+
+  for (const item of counts) {
+    const value = item.value.trim();
+    if (!value) {
+      continue;
+    }
+    const key = value.toLowerCase();
+    const existing = merged.get(key);
+    if (existing) {
+      existing.count += item.count;
+    } else {
+      merged.set(key, { value, count: item.count });
+    }
+  }
+
+  for (const value of canonicalValues) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    const existing = merged.get(key);
+    if (existing) {
+      existing.value = trimmed;
+    } else {
+      merged.set(key, { value: trimmed, count: 0 });
+    }
+  }
+
+  for (const value of selectedValues) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (!merged.has(key)) {
+      merged.set(key, { value: trimmed, count: 0 });
+    }
+  }
+
+  return [...merged.values()].sort((left, right) => left.value.localeCompare(right.value));
 }
 
 const STATE_NAME_TO_CODE: Record<string, string> = {
@@ -1047,14 +1176,34 @@ async function mapNotionPageToTerritoryStore(
   const lastSampleOrderDate =
     readIsoDateProperty((propertyByCandidates('last sample order date', 'sample order date', 'last sample date') as NotionPropertyValue | undefined) ?? properties['Last Sample Order Date']) ||
     null;
+  const lastSampleDeliveryDate =
+    readIsoDateProperty(
+      (propertyByCandidates(
+        'last sample delivery date',
+        'sample delivery date',
+        'last sample delivered date',
+        'sample delivered date',
+      ) as NotionPropertyValue | undefined) ?? properties['Last Sample Delivery Date'],
+    ) || null;
   const lastOrderDate =
     readIsoDateProperty((propertyByCandidates('last order date', 'most recent order date') as NotionPropertyValue | undefined) ?? properties['Last Order Date']) ||
     null;
+  const referralSource =
+    readTextFromAnyProperty((propertyByCandidates('referral source') as NotionPropertyValue | undefined) ?? properties['Referral Source']) || null;
   const followUpDate = readDateStartProperty((propertyByCandidates('follow-up date', 'follow up date') as NotionPropertyValue | undefined) ?? properties['Follow-up Date']) || null;
   const followUpNeeded = readBooleanProperty((propertyByCandidates('follow-up needed', 'follow up needed') as NotionPropertyValue | undefined) ?? properties['Follow-up Needed']);
   const followUpReason = readTextFromAnyProperty((propertyByCandidates('follow-up reason', 'follow up reason') as NotionPropertyValue | undefined) ?? properties['Follow-up Reason']) || null;
   const notes = textFromRichTextProperty((propertyByCandidates('notes', 'account notes', 'store notes') as NotionPropertyValue | undefined) ?? properties.Notes) || null;
   const lastCheckIn = readDateStartProperty((propertyByCandidates('last check-in', 'last check in', 'last visit') as NotionPropertyValue | undefined) ?? properties['Last Check-in']) || null;
+  const isPreferredPartner = readBooleanProperty(
+    (propertyByCandidates(
+      'picc preferred partner',
+      'preferred partner',
+      'is picc preferred partner',
+      'preferred picc partner',
+    ) as NotionPropertyValue | undefined) ??
+      properties['PICC Preferred Partner'],
+  );
 
   const fallbackAddress = firstNonEmpty([fullAddress, placeAddress, [address1, city, stateField, zipcode].filter(Boolean).join(', '), placeName]);
   const inferredCity = firstNonEmpty([city, parseCityFromAddress(fallbackAddress)]);
@@ -1141,14 +1290,17 @@ async function mapNotionPageToTerritoryStore(
     daysOverdue,
     phoneNumber,
     email,
+    referralSource,
     vendorDayStatus,
     lastSampleOrderDate,
+    lastSampleDeliveryDate,
     lastOrderDate,
     followUpDate,
     followUpNeeded,
     followUpReason,
     notes,
     lastCheckIn,
+    isPreferredPartner,
   };
 }
 
@@ -1166,7 +1318,7 @@ function normalizeSnapshotPayload(payload: unknown): TerritoryStorePin[] {
   });
 
   return rows
-    .map((row) => {
+    .map<TerritoryStorePin | null>((row) => {
       const id = typeof row.id === 'string' ? row.id : '';
       const notionPageId = typeof row.notionPageId === 'string' ? row.notionPageId : id;
       const name = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : 'Untitled Store';
@@ -1211,9 +1363,14 @@ function normalizeSnapshotPayload(payload: unknown): TerritoryStorePin[] {
             : 'address',
         isApproximate: Boolean(row.isApproximate),
         lastEditedTime: typeof row.lastEditedTime === 'string' && row.lastEditedTime ? row.lastEditedTime : new Date().toISOString(),
+        referralSource: typeof row.referralSource === 'string' && row.referralSource.trim() ? row.referralSource.trim() : null,
+        lastSampleOrderDate: typeof row.lastSampleOrderDate === 'string' && row.lastSampleOrderDate.trim() ? row.lastSampleOrderDate.trim() : null,
+        lastSampleDeliveryDate:
+          typeof row.lastSampleDeliveryDate === 'string' && row.lastSampleDeliveryDate.trim() ? row.lastSampleDeliveryDate.trim() : null,
+        lastOrderDate: typeof row.lastOrderDate === 'string' && row.lastOrderDate.trim() ? row.lastOrderDate.trim() : null,
       };
     })
-    .filter((row): row is TerritoryStorePin => Boolean(row));
+    .filter((row): row is TerritoryStorePin => row !== null);
 }
 
 async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?: number }) {
@@ -2005,10 +2162,13 @@ export async function territoryConnectionCheck() {
 export async function loadTerritoryStores(input?: {
   statuses?: string[];
   reps?: string[];
+  referralSources?: string[];
+  includeNoReferralSource?: boolean;
   vendorDayStatuses?: TerritoryVendorDayStatusFilter;
   query?: string;
   locationAvailability?: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate?: boolean;
+  noLastSampleDeliveryDate?: boolean;
   sampleAccountTypeFilter?: TerritorySampleAccountTypeFilter;
   lastOrderDateFilter?: TerritoryOrderDateFilter;
   refresh?: boolean;
@@ -2018,9 +2178,19 @@ export async function loadTerritoryStores(input?: {
     refresh: input?.refresh,
     maxLiveGeocodeLookups: input?.maxLiveGeocodeLookups,
   });
+  const referralSourceSchemaOptions = await loadReferralSourceOptionsFromSchema({
+    refresh: input?.refresh,
+  }).catch((error) => {
+    console.warn('territory_referral_source_schema_options_failed', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return [] as string[];
+  });
   const selection = {
     statuses: input?.statuses,
     reps: input?.reps,
+    referralSources: input?.referralSources,
+    includeNoReferralSource: input?.includeNoReferralSource,
     query: input?.query,
     locationAvailability: input?.locationAvailability,
   };
@@ -2030,38 +2200,51 @@ export async function loadTerritoryStores(input?: {
   let recordsRead: number;
   let sourceEngine: TerritoryStoresResponse['meta']['sourceEngine'] | undefined;
 
+  const mergeSnapshotStore = (store: TerritoryStorePin): TerritoryStorePin => {
+    const snapshotStore = snapshotById.get(store.id);
+    return {
+      ...store,
+      name: snapshotStore?.name ?? store.name,
+      status: snapshotStore?.status ?? store.status,
+      statusKey: snapshotStore?.statusKey ?? store.statusKey,
+      statusColor: snapshotStore?.statusColor ?? store.statusColor,
+      pinKind: snapshotStore?.pinKind ?? store.pinKind,
+      repNames: snapshotStore?.repNames ?? store.repNames,
+      repEmails: snapshotStore?.repEmails ?? store.repEmails,
+      lastEditedTime: snapshotStore?.lastEditedTime ?? store.lastEditedTime,
+      licenseNumber: snapshotStore?.licenseNumber ?? store.licenseNumber,
+      phoneNumber: snapshotStore?.phoneNumber ?? store.phoneNumber,
+      email: snapshotStore?.email ?? store.email,
+      referralSource: snapshotStore?.referralSource ?? store.referralSource,
+      vendorDayStatus: snapshotStore?.vendorDayStatus ?? store.vendorDayStatus,
+      lastSampleOrderDate: snapshotStore?.lastSampleOrderDate ?? store.lastSampleOrderDate,
+      lastSampleDeliveryDate: snapshotStore?.lastSampleDeliveryDate ?? store.lastSampleDeliveryDate,
+      lastOrderDate: snapshotStore?.lastOrderDate ?? store.lastOrderDate,
+      followUpNeeded: snapshotStore?.followUpNeeded ?? store.followUpNeeded ?? null,
+      followUpReason: snapshotStore?.followUpReason ?? store.followUpReason ?? null,
+      followUpDate: snapshotStore?.followUpDate ?? store.followUpDate,
+      notes: snapshotStore?.notes ?? store.notes,
+      lastCheckIn: snapshotStore?.lastCheckIn ?? store.lastCheckIn,
+    };
+  };
+
   try {
-    let readModel = await loadTerritoryStoresFromReadModel(selection);
+    let readModel = await loadTerritoryStoresFromReadModel({});
     if (readModel.recordsRead === 0 && snapshot.stores.length > 0) {
       await syncTerritoryStoresReadModel(snapshot.stores);
-      readModel = await loadTerritoryStoresFromReadModel(selection);
+      readModel = await loadTerritoryStoresFromReadModel({});
     }
-    stores = readModel.stores.map((store) => {
-      const snapshotStore = snapshotById.get(store.id);
-      return {
-        ...store,
-        name: snapshotStore?.name ?? store.name,
-        status: snapshotStore?.status ?? store.status,
-        statusKey: snapshotStore?.statusKey ?? store.statusKey,
-        statusColor: snapshotStore?.statusColor ?? store.statusColor,
-        pinKind: snapshotStore?.pinKind ?? store.pinKind,
-        repNames: snapshotStore?.repNames ?? store.repNames,
-        repEmails: snapshotStore?.repEmails ?? store.repEmails,
-        lastEditedTime: snapshotStore?.lastEditedTime ?? store.lastEditedTime,
-        licenseNumber: snapshotStore?.licenseNumber ?? store.licenseNumber,
-        phoneNumber: snapshotStore?.phoneNumber ?? store.phoneNumber,
-        email: snapshotStore?.email ?? store.email,
-        vendorDayStatus: snapshotStore?.vendorDayStatus ?? store.vendorDayStatus,
-        lastSampleOrderDate: snapshotStore?.lastSampleOrderDate ?? store.lastSampleOrderDate,
-        lastOrderDate: snapshotStore?.lastOrderDate ?? store.lastOrderDate,
-        followUpNeeded: snapshotStore?.followUpNeeded ?? null,
-        followUpReason: snapshotStore?.followUpReason ?? null,
-        followUpDate: snapshotStore?.followUpDate ?? store.followUpDate,
-        notes: snapshotStore?.notes ?? store.notes,
-        lastCheckIn: snapshotStore?.lastCheckIn ?? store.lastCheckIn,
-      };
-    });
-    filters = readModel.filters;
+    const mergedStores = readModel.stores.map(mergeSnapshotStore);
+    const filtered = filterTerritoryPins(mergedStores, selection);
+    stores = filtered.stores;
+    filters = {
+      ...filtered.filters,
+      referralSources: mergeFilterCountsWithCanonicalOptions(
+        filtered.filters.referralSources,
+        referralSourceSchemaOptions,
+        input?.referralSources ?? [],
+      ),
+    };
     recordsRead = readModel.recordsRead;
     sourceEngine = 'postgis';
   } catch (error) {
@@ -2070,7 +2253,14 @@ export async function loadTerritoryStores(input?: {
     });
     const fallback = filterTerritoryPins(snapshot.stores, selection);
     stores = fallback.stores;
-    filters = fallback.filters;
+    filters = {
+      ...fallback.filters,
+      referralSources: mergeFilterCountsWithCanonicalOptions(
+        fallback.filters.referralSources,
+        referralSourceSchemaOptions,
+        input?.referralSources ?? [],
+      ),
+    };
     recordsRead = fallback.recordsRead;
     sourceEngine = undefined;
   }
@@ -2085,6 +2275,10 @@ export async function loadTerritoryStores(input?: {
 
   if (input?.hasSampleOrderDate) {
     stores = stores.filter((store) => Boolean(store.lastSampleOrderDate));
+  }
+
+  if (input?.noLastSampleDeliveryDate) {
+    stores = stores.filter((store) => !store.lastSampleDeliveryDate);
   }
 
   const sampleAccountTypeFilter = input?.sampleAccountTypeFilter ?? 'all';
@@ -2103,7 +2297,7 @@ export async function loadTerritoryStores(input?: {
     stores = stores.filter((store) => matchesLastOrderDateFilter(store.lastOrderDate, lastOrderDateFilter));
   }
 
-  if ((input?.hasSampleOrderDate || lastOrderDateFilter !== 'all') && stores.length === 0 && !input?.refresh) {
+  if ((input?.hasSampleOrderDate || input?.noLastSampleDeliveryDate || lastOrderDateFilter !== 'all') && stores.length === 0 && !input?.refresh) {
     return loadTerritoryStores({
       ...input,
       refresh: true,

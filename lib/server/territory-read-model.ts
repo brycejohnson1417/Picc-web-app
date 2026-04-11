@@ -185,6 +185,7 @@ function toPin(record: {
   daysOverdue: number | null;
   phoneNumber: string | null;
   email: string | null;
+  referralSource: string | null;
   followUpDate: Date | null;
   notes: string | null;
   lastCheckIn: Date | null;
@@ -216,6 +217,7 @@ function toPin(record: {
     daysOverdue: record.daysOverdue,
     phoneNumber: record.phoneNumber,
     email: record.email,
+    referralSource: record.referralSource,
     followUpDate: record.followUpDate ? record.followUpDate.toISOString() : null,
     notes: record.notes,
     lastCheckIn: record.lastCheckIn ? record.lastCheckIn.toISOString() : null,
@@ -275,6 +277,7 @@ function buildTerritoryReadModelRow(
     daysOverdue: typeof store.daysOverdue === 'number' ? Math.trunc(store.daysOverdue) : null,
     phoneNumber: store.phoneNumber ?? null,
     email: store.email ?? null,
+    referralSource: store.referralSource ?? null,
     followUpDate: store.followUpDate ? new Date(store.followUpDate) : null,
     notes: store.notes ?? null,
     lastCheckIn: store.lastCheckIn ? new Date(store.lastCheckIn) : null,
@@ -331,19 +334,78 @@ export function filterTerritoryPins(
   input: {
     statuses?: string[];
     reps?: string[];
+    referralSources?: string[];
+    includeNoReferralSource?: boolean;
     query?: string;
     locationAvailability?: 'all' | 'available' | 'unavailable';
   },
 ) {
   const pinsInTerritory = pins.filter(isInHomeTerritory);
-  const statusCounts = new Map<string, number>();
-  const repCounts = new Map<string, number>();
-  const vendorDayStatusCounts = new Map<string, number>();
+  const statusFilter = new Set((input.statuses ?? []).map((value) => normalizeStatus(value)));
+  const repFilter = new Set((input.reps ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean));
+  const referralSourceFilter = new Set((input.referralSources ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean));
+  const includeNoReferralSource = Boolean(input.includeNoReferralSource);
+  const locationAvailability = input.locationAvailability ?? 'all';
+  const q = input.query?.trim().toLowerCase() ?? '';
 
+  const matchesFilters = (
+    pin: TerritoryStorePin,
+    input: {
+      ignoreStatus?: boolean;
+      ignoreRep?: boolean;
+      ignoreReferralSource?: boolean;
+      ignoreQuery?: boolean;
+      ignoreLocationAvailability?: boolean;
+    } = {},
+  ) => {
+    if (!input.ignoreStatus && statusFilter.size > 0 && !statusFilter.has(pin.statusKey)) {
+      return false;
+    }
+
+    if (!input.ignoreRep && !matchRepFilter(pin, repFilter)) {
+      return false;
+    }
+
+    if (!input.ignoreReferralSource && (referralSourceFilter.size > 0 || includeNoReferralSource)) {
+      const sourceKey = pin.referralSource?.trim().toLowerCase() ?? '';
+      const matchesSelectedSource = sourceKey ? referralSourceFilter.has(sourceKey) : false;
+      const matchesMissingSource = !sourceKey && includeNoReferralSource;
+      if (!matchesSelectedSource && !matchesMissingSource) {
+        return false;
+      }
+    }
+
+    if (!input.ignoreQuery && q && !hydrateSearch(pin).includes(q)) {
+      return false;
+    }
+
+    if (!input.ignoreLocationAvailability) {
+      if (locationAvailability === 'available' && pin.locationPrecision === 'unavailable') {
+        return false;
+      }
+
+      if (locationAvailability === 'unavailable' && pin.locationPrecision !== 'unavailable') {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const filteredStores = pinsInTerritory.filter((pin) => matchesFilters(pin));
+
+  const statusCounts = new Map<string, number>();
   for (const pin of pinsInTerritory) {
+    if (!matchesFilters(pin, { ignoreStatus: true })) {
+      continue;
+    }
     statusCounts.set(pin.status, (statusCounts.get(pin.status) ?? 0) + 1);
-    if (pin.vendorDayStatus?.trim()) {
-      vendorDayStatusCounts.set(pin.vendorDayStatus, (vendorDayStatusCounts.get(pin.vendorDayStatus) ?? 0) + 1);
+  }
+
+  const repCounts = new Map<string, number>();
+  for (const pin of pinsInTerritory) {
+    if (!matchesFilters(pin, { ignoreRep: true })) {
+      continue;
     }
     if (pin.repNames.length === 0 && pin.repEmails.length === 0) {
       repCounts.set('Unassigned', (repCounts.get('Unassigned') ?? 0) + 1);
@@ -354,43 +416,48 @@ export function filterTerritoryPins(
     }
   }
 
-  const statusFilter = new Set((input.statuses ?? []).map((value) => normalizeStatus(value)));
-  const repFilter = new Set((input.reps ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean));
-  const locationAvailability = input.locationAvailability ?? 'all';
-  const q = input.query?.trim().toLowerCase() ?? '';
-
-  const filteredStores = pinsInTerritory.filter((pin) => {
-    if (statusFilter.size > 0 && !statusFilter.has(pin.statusKey)) {
-      return false;
+  const referralSourceCounts = new Map<string, number>();
+  for (const pin of pinsInTerritory) {
+    if (!matchesFilters(pin, { ignoreReferralSource: true })) {
+      continue;
     }
-
-    if (!matchRepFilter(pin, repFilter)) {
-      return false;
+    if (pin.referralSource?.trim()) {
+      referralSourceCounts.set(pin.referralSource, (referralSourceCounts.get(pin.referralSource) ?? 0) + 1);
     }
+  }
 
-    if (q && !hydrateSearch(pin).includes(q)) {
-      return false;
+  const vendorDayStatusCounts = new Map<string, number>();
+  for (const pin of pinsInTerritory) {
+    if (!matchesFilters(pin)) {
+      continue;
     }
-
-    if (locationAvailability === 'available' && pin.locationPrecision === 'unavailable') {
-      return false;
+    if (pin.vendorDayStatus?.trim()) {
+      vendorDayStatusCounts.set(pin.vendorDayStatus, (vendorDayStatusCounts.get(pin.vendorDayStatus) ?? 0) + 1);
     }
+  }
 
-    if (locationAvailability === 'unavailable' && pin.locationPrecision !== 'unavailable') {
-      return false;
+  let availableCount = 0;
+  let unavailableCount = 0;
+  for (const pin of pinsInTerritory) {
+    if (!matchesFilters(pin, { ignoreLocationAvailability: true })) {
+      continue;
     }
-
-    return true;
-  });
-
-  const unavailableCount = pinsInTerritory.filter((pin) => pin.locationPrecision === 'unavailable').length;
-  const availableCount = Math.max(0, pinsInTerritory.length - unavailableCount);
+    if (pin.locationPrecision === 'unavailable') {
+      unavailableCount += 1;
+    } else {
+      availableCount += 1;
+    }
+  }
 
   const statuses: TerritoryFilterCount[] = [...statusCounts.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
   const reps: TerritoryFilterCount[] = [...repCounts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
+  const referralSources: TerritoryFilterCount[] = [...referralSourceCounts.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
@@ -403,6 +470,7 @@ export function filterTerritoryPins(
     filters: {
       statuses,
       reps,
+      referralSources,
       locationAvailability: [
         { value: 'Available location', count: availableCount },
         { value: 'Unavailable location', count: unavailableCount },
@@ -466,6 +534,7 @@ export async function syncTerritoryStoresReadModel(stores: TerritoryStorePin[], 
       ...row,
       locationPrecision: undefined,
       isApproximate: undefined,
+      referralSource: undefined,
     }));
 
     await prisma.$transaction([
@@ -605,6 +674,7 @@ export async function syncTerritoryStoreToReadModel(store: TerritoryStorePin, in
       ...row,
       locationPrecision: undefined,
       isApproximate: undefined,
+      referralSource: undefined,
     };
 
     await prisma.territoryStoreReadModel.upsert({
@@ -645,6 +715,8 @@ export async function syncTerritoryStoreToReadModel(store: TerritoryStorePin, in
 export async function loadTerritoryStoresFromReadModel(input: {
   statuses?: string[];
   reps?: string[];
+  referralSources?: string[];
+  includeNoReferralSource?: boolean;
   query?: string;
   locationAvailability?: 'all' | 'available' | 'unavailable';
   orgId?: string;
@@ -666,6 +738,7 @@ export async function loadTerritoryStoresFromReadModel(input: {
       daysOverdue: row.daysOverdue,
       phoneNumber: row.phoneNumber,
       email: row.email,
+      referralSource: row.referralSource,
       followUpDate: row.followUpDate,
       notes: row.notes,
       lastCheckIn: row.lastCheckIn,
@@ -677,12 +750,20 @@ export async function loadTerritoryStoresFromReadModel(input: {
 
 export async function loadTerritoryStoreFromReadModel(storeId: string, input?: { orgId?: string }) {
   const orgId = orgIdOrDefault(input?.orgId);
-  const row = await prisma.territoryStoreReadModel.findFirst({
-    where: {
-      orgId,
-      OR: [{ id: storeId }, { notionPageId: storeId }],
-    },
-  });
+  let row: Awaited<ReturnType<typeof prisma.territoryStoreReadModel.findFirst>>;
+  try {
+    row = await prisma.territoryStoreReadModel.findFirst({
+      where: {
+        orgId,
+        OR: [{ id: storeId }, { notionPageId: storeId }],
+      },
+    });
+  } catch (error) {
+    if (isMissingColumnError(error)) {
+      return null;
+    }
+    throw error;
+  }
 
   if (!row) {
     return null;
@@ -698,6 +779,7 @@ export async function loadTerritoryStoreFromReadModel(storeId: string, input?: {
     daysOverdue: row.daysOverdue,
     phoneNumber: row.phoneNumber,
     email: row.email,
+    referralSource: row.referralSource,
     followUpDate: row.followUpDate,
     notes: row.notes,
     lastCheckIn: row.lastCheckIn,

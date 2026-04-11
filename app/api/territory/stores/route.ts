@@ -21,6 +21,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const statuses = readMultiParam(searchParams, 'status');
   const reps = readMultiParam(searchParams, 'rep');
+  const referralSources = readMultiParam(searchParams, 'referralSource');
+  const includeNoReferralSource = searchParams.get('noReferralSource') === '1';
   const vendorDayStatuses = readMultiParam(searchParams, 'vendorDayStatus');
   const locationAvailabilityParam = (searchParams.get('locationStatus') ?? 'all').trim().toLowerCase();
   const locationAvailability =
@@ -28,6 +30,7 @@ export async function GET(request: Request) {
       ? locationAvailabilityParam
       : 'all';
   const hasSampleOrderDate = searchParams.get('hasSampleOrderDate') === '1';
+  const noLastSampleDeliveryDate = searchParams.get('noLastSampleDeliveryDate') === '1';
   const sampleAccountTypeFilterParam = (searchParams.get('sampleAccountTypeFilter') ?? 'all').trim().toLowerCase();
   const sampleAccountTypeFilter =
     sampleAccountTypeFilterParam === 'customers' || sampleAccountTypeFilterParam === 'non_customers'
@@ -52,9 +55,12 @@ export async function GET(request: Request) {
     const payload = await loadTerritoryStores({
       statuses,
       reps,
+      referralSources,
+      includeNoReferralSource,
       vendorDayStatuses,
       locationAvailability,
       hasSampleOrderDate,
+      noLastSampleDeliveryDate,
       sampleAccountTypeFilter,
       lastOrderDateFilter,
       query: q,

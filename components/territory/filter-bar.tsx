@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { Loader2, Search, X } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import type { TerritoryFilterCount } from '@/lib/territory/types';
@@ -10,10 +11,13 @@ interface TerritoryFilterBarProps {
   onSearchChange: (value: string) => void;
   statuses: TerritoryFilterCount[];
   reps: TerritoryFilterCount[];
+  referralSources: TerritoryFilterCount[];
   selectedStatuses: string[];
   selectedReps: string[];
+  selectedReferralSources: string[];
   onToggleStatus: (value: string) => void;
   onToggleRep: (value: string) => void;
+  onToggleReferralSource: (value: string) => void;
   onClearFilters: () => void;
   isFiltering?: boolean;
 }
@@ -23,13 +27,25 @@ export function TerritoryFilterBar({
   onSearchChange,
   statuses,
   reps,
+  referralSources,
   selectedStatuses,
   selectedReps,
+  selectedReferralSources,
   onToggleStatus,
   onToggleRep,
+  onToggleReferralSource,
   onClearFilters,
   isFiltering = false,
 }: TerritoryFilterBarProps) {
+  const [referralSearch, setReferralSearch] = useState('');
+  const filteredReferralSources = useMemo(() => {
+    const needle = referralSearch.trim().toLowerCase();
+    if (!needle) {
+      return referralSources;
+    }
+    return referralSources.filter((item) => item.value.toLowerCase().includes(needle));
+  }, [referralSearch, referralSources]);
+
   return (
     <div className="space-y-2 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-950/95">
       <div className="relative">
@@ -50,6 +66,21 @@ export function TerritoryFilterBar({
 
       <FilterRow label="Status" items={statuses} selected={selectedStatuses} onToggle={onToggleStatus} disabled={isFiltering} />
       <FilterRow label="Rep" items={reps} selected={selectedReps} onToggle={onToggleRep} disabled={isFiltering} />
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Referral Source</p>
+          <p className="text-[11px] text-slate-500">{selectedReferralSources.length > 0 ? `${selectedReferralSources.length} selected` : 'Optional'}</p>
+        </div>
+        <Input
+          value={referralSearch}
+          onChange={(event) => setReferralSearch(event.target.value)}
+          className="h-9"
+          placeholder="Search referral sources"
+          disabled={isFiltering}
+        />
+        <FilterRow label="Referral Source" items={filteredReferralSources} selected={selectedReferralSources} onToggle={onToggleReferralSource} disabled={isFiltering} hideLabel />
+        <p className="text-[11px] text-slate-500">Leave this empty to show all referral sources.</p>
+      </div>
 
       <div className="flex items-center justify-between">
         {isFiltering ? (
@@ -74,16 +105,18 @@ function FilterRow({
   selected,
   onToggle,
   disabled = false,
+  hideLabel = false,
 }: {
   label: string;
   items: TerritoryFilterCount[];
   selected: string[];
   onToggle: (value: string) => void;
   disabled?: boolean;
+  hideLabel?: boolean;
 }) {
   return (
     <div className="space-y-1">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      {hideLabel ? null : <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {items.length === 0 ? <p className="text-xs text-slate-500">No values available</p> : null}
         {items.map((item) => {

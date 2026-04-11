@@ -1,29 +1,31 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { AlertTriangle, Crosshair, Filter, Layers3, Loader2, Navigation, Plus, RefreshCw, Search } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAppAccess } from '@/components/auth/app-access-provider';
 import { MobileHeader } from '@/components/mobile/mobile-header';
-import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
-import { AlphabetRail } from '@/components/mobile/alphabet-rail';
 import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
+import { TerritoryFocusedCard } from '@/components/mobile/territory-focused-card';
+import { TerritoryListPane } from '@/components/mobile/territory-list-pane';
+import { TerritoryMapOverlayControls } from '@/components/mobile/territory-map-overlay-controls';
 import {
   TerritoryBoundaryEditor,
   TerritoryBoundarySheet,
   TerritoryMarkerEditor,
   type TerritoryBoundaryEditorState,
-  type TerritoryMarkerEditorState,
 } from '@/components/mobile/territory-boundary-sheet';
 import { StoreFilterSheet } from '@/components/mobile/store-filter-sheet';
+import { useTerritoryData } from '@/components/mobile/use-territory-data';
+import { useTerritoryOverlays } from '@/components/mobile/use-territory-overlays';
 import { MapRenderBoundary } from '@/components/mobile/map-render-boundary';
-import { createRepColorMap, pinColorForStore, type PinColorMode } from '@/lib/territory/pin-colors';
-import type { TerritoryBoundaryListResponse, TerritoryMarkerListResponse, TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
+import { createRepColorMap, type PinColorMode } from '@/lib/territory/pin-colors';
+import type { TerritoryStorePin } from '@/lib/territory/types';
+import { clearSavedTerritoryFilters, countActiveTerritoryFilters, loadSavedTerritoryFilters, persistSavedTerritoryFilters, type TerritorySavedFiltersPayload } from '@/lib/territory/filter-storage';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
-import { cn } from '@/lib/utils';
 
 const TerritoryMapMobile = dynamic(
   () => import('@/components/mobile/territory-map-mobile').then((module) => module.TerritoryMapMobile),
@@ -32,23 +34,6 @@ const TerritoryMapMobile = dynamic(
     loading: () => <div className="h-full w-full animate-pulse bg-[#d8d8dc]" />,
   },
 );
-
-const FILTER_STORAGE_KEY = 'territory-mobile-filters-v1';
-const BOUNDARY_VISIBILITY_STORAGE_KEY = 'territory-boundary-visibility-v1';
-
-type SavedFiltersPayload = {
-  search: string;
-  selectedStatuses: string[];
-  selectedReps: string[];
-  selectedVendorDayStatuses: string[];
-  locationAvailability: 'all' | 'available' | 'unavailable';
-  hasSampleOrderDate: boolean;
-  sampleAccountTypeFilter: 'all' | 'customers' | 'non_customers';
-  lastOrderDateFilter: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
-  showRouteOnly: boolean;
-  pinColorMode: PinColorMode;
-  savedAt: string;
-};
 
 function firstLetter(name: string) {
   const normalized = String(name ?? '').trim().toUpperCase();
@@ -100,9 +85,12 @@ export function TerritoryMobile() {
   const [showRouteOnly, setShowRouteOnly] = useState(false);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
+  const [selectedReferralSources, setSelectedReferralSources] = useState<string[]>([]);
+  const [includeNoReferralSource, setIncludeNoReferralSource] = useState(false);
   const [selectedVendorDayStatuses, setSelectedVendorDayStatuses] = useState<string[]>([]);
   const [locationAvailability, setLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
   const [hasSampleOrderDate, setHasSampleOrderDate] = useState(false);
+  const [noLastSampleDeliveryDate, setNoLastSampleDeliveryDate] = useState(false);
   const [sampleAccountTypeFilter, setSampleAccountTypeFilter] = useState<'all' | 'customers' | 'non_customers'>('all');
   const [lastOrderDateFilter, setLastOrderDateFilter] = useState<'all' | 'last_month' | 'last_2_months' | 'three_plus_months'>('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -110,9 +98,12 @@ export function TerritoryMobile() {
   const [pinColorMode, setPinColorMode] = useState<PinColorMode>('status');
   const [draftStatuses, setDraftStatuses] = useState<string[]>([]);
   const [draftReps, setDraftReps] = useState<string[]>([]);
+  const [draftReferralSources, setDraftReferralSources] = useState<string[]>([]);
+  const [draftIncludeNoReferralSource, setDraftIncludeNoReferralSource] = useState(false);
   const [draftVendorDayStatuses, setDraftVendorDayStatuses] = useState<string[]>([]);
   const [draftLocationAvailability, setDraftLocationAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
   const [draftHasSampleOrderDate, setDraftHasSampleOrderDate] = useState(false);
+  const [draftNoLastSampleDeliveryDate, setDraftNoLastSampleDeliveryDate] = useState(false);
   const [draftSampleAccountTypeFilter, setDraftSampleAccountTypeFilter] = useState<'all' | 'customers' | 'non_customers'>('all');
   const [draftLastOrderDateFilter, setDraftLastOrderDateFilter] = useState<'all' | 'last_month' | 'last_2_months' | 'three_plus_months'>('all');
   const [draftPinColorMode, setDraftPinColorMode] = useState<PinColorMode>('status');
@@ -120,18 +111,6 @@ export function TerritoryMobile() {
   const [focusRequestToken, setFocusRequestToken] = useState(0);
   const [locationRequestToken, setLocationRequestToken] = useState(0);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [showBoundaries, setShowBoundaries] = useState(true);
-  const [hiddenBoundaryIds, setHiddenBoundaryIds] = useState<string[]>([]);
-  const [showMarkers, setShowMarkers] = useState(true);
-  const [hiddenMarkerIds, setHiddenMarkerIds] = useState<string[]>([]);
-  const [showBoundarySheet, setShowBoundarySheet] = useState(false);
-  const [boundaryPrefsReady, setBoundaryPrefsReady] = useState(false);
-  const [boundaryEditor, setBoundaryEditor] = useState<TerritoryBoundaryEditorState | null>(null);
-  const [drawingBoundaryMode, setDrawingBoundaryMode] = useState(false);
-  const [savingBoundary, setSavingBoundary] = useState(false);
-  const [markerEditor, setMarkerEditor] = useState<TerritoryMarkerEditorState | null>(null);
-  const [savingMarker, setSavingMarker] = useState(false);
-  const [searchingMarkerAddress, setSearchingMarkerAddress] = useState(false);
   const [showRepLegend, setShowRepLegend] = useState(false);
   const [lassoSelection, setLassoSelection] = useState<TerritoryBoundaryEditorState | null>(null);
   const [lassoDrawingMode, setLassoDrawingMode] = useState(false);
@@ -155,123 +134,60 @@ export function TerritoryMobile() {
   }, [mapSearch]);
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(FILTER_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Partial<SavedFiltersPayload>;
-
-      setSearch(typeof parsed.search === 'string' ? parsed.search : '');
-      setDebouncedSearch(typeof parsed.search === 'string' ? parsed.search.trim() : '');
-      setSelectedStatuses(Array.isArray(parsed.selectedStatuses) ? parsed.selectedStatuses.filter((value): value is string => typeof value === 'string') : []);
-      setSelectedReps(Array.isArray(parsed.selectedReps) ? parsed.selectedReps.filter((value): value is string => typeof value === 'string') : []);
-      setSelectedVendorDayStatuses(
-        Array.isArray(parsed.selectedVendorDayStatuses)
-          ? parsed.selectedVendorDayStatuses.filter((value): value is string => typeof value === 'string')
-          : [],
-      );
-      setLocationAvailability(parsed.locationAvailability === 'available' || parsed.locationAvailability === 'unavailable' ? parsed.locationAvailability : 'all');
-      setHasSampleOrderDate(Boolean(parsed.hasSampleOrderDate));
-      setSampleAccountTypeFilter(
-        parsed.sampleAccountTypeFilter === 'customers' || parsed.sampleAccountTypeFilter === 'non_customers'
-          ? parsed.sampleAccountTypeFilter
-          : 'all',
-      );
-      setLastOrderDateFilter(
-        parsed.lastOrderDateFilter === 'last_month' ||
-          parsed.lastOrderDateFilter === 'last_2_months' ||
-          parsed.lastOrderDateFilter === 'three_plus_months'
-          ? parsed.lastOrderDateFilter
-          : 'all',
-      );
-      setShowRouteOnly(Boolean(parsed.showRouteOnly));
-      setPinColorMode(parsed.pinColorMode === 'rep' ? 'rep' : 'status');
-      setSavedFiltersAt(typeof parsed.savedAt === 'string' ? parsed.savedAt : null);
-      toast.success('Loaded saved territory filters');
-    } catch {
-      // Ignore malformed local storage.
+    const parsed = loadSavedTerritoryFilters();
+    if (!parsed) {
+      return;
     }
+
+    setSearch(typeof parsed.search === 'string' ? parsed.search : '');
+    setDebouncedSearch(typeof parsed.search === 'string' ? parsed.search.trim() : '');
+    setSelectedStatuses(Array.isArray(parsed.selectedStatuses) ? parsed.selectedStatuses.filter((value): value is string => typeof value === 'string') : []);
+    setSelectedReps(Array.isArray(parsed.selectedReps) ? parsed.selectedReps.filter((value): value is string => typeof value === 'string') : []);
+    setSelectedReferralSources(
+      Array.isArray(parsed.selectedReferralSources)
+        ? parsed.selectedReferralSources.filter((value): value is string => typeof value === 'string')
+        : [],
+    );
+    setIncludeNoReferralSource(Boolean(parsed.includeNoReferralSource));
+    setSelectedVendorDayStatuses(
+      Array.isArray(parsed.selectedVendorDayStatuses)
+        ? parsed.selectedVendorDayStatuses.filter((value): value is string => typeof value === 'string')
+        : [],
+    );
+    setLocationAvailability(parsed.locationAvailability === 'available' || parsed.locationAvailability === 'unavailable' ? parsed.locationAvailability : 'all');
+    setHasSampleOrderDate(Boolean(parsed.hasSampleOrderDate));
+    setNoLastSampleDeliveryDate(Boolean(parsed.noLastSampleDeliveryDate));
+    setSampleAccountTypeFilter(
+      parsed.sampleAccountTypeFilter === 'customers' || parsed.sampleAccountTypeFilter === 'non_customers'
+        ? parsed.sampleAccountTypeFilter
+        : 'all',
+    );
+    setLastOrderDateFilter(
+      parsed.lastOrderDateFilter === 'last_month' ||
+        parsed.lastOrderDateFilter === 'last_2_months' ||
+        parsed.lastOrderDateFilter === 'three_plus_months'
+        ? parsed.lastOrderDateFilter
+        : 'all',
+    );
+    setShowRouteOnly(Boolean(parsed.showRouteOnly));
+    setPinColorMode(parsed.pinColorMode === 'rep' ? 'rep' : 'status');
+    setSavedFiltersAt(typeof parsed.savedAt === 'string' ? parsed.savedAt : null);
+    toast.success('Loaded saved territory filters');
   }, []);
 
-  const storesQuery = useQuery({
-    queryKey: [
-      'territory-mobile',
-      debouncedSearch,
-      selectedStatuses.join('|'),
-      selectedReps.join('|'),
-      selectedVendorDayStatuses.join('|'),
-      locationAvailability,
-      hasSampleOrderDate ? 'sample' : 'all',
-      sampleAccountTypeFilter,
-      lastOrderDateFilter,
-      refreshNonce,
-    ],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (debouncedSearch) params.set('q', debouncedSearch);
-      for (const status of selectedStatuses) params.append('status', status);
-      for (const rep of selectedReps) params.append('rep', rep);
-      for (const vendorDayStatus of selectedVendorDayStatuses) params.append('vendorDayStatus', vendorDayStatus);
-      if (locationAvailability !== 'all') params.set('locationStatus', locationAvailability);
-      if (hasSampleOrderDate) params.set('hasSampleOrderDate', '1');
-      if (sampleAccountTypeFilter !== 'all') params.set('sampleAccountTypeFilter', sampleAccountTypeFilter);
-      if (lastOrderDateFilter !== 'all') params.set('lastOrderDateFilter', lastOrderDateFilter);
-      if (refreshNonce > 0) params.set('refresh', '1');
-      const response = await fetch(`/api/territory/stores?${params.toString()}`, {
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error ?? 'Failed to load stores');
-      }
-      return (await response.json()) as TerritoryStoresResponse;
-    },
-    staleTime: 10000,
-    refetchOnWindowFocus: true,
-    refetchInterval: 15000,
-    retry: 1,
-    placeholderData: (previousData) => previousData,
-  });
-
-  const boundariesQuery = useQuery({
-    queryKey: ['territory-boundaries'],
-    queryFn: async () => {
-      const response = await fetch('/api/territory/boundaries', {
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error ?? 'Failed to load territory boundaries');
-      }
-      return (await response.json()) as TerritoryBoundaryListResponse;
-    },
-    staleTime: 5000,
-    gcTime: 300000,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchInterval: 10000,
-    retry: 1,
-    placeholderData: (previousData) => previousData,
-  });
-
-  const markersQuery = useQuery({
-    queryKey: ['territory-markers'],
-    queryFn: async () => {
-      const response = await fetch('/api/territory/markers', {
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error ?? 'Failed to load territory markers');
-      }
-      return (await response.json()) as TerritoryMarkerListResponse;
-    },
-    staleTime: 5000,
-    gcTime: 300000,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchInterval: 10000,
-    retry: 1,
-    placeholderData: (previousData) => previousData,
+  const { storesQuery, boundariesQuery, markersQuery } = useTerritoryData({
+    search: debouncedSearch,
+    selectedStatuses,
+    selectedReps,
+    selectedReferralSources,
+    includeNoReferralSource,
+    selectedVendorDayStatuses,
+    locationAvailability,
+    hasSampleOrderDate,
+    noLastSampleDeliveryDate,
+    sampleAccountTypeFilter,
+    lastOrderDateFilter,
+    refreshNonce,
   });
 
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
@@ -318,91 +234,48 @@ export function TerritoryMobile() {
     setFocusedId(null);
   }, [focusedId, mapStores]);
 
-  useEffect(() => {
-    if (boundaryPrefsReady || boundariesQuery.isLoading) {
-      return;
-    }
-
-    try {
-      const raw = window.localStorage.getItem(BOUNDARY_VISIBILITY_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as {
-          hiddenBoundaryIds?: string[];
-          hiddenMarkerIds?: string[];
-          showBoundaries?: boolean;
-          showMarkers?: boolean;
-        };
-        setShowBoundaries(parsed.showBoundaries !== false);
-        setHiddenBoundaryIds(
-          [
-            ...(Array.isArray(parsed.hiddenBoundaryIds)
-              ? parsed.hiddenBoundaryIds.filter((value): value is string => typeof value === 'string')
-              : []),
-            ...boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id),
-          ].filter((value, index, array) => array.indexOf(value) === index),
-        );
-        setShowMarkers(parsed.showMarkers !== false);
-        setHiddenMarkerIds(
-          [
-            ...(Array.isArray(parsed.hiddenMarkerIds)
-              ? parsed.hiddenMarkerIds.filter((value): value is string => typeof value === 'string')
-              : []),
-            ...markers.filter((marker) => !marker.isVisibleByDefault).map((marker) => marker.id),
-          ].filter((value, index, array) => array.indexOf(value) === index),
-        );
-      } else {
-        setShowBoundaries(true);
-        setHiddenBoundaryIds(boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id));
-        setShowMarkers(true);
-        setHiddenMarkerIds(markers.filter((marker) => !marker.isVisibleByDefault).map((marker) => marker.id));
-      }
-    } catch {
-      setShowBoundaries(true);
-      setHiddenBoundaryIds(boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id));
-      setShowMarkers(true);
-      setHiddenMarkerIds(markers.filter((marker) => !marker.isVisibleByDefault).map((marker) => marker.id));
-    } finally {
-      setBoundaryPrefsReady(true);
-    }
-  }, [boundaries, boundariesQuery.isLoading, boundaryPrefsReady, markers]);
-
-  useEffect(() => {
-    if (!boundaryPrefsReady) {
-      return;
-    }
-
-    window.localStorage.setItem(
-      BOUNDARY_VISIBILITY_STORAGE_KEY,
-      JSON.stringify({
-        showBoundaries,
-        hiddenBoundaryIds,
-        showMarkers,
-        hiddenMarkerIds,
-      }),
-    );
-  }, [boundaryPrefsReady, hiddenBoundaryIds, hiddenMarkerIds, showBoundaries, showMarkers]);
-
-  useEffect(() => {
-    if (boundaries.length === 0) {
-      return;
-    }
-    setHiddenBoundaryIds((current) => {
-      const knownIds = current.filter((boundaryId) => boundaries.some((boundary) => boundary.id === boundaryId));
-      const hiddenByDefault = boundaries.filter((boundary) => !boundary.isVisibleByDefault).map((boundary) => boundary.id);
-      return [...knownIds, ...hiddenByDefault].filter((value, index, array) => array.indexOf(value) === index);
-    });
-  }, [boundaries]);
-
-  useEffect(() => {
-    if (markers.length === 0) {
-      return;
-    }
-    setHiddenMarkerIds((current) => {
-      const knownIds = current.filter((markerId) => markers.some((marker) => marker.id === markerId));
-      const hiddenByDefault = markers.filter((marker) => !marker.isVisibleByDefault).map((marker) => marker.id);
-      return [...knownIds, ...hiddenByDefault].filter((value, index, array) => array.indexOf(value) === index);
-    });
-  }, [markers]);
+  const {
+    showBoundaries,
+    hiddenBoundaryIds,
+    showMarkers,
+    hiddenMarkerIds,
+    showBoundarySheet,
+    setShowBoundarySheet,
+    boundaryEditor,
+    setBoundaryEditor,
+    drawingBoundaryMode,
+    setDrawingBoundaryMode,
+    savingBoundary,
+    markerEditor,
+    setMarkerEditor,
+    savingMarker,
+    searchingMarkerAddress,
+    toggleBoundaryVisibility,
+    toggleAllBoundaries,
+    toggleMarkerVisibility,
+    toggleAllMarkers,
+    closeBoundaryEditor,
+    closeMarkerEditor,
+    startCreatingBoundary,
+    startEditingBoundary,
+    startCreatingMarker,
+    startEditingMarker,
+    deleteBoundary,
+    deleteMarker,
+    saveBoundary,
+    searchMarkerAddress,
+    saveMarker,
+  } = useTerritoryOverlays({
+    boundaries,
+    markers,
+    boundariesLoading: boundariesQuery.isLoading,
+    queryClient,
+    onShowMap: () => setView('map'),
+    onCenterLocation: (location) => {
+      setCurrentLocation(location);
+      setLocationRequestToken((current) => current + 1);
+    },
+  });
 
   const focusedStore = useMemo(() => {
     if (!focusedId) return null;
@@ -511,22 +384,29 @@ export function TerritoryMobile() {
   }, [highlightedSearchStore?.id, view]);
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
-  const activeFiltersCount =
-    selectedStatuses.length +
-    selectedReps.length +
-    selectedVendorDayStatuses.length +
-    (locationAvailability === 'all' ? 0 : 1) +
-    (hasSampleOrderDate ? 1 : 0) +
-    (sampleAccountTypeFilter === 'all' ? 0 : 1) +
-    (lastOrderDateFilter === 'all' ? 0 : 1);
+  const activeFiltersCount = countActiveTerritoryFilters({
+    selectedStatuses,
+    selectedReps,
+    selectedReferralSources,
+    includeNoReferralSource,
+    selectedVendorDayStatuses,
+    locationAvailability,
+    hasSampleOrderDate,
+    noLastSampleDeliveryDate,
+    sampleAccountTypeFilter,
+    lastOrderDateFilter,
+  });
   const canVisualizeRoute = routePlan.selectedStopIds.length >= 2;
 
   function openFiltersSheet() {
     setDraftStatuses(selectedStatuses);
     setDraftReps(selectedReps);
+    setDraftReferralSources(selectedReferralSources);
+    setDraftIncludeNoReferralSource(includeNoReferralSource);
     setDraftVendorDayStatuses(selectedVendorDayStatuses);
     setDraftLocationAvailability(locationAvailability);
     setDraftHasSampleOrderDate(hasSampleOrderDate);
+    setDraftNoLastSampleDeliveryDate(noLastSampleDeliveryDate);
     setDraftSampleAccountTypeFilter(sampleAccountTypeFilter);
     setDraftLastOrderDateFilter(lastOrderDateFilter);
     setDraftPinColorMode(pinColorMode);
@@ -536,9 +416,12 @@ export function TerritoryMobile() {
   function applyDraftFilters() {
     setSelectedStatuses(draftStatuses);
     setSelectedReps(draftReps);
+    setSelectedReferralSources(draftReferralSources);
+    setIncludeNoReferralSource(draftIncludeNoReferralSource);
     setSelectedVendorDayStatuses(draftVendorDayStatuses);
     setLocationAvailability(draftLocationAvailability);
     setHasSampleOrderDate(draftHasSampleOrderDate);
+    setNoLastSampleDeliveryDate(draftNoLastSampleDeliveryDate);
     setSampleAccountTypeFilter(draftSampleAccountTypeFilter);
     setLastOrderDateFilter(draftLastOrderDateFilter);
     setPinColorMode(draftPinColorMode);
@@ -546,20 +429,23 @@ export function TerritoryMobile() {
   }
 
   function persistCurrentFilters() {
-    const payload: SavedFiltersPayload = {
+    const payload: TerritorySavedFiltersPayload = {
       search: search.trim(),
       selectedStatuses,
       selectedReps,
+      selectedReferralSources,
+      includeNoReferralSource,
       selectedVendorDayStatuses,
       locationAvailability,
       hasSampleOrderDate,
+      noLastSampleDeliveryDate,
       sampleAccountTypeFilter,
       lastOrderDateFilter,
       showRouteOnly,
       pinColorMode,
       savedAt: new Date().toISOString(),
     };
-    window.localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(payload));
+    persistSavedTerritoryFilters(payload);
     setSavedFiltersAt(payload.savedAt);
     toast.success('Filters saved');
   }
@@ -569,18 +455,24 @@ export function TerritoryMobile() {
     setDebouncedSearch('');
     setSelectedStatuses([]);
     setSelectedReps([]);
+    setSelectedReferralSources([]);
+    setIncludeNoReferralSource(false);
     setSelectedVendorDayStatuses([]);
     setLocationAvailability('all');
     setHasSampleOrderDate(false);
+    setNoLastSampleDeliveryDate(false);
     setSampleAccountTypeFilter('all');
     setLastOrderDateFilter('all');
     setShowRouteOnly(false);
     setPinColorMode('status');
     setDraftStatuses([]);
     setDraftReps([]);
+    setDraftReferralSources([]);
+    setDraftIncludeNoReferralSource(false);
     setDraftVendorDayStatuses([]);
     setDraftLocationAvailability('all');
     setDraftHasSampleOrderDate(false);
+    setDraftNoLastSampleDeliveryDate(false);
     setDraftSampleAccountTypeFilter('all');
     setDraftLastOrderDateFilter('all');
     setDraftPinColorMode('status');
@@ -588,7 +480,7 @@ export function TerritoryMobile() {
     setLassoSelection(null);
     setLassoDrawingMode(false);
     setLassoSelectedIds([]);
-    window.localStorage.removeItem(FILTER_STORAGE_KEY);
+    clearSavedTerritoryFilters();
     toast.success('Filters cleared');
   }
 
@@ -637,268 +529,6 @@ export function TerritoryMobile() {
     if (!showRouteOnly && orderedStops[0]) {
       setFocusedId(orderedStops[0].id);
       setFocusRequestToken((current) => current + 1);
-    }
-  }
-
-  function toggleBoundaryVisibility(boundaryId: string) {
-    setHiddenBoundaryIds((current) => (current.includes(boundaryId) ? current.filter((value) => value !== boundaryId) : [...current, boundaryId]));
-  }
-
-  function toggleAllBoundaries() {
-    setShowBoundaries((current) => !current);
-  }
-
-  function toggleMarkerVisibility(markerId: string) {
-    setHiddenMarkerIds((current) => (current.includes(markerId) ? current.filter((value) => value !== markerId) : [...current, markerId]));
-  }
-
-  function toggleAllMarkers() {
-    setShowMarkers((current) => !current);
-  }
-
-  function closeBoundaryEditor() {
-    setBoundaryEditor(null);
-    setDrawingBoundaryMode(false);
-  }
-
-  function closeMarkerEditor() {
-    setMarkerEditor(null);
-  }
-
-  function startCreatingBoundary() {
-    setShowBoundarySheet(false);
-    setBoundaryEditor({
-      id: null,
-      name: '',
-      description: '',
-      color: '#ef4444',
-      borderWidth: 2,
-      coordinates: [],
-    });
-    setDrawingBoundaryMode(true);
-    setView('map');
-  }
-
-  function startEditingBoundary(boundary: TerritoryBoundaryListResponse['boundaries'][number]) {
-    setShowBoundarySheet(false);
-    setBoundaryEditor({
-      id: boundary.id,
-      name: boundary.name,
-      description: boundary.description ?? '',
-      color: boundary.color,
-      borderWidth: boundary.borderWidth,
-      coordinates: boundary.coordinates,
-    });
-    setDrawingBoundaryMode(false);
-    setView('map');
-  }
-
-  function startCreatingMarker() {
-    setShowBoundarySheet(false);
-    setMarkerEditor({
-      id: null,
-      name: '',
-      description: '',
-      address: '',
-      lat: null,
-      lng: null,
-      color: '#0f172a',
-    });
-    setView('map');
-  }
-
-  function startEditingMarker(marker: TerritoryMarkerListResponse['markers'][number]) {
-    setShowBoundarySheet(false);
-    setMarkerEditor({
-      id: marker.id,
-      name: marker.name,
-      description: marker.description ?? '',
-      address: marker.address ?? '',
-      lat: marker.lat,
-      lng: marker.lng,
-      color: marker.color,
-    });
-    setView('map');
-  }
-
-  async function deleteBoundary(boundary: TerritoryBoundaryListResponse['boundaries'][number]) {
-    if (!window.confirm(`Delete the "${boundary.name}" territory boundary?`)) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/territory/boundaries/${boundary.id}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error ?? 'Unable to delete territory boundary');
-      }
-
-      setHiddenBoundaryIds((current) => current.filter((value) => value !== boundary.id));
-      await queryClient.invalidateQueries({ queryKey: ['territory-boundaries'] });
-      toast.success('Territory boundary deleted');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to delete territory boundary');
-    }
-  }
-
-  async function deleteMarker(marker: TerritoryMarkerListResponse['markers'][number]) {
-    if (!window.confirm(`Delete the "${marker.name}" home marker?`)) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/territory/markers/${marker.id}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.error ?? 'Unable to delete home marker');
-      }
-
-      setHiddenMarkerIds((current) => current.filter((value) => value !== marker.id));
-      await queryClient.invalidateQueries({ queryKey: ['territory-markers'] });
-      toast.success('Home marker deleted');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to delete home marker');
-    }
-  }
-
-  async function saveBoundary() {
-    if (!boundaryEditor) {
-      return;
-    }
-
-    if (!boundaryEditor.name.trim()) {
-      toast.error('Boundary name is required.');
-      return;
-    }
-
-    if (boundaryEditor.coordinates.length < 3) {
-      toast.error('Add at least 3 points to save a territory.');
-      return;
-    }
-
-    setSavingBoundary(true);
-    try {
-      const response = await fetch(
-        boundaryEditor.id ? `/api/territory/boundaries/${boundaryEditor.id}` : '/api/territory/boundaries',
-        {
-          method: boundaryEditor.id ? 'PATCH' : 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: boundaryEditor.name,
-            description: boundaryEditor.description || null,
-            color: boundaryEditor.color,
-            borderWidth: boundaryEditor.borderWidth,
-            coordinates: boundaryEditor.coordinates,
-          }),
-        },
-      );
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'Unable to save territory boundary');
-      }
-
-      closeBoundaryEditor();
-      setShowBoundaries(true);
-      await queryClient.invalidateQueries({ queryKey: ['territory-boundaries'] });
-      toast.success(boundaryEditor.id ? 'Territory boundary updated' : 'Territory boundary saved');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to save territory boundary');
-    } finally {
-      setSavingBoundary(false);
-    }
-  }
-
-  async function searchMarkerAddress() {
-    if (!markerEditor?.address.trim()) {
-      toast.error('Enter an address first.');
-      return;
-    }
-
-    setSearchingMarkerAddress(true);
-    try {
-      const params = new URLSearchParams({ q: markerEditor.address.trim() });
-      const response = await fetch(`/api/territory/geocode?${params.toString()}`, {
-        cache: 'no-store',
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'Address search failed');
-      }
-
-      setMarkerEditor((current) =>
-        current
-          ? {
-              ...current,
-              address: payload.formattedAddress ?? current.address,
-              lat: payload.lat,
-              lng: payload.lng,
-            }
-          : current,
-      );
-
-      setCurrentLocation({ lat: payload.lat, lng: payload.lng });
-      setLocationRequestToken((current) => current + 1);
-      toast.success('Address found');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Address search failed');
-    } finally {
-      setSearchingMarkerAddress(false);
-    }
-  }
-
-  async function saveMarker() {
-    if (!markerEditor) {
-      return;
-    }
-
-    if (!markerEditor.name.trim()) {
-      toast.error('Marker name is required.');
-      return;
-    }
-
-    if (markerEditor.lat === null || markerEditor.lng === null) {
-      toast.error('Search an address first.');
-      return;
-    }
-
-    setSavingMarker(true);
-    try {
-      const response = await fetch(
-        markerEditor.id ? `/api/territory/markers/${markerEditor.id}` : '/api/territory/markers',
-        {
-          method: markerEditor.id ? 'PATCH' : 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: markerEditor.name,
-            description: markerEditor.description || null,
-            address: markerEditor.address || null,
-            lat: markerEditor.lat,
-            lng: markerEditor.lng,
-            color: markerEditor.color,
-          }),
-        },
-      );
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'Unable to save home marker');
-      }
-
-      closeMarkerEditor();
-      setShowMarkers(true);
-      await queryClient.invalidateQueries({ queryKey: ['territory-markers'] });
-      toast.success(markerEditor.id ? 'Home marker updated' : 'Home marker saved');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to save home marker');
-    } finally {
-      setSavingMarker(false);
     }
   }
 
@@ -1039,309 +669,79 @@ export function TerritoryMobile() {
             />
           </MapRenderBoundary>
 
-          <div className="absolute left-1/2 top-3 z-[1500] -translate-x-1/2">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={!canVisualizeRoute}
-                className={cn(
-                  'rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow',
-                  !canVisualizeRoute
-                    ? 'cursor-not-allowed border-white/40 bg-white/65 text-[#80848d]'
-                    : showRouteOnly
-                    ? 'border-[#39a9ff] bg-[#12344b]/90 text-[#8fd5ff]'
-                    : 'border-white/70 bg-white/92 text-[#25313d]',
-                )}
-                onClick={toggleRouteVisualization}
-              >
-                {showRouteOnly ? 'Hide Route' : 'Visualize Route'}
-              </button>
-              {lassoSelection ? (
-                <>
-                  <button
-                    type="button"
-                    className={cn(
-                      'rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow',
-                      lassoDrawingMode ? 'border-[#2563eb] bg-[#2563eb] text-white' : 'border-white/70 bg-white/92 text-[#25313d]',
-                    )}
-                    onClick={() => setLassoDrawingMode((current) => !current)}
-                  >
-                    {lassoDrawingMode ? 'Pause Lasso' : 'Resume Lasso'}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full border border-[#2563eb] bg-white/92 px-3 py-1.5 text-[12px] font-semibold text-[#1d4ed8] shadow"
-                    onClick={finishLasso}
-                  >
-                    Finish Lasso
-                  </button>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          {showMapSearch || mapSearch.trim().length > 0 ? (
-            <div className="absolute left-1/2 top-16 z-[1500] w-[min(calc(100%-16px),420px)] -translate-x-1/2">
-              <div className="rounded-2xl bg-white/92 p-2 shadow-[0_12px_24px_rgba(0,0,0,0.16)] backdrop-blur-sm">
-                <div className="flex items-center gap-2">
-                  <MobileSearch
-                    value={mapSearch}
-                    onChange={setMapSearch}
-                    placeholder="Search dispensaries on the map"
-                    className="flex-1 bg-[#eef0f3]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMapSearch('');
-                      setDebouncedMapSearch('');
-                      setShowMapSearch(false);
-                      lastSearchFocusRef.current = '';
-                    }}
-                    className="rounded-xl border border-[#d0d3d9] bg-white px-3 py-2 text-[13px] font-medium text-[#4b4f57]"
-                  >
-                    Clear
-                  </button>
-                </div>
-                {mapSearch.trim().length > 0 ? (
-                  <p className="mt-2 px-1 text-[12px] text-[#62666f]">
-                    {highlightedSearchStore ? `Highlighting ${highlightedSearchStore.name}` : 'No dispensaries match this search yet'}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {showRouteOnly && routePlan.selectedStopIds.length >= 2 ? (
-            <div className={cn('absolute left-3 z-[1500] rounded-xl bg-black/70 px-2.5 py-1.5 text-[11px] text-white', focusedStore ? 'bottom-[108px]' : 'bottom-3')}>
-              {hasRoadRouteGeometry
-                ? `${routePlan.optimizedRoute?.mode === 'transit' ? 'Transit' : routePlan.optimizedRoute?.mode === 'bike' ? 'Bike' : 'Driving'} route on roads`
-                : 'Add 2+ stops and tap Optimize in Route view'}
-            </div>
-          ) : null}
-
-          {pinColorMode === 'rep' && repLegend.length > 0 ? (
-            <div className={cn('absolute left-3 z-[1500]', focusedStore ? 'bottom-[148px]' : 'bottom-12')}>
-              <button
-                type="button"
-                className="rounded-full bg-black/70 px-3 py-2 text-[12px] font-semibold text-white shadow"
-                onClick={() => setShowRepLegend((current) => !current)}
-              >
-                {showRepLegend ? 'Hide rep colors' : `Rep colors (${repLegend.length})`}
-              </button>
-              {showRepLegend ? (
-                <div className="mt-2 max-h-[40vh] max-w-[240px] overflow-y-auto rounded-xl bg-black/70 px-2.5 py-2 text-white">
-                  <p className="mb-1 text-[11px] uppercase tracking-wide text-white/70">Rep Colors</p>
-                  <div className="space-y-1">
-                    {repLegend.map((entry) => (
-                      <div key={entry.label} className="flex items-center justify-between gap-3 text-[12px]">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                          <span className="truncate">{entry.label}</span>
-                        </span>
-                        <span className="text-white/70">{entry.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="absolute left-2 top-3 z-[1500] flex flex-col gap-2">
-            <button
-              type="button"
-              aria-label="Center on your current location"
-              title="Current location"
-              className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
-              onClick={centerOnCurrentLocation}
-            >
-              <Crosshair className="h-5 w-5 text-[#7f828a]" />
-            </button>
-            <button
-              type="button"
-              aria-label="Refresh territory data"
-              title="Refresh territory data"
-              className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
-              onClick={() => setRefreshNonce((value) => value + 1)}
-            >
-              <RefreshCw className="h-5 w-5 text-[#7f828a]" />
-            </button>
-            <button
-              type="button"
-              aria-label={lassoSelection ? 'Clear lasso selection' : 'Start lasso selection'}
-              title={lassoSelection ? 'Clear lasso selection' : 'Lasso accounts'}
-              className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', lassoSelection ? 'ring-2 ring-[#2563eb]' : '')}
-              onClick={toggleLassoMode}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className={cn('h-5 w-5', lassoSelection ? 'text-[#2563eb]' : 'text-[#7f828a]')}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M6 7.5c0-2.8 2.9-4.5 6.2-4.5 4.4 0 7.8 2.4 7.8 5.9 0 3-2.4 4.9-5.4 5.5" />
-                <path d="M10.5 13.3c-3.9-.1-6.5-2-6.5-5 0-1.5.8-2.8 2.1-3.8" />
-                <path d="M14.5 16.2c0 1.3-1.1 2.3-2.5 2.3s-2.5-1-2.5-2.3 1.1-2.3 2.5-2.3 2.5 1 2.5 2.3Z" />
-                <path d="M12 18.5v2.5" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="absolute right-2 top-3 z-[1500] flex flex-col gap-2">
-            <button
-              type="button"
-              aria-label="Search dispensaries on the map"
-              title="Search map"
-              className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showMapSearch || mapSearch.trim().length > 0 ? 'ring-2 ring-[#cd3814]' : '')}
-              onClick={() => setShowMapSearch((current) => !current)}
-            >
-              <Search className={cn('h-5 w-5', showMapSearch || mapSearch.trim().length > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
-            </button>
-            <button
-              type="button"
-              aria-label="Open territory layers"
-              title="Territory layers"
-              className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showBoundaries ? 'ring-2 ring-[#cd3814]' : '')}
-              onClick={() => setShowBoundarySheet(true)}
-            >
-              <Layers3 className={cn('h-5 w-5', showBoundaries ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
-            </button>
-            <button
-              type="button"
-              aria-label="Open filters"
-              title="Filters"
-              className={cn('relative grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', activeFiltersCount > 0 ? 'ring-2 ring-[#cd3814]' : '')}
-              onClick={openFiltersSheet}
-            >
-              <Filter className={cn('h-5 w-5', activeFiltersCount > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
-              {activeFiltersCount > 0 ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#cd3814] px-1 text-[11px] font-semibold text-white">{activeFiltersCount}</span> : null}
-            </button>
-          </div>
+          <TerritoryMapOverlayControls
+            canVisualizeRoute={canVisualizeRoute}
+            showRouteOnly={showRouteOnly}
+            onToggleRouteVisualization={toggleRouteVisualization}
+            lassoActive={Boolean(lassoSelection)}
+            lassoDrawingMode={lassoDrawingMode}
+            onToggleLassoMode={toggleLassoMode}
+            onFinishLasso={finishLasso}
+            showMapSearch={showMapSearch}
+            mapSearch={mapSearch}
+            onMapSearchChange={setMapSearch}
+            onClearMapSearch={() => {
+              setMapSearch('');
+              setDebouncedMapSearch('');
+              setShowMapSearch(false);
+              lastSearchFocusRef.current = '';
+            }}
+            highlightedSearchStoreName={highlightedSearchStore?.name ?? null}
+            hasRoadRouteGeometry={hasRoadRouteGeometry}
+            routeModeLabel={
+              routePlan.optimizedRoute?.mode === 'transit'
+                ? 'Transit'
+                : routePlan.optimizedRoute?.mode === 'bike'
+                  ? 'Bike'
+                  : 'Driving'
+            }
+            pinColorMode={pinColorMode}
+            repLegend={repLegend}
+            showRepLegend={showRepLegend}
+            onToggleRepLegend={() => setShowRepLegend((current) => !current)}
+            focusedStoreVisible={Boolean(focusedStore)}
+            onCenterCurrentLocation={centerOnCurrentLocation}
+            onRefreshData={() => setRefreshNonce((value) => value + 1)}
+            onToggleMapSearch={() => setShowMapSearch((current) => !current)}
+            onOpenBoundarySheet={() => setShowBoundarySheet(true)}
+            showBoundaries={showBoundaries}
+            onOpenFilters={openFiltersSheet}
+            activeFiltersCount={activeFiltersCount}
+          />
         </div>
       ) : (
-        <div className="px-3 pb-28 pt-2">
-          {storesQuery.isError ? (
-            <div className="mb-3 rounded-lg border border-[#e6b3a7] bg-[#fdebe7] px-3 py-2 text-[13px] text-[#8f2410]">
-              Live sync warning: {storesQuery.error instanceof Error ? storesQuery.error.message : 'Failed to refresh territory'}
-            </div>
-          ) : null}
-          <div className="flex items-center gap-2">
-            <MobileSearch value={search} onChange={setSearch} placeholder="Search Locations" className="flex-1" />
-            <button
-              type="button"
-              onClick={openFiltersSheet}
-              className={cn('relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border bg-white', activeFiltersCount > 0 ? 'border-[#cd3814]' : 'border-[#c8c9cf]')}
-            >
-              <Filter className={cn('h-5 w-5', activeFiltersCount > 0 ? 'text-[#cd3814]' : 'text-[#6c7078]')} />
-              {activeFiltersCount > 0 ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#cd3814] px-1 text-[11px] font-semibold text-white">{activeFiltersCount}</span> : null}
-            </button>
-          </div>
-          {lassoSelectedIds.length > 0 ? (
-            <div className="mt-2 flex items-center justify-between rounded-xl border border-[#c9d7ff] bg-[#eef4ff] px-3 py-2 text-[12px] text-[#20439b]">
-              <span>Lasso selection: {lassoSelectedIds.length} accounts</span>
-              <button type="button" className="font-semibold" onClick={() => {
-                setLassoSelection(null);
-                setLassoDrawingMode(false);
-                setLassoSelectedIds([]);
-              }}>
-                Clear
-              </button>
-            </div>
-          ) : null}
-          <div className="mt-2 border-t border-[#c6c7cb]" />
-          {grouped.map(([letter, list]) => (
-            <section
-              key={letter}
-              ref={(element) => {
-                sectionRefs.current[letter] = element;
-              }}
-            >
-              <div className="border-b border-[#c6c7cb] px-1 py-1.5 text-[26px] text-[#8a8d95]">{letter}</div>
-              {list.map((store) => {
-                const selected = routePlan.selectedStopIds.includes(store.id);
-                const pinColor = pinColorForStore(store, pinColorMode, repColorMap);
-                return (
-                  <button
-                    key={store.id}
-                    type="button"
-                    onClick={() => setDetailStoreId(store.id)}
-                    className="flex w-full items-center gap-2 border-b border-[#d0d1d4] px-1 py-2 text-left"
-                  >
-                    <span className="inline-block h-3.5 w-3.5 shrink-0 rounded-full" style={{ backgroundColor: pinColor }} />
-                    <span
-                      className={cn(
-                        'grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 text-sm',
-                        selected ? 'border-[#4fb649] text-[#4fb649]' : 'border-[#b8bac0] text-transparent',
-                      )}
-                    >
-                      ✓
-                    </span>
-                    <span className="truncate text-[16px] text-[#15171c]">{store.name}</span>
-                  </button>
-                );
-              })}
-            </section>
-          ))}
-          <AlphabetRail onSelect={(letter) => sectionRefs.current[letter]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
-        </div>
+        <TerritoryListPane
+          storesQueryError={storesQuery.isError ? (storesQuery.error instanceof Error ? storesQuery.error : new Error('Failed to refresh territory')) : null}
+          search={search}
+          onSearchChange={setSearch}
+          activeFiltersCount={activeFiltersCount}
+          onOpenFilters={openFiltersSheet}
+          lassoSelectedCount={lassoSelectedIds.length}
+          onClearLassoSelection={() => {
+            setLassoSelection(null);
+            setLassoDrawingMode(false);
+            setLassoSelectedIds([]);
+          }}
+          groupedStores={grouped}
+          sectionRefs={sectionRefs}
+          routeSelectedIds={routePlan.selectedStopIds}
+          pinColorMode={pinColorMode}
+          repColorMap={repColorMap}
+          onOpenStore={setDetailStoreId}
+        />
       )}
 
       {view === 'map' && focusedStore ? (
-        <div className="fixed bottom-[86px] left-0 right-0 z-[2500]">
-          <div className="mx-auto max-w-[720px] bg-[#1d1f24]/95 text-white shadow-[0_-2px_8px_rgba(0,0,0,0.35)] backdrop-blur-sm">
-            <button type="button" onClick={() => setDetailStoreId(focusedStore.id)} className="w-full border-b border-[#30333b] px-3 py-2 text-left">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-[18px] font-semibold leading-tight">{focusedStore.name}</p>
-                  <p className="truncate text-[13px] text-[#b6bac3]">{focusedStore.locationAddress ?? focusedStore.locationLabel ?? 'No address'}</p>
-                  {focusedStore.isApproximate ? (
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#f1cc78]">Approximate ({focusedStore.locationPrecision})</p>
-                  ) : null}
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
-                    {focusedStore.pinKind === 'lead' ? 'Lead Status' : 'Status'}
-                  </p>
-                  <span className="mt-1 inline-flex max-w-[132px] truncate rounded-full border border-[#39a9ff]/45 bg-[#0f3654] px-2.5 py-1 text-[11px] font-semibold text-[#8fd5ff]">
-                    {focusedStore.status}
-                  </span>
-                </div>
-              </div>
-            </button>
-            <div className="grid grid-cols-[1fr_56px_56px_56px] border-b border-[#30333b]">
-              <button type="button" className="flex items-center gap-2 px-3 py-2 text-[14px] text-[#d5d9e1]" onClick={() => messageRep(focusedStore)}>
-                <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: pinColorForStore(focusedStore, pinColorMode, repColorMap) }} />
-                {focusedStore.repNames[0] ?? 'Unassigned'}
-              </button>
-              <a
-                href={notionPageUrl(focusedStore.notionPageId)}
-                target="_blank"
-                rel="noreferrer"
-                className="grid place-items-center border-l border-[#30333b] text-[20px] font-semibold text-[#d8dde6]"
-                aria-label="Open in Notion"
-                title="Open in Notion"
-              >
-                N
-              </a>
-              <button type="button" onClick={() => routePlan.toggleStop(focusedStore.id)} className="grid place-items-center border-l border-[#30333b]">
-                <Plus className={cn('h-6 w-6', selectedOnCard ? 'text-[#4fb649]' : 'text-[#d8dde6]')} />
-              </button>
-              <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${focusedStore.lat},${focusedStore.lng}`}
-                target="_blank"
-                rel="noreferrer"
-                className="grid place-items-center border-l border-[#30333b]"
-              >
-                <Navigation className="h-5 w-5 text-[#d8dde6]" />
-              </a>
-            </div>
-          </div>
-        </div>
+        <TerritoryFocusedCard
+          store={focusedStore}
+          selectedOnRoute={selectedOnCard}
+          pinColorMode={pinColorMode}
+          repColorMap={repColorMap}
+          onOpenDetails={setDetailStoreId}
+          onMessageRep={messageRep}
+          onToggleRouteStop={routePlan.toggleStop}
+          notionPageUrl={notionPageUrl(focusedStore.notionPageId)}
+        />
       ) : null}
 
       <StoreFilterSheet
@@ -1349,20 +749,27 @@ export function TerritoryMobile() {
         onClose={() => setShowFilters(false)}
         statuses={storesQuery.data?.filters.statuses ?? []}
         reps={storesQuery.data?.filters.reps ?? []}
+        referralSources={storesQuery.data?.filters.referralSources ?? []}
         vendorDayStatuses={storesQuery.data?.filters.vendorDayStatuses ?? []}
         locationAvailabilityOptions={storesQuery.data?.filters.locationAvailability ?? []}
         selectedStatuses={draftStatuses}
         selectedReps={draftReps}
+        selectedReferralSources={draftReferralSources}
+        includeNoReferralSource={draftIncludeNoReferralSource}
         selectedVendorDayStatuses={draftVendorDayStatuses}
         locationAvailability={draftLocationAvailability}
         hasSampleOrderDate={draftHasSampleOrderDate}
+        noLastSampleDeliveryDate={draftNoLastSampleDeliveryDate}
         sampleAccountTypeFilter={draftSampleAccountTypeFilter}
         lastOrderDateFilter={draftLastOrderDateFilter}
         onToggleStatus={(value) => setDraftStatuses((current) => toggleListValue(current, value))}
         onToggleRep={(value) => setDraftReps((current) => toggleListValue(current, value))}
+        onToggleReferralSource={(value) => setDraftReferralSources((current) => toggleListValue(current, value))}
+        onSetIncludeNoReferralSource={setDraftIncludeNoReferralSource}
         onToggleVendorDayStatus={(value) => setDraftVendorDayStatuses((current) => toggleListValue(current, value))}
         onSetLocationAvailability={setDraftLocationAvailability}
         onSetHasSampleOrderDate={setDraftHasSampleOrderDate}
+        onSetNoLastSampleDeliveryDate={setDraftNoLastSampleDeliveryDate}
         onSetSampleAccountTypeFilter={setDraftSampleAccountTypeFilter}
         onSetLastOrderDateFilter={setDraftLastOrderDateFilter}
         pinColorMode={draftPinColorMode}

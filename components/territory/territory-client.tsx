@@ -17,6 +17,7 @@ export function TerritoryClient() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
+  const [selectedReferralSources, setSelectedReferralSources] = useState<string[]>([]);
   const [focusedStoreId, setFocusedStoreId] = useState<string | null>(null);
   const [routeState, setRouteState] = useState(initialTerritoryRouteState);
   const [routeMode, setRouteMode] = useState<RouteMode>('car');
@@ -34,7 +35,7 @@ export function TerritoryClient() {
   }, [search]);
 
   const storesQuery = useQuery({
-    queryKey: ['territory-stores', selectedStatuses.join('|'), selectedReps.join('|'), debouncedSearch, refreshNonce],
+    queryKey: ['territory-stores', selectedStatuses.join('|'), selectedReps.join('|'), selectedReferralSources.join('|'), debouncedSearch, refreshNonce],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (refreshNonce > 0) {
@@ -43,15 +44,21 @@ export function TerritoryClient() {
       if (debouncedSearch) params.set('q', debouncedSearch);
       for (const status of selectedStatuses) params.append('status', status);
       for (const rep of selectedReps) params.append('rep', rep);
+      for (const referralSource of selectedReferralSources) params.append('referralSource', referralSource);
 
-      const response = await fetch(`/api/territory/stores?${params.toString()}`);
+      const response = await fetch(`/api/territory/stores?${params.toString()}`, {
+        cache: 'no-store',
+      });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.error ?? 'Failed to load territory stores');
       }
       return (await response.json()) as TerritoryStoresResponse;
     },
-    staleTime: 30000,
+    staleTime: 10000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 15000,
+    retry: 1,
     placeholderData: (previousData) => previousData,
   });
 
@@ -221,8 +228,10 @@ export function TerritoryClient() {
             onSearchChange={setSearch}
             statuses={storesQuery.data?.filters.statuses ?? []}
             reps={storesQuery.data?.filters.reps ?? []}
+            referralSources={storesQuery.data?.filters.referralSources ?? []}
             selectedStatuses={selectedStatuses}
             selectedReps={selectedReps}
+            selectedReferralSources={selectedReferralSources}
             onToggleStatus={(value) => {
               setSelectedStatuses((current) => toggleListValue(current, value));
               setOptimizedRoute(null);
@@ -231,10 +240,15 @@ export function TerritoryClient() {
               setSelectedReps((current) => toggleListValue(current, value));
               setOptimizedRoute(null);
             }}
+            onToggleReferralSource={(value) => {
+              setSelectedReferralSources((current) => toggleListValue(current, value));
+              setOptimizedRoute(null);
+            }}
             onClearFilters={() => {
               setSearch('');
               setSelectedStatuses([]);
               setSelectedReps([]);
+              setSelectedReferralSources([]);
               setOptimizedRoute(null);
             }}
             isFiltering={storesQuery.isFetching}

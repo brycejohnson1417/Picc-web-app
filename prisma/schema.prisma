@@ -1013,6 +1013,7 @@ model TerritoryStoreReadModel {
   daysOverdue           Int?
   phoneNumber           String?
   email                 String?
+  referralSource        String?
   followUpDate          DateTime?
   notes                 String?
   lastCheckIn           DateTime?

@@ -65,7 +65,10 @@ export interface TerritoryStorePin {
   email?: string | null;
   vendorDayStatus?: string | null;
   lastSampleOrderDate?: string | null;
+  lastSampleDeliveryDate?: string | null;
   lastOrderDate?: string | null;
+  referralSource: string | null;
+  isPreferredPartner?: boolean | null;
   followUpDate?: string | null;
   followUpNeeded?: boolean | null;
   followUpReason?: string | null;
@@ -166,6 +169,7 @@ export interface TerritoryStoresResponse {
   filters: {
     statuses: TerritoryFilterCount[];
     reps: TerritoryFilterCount[];
+    referralSources: TerritoryFilterCount[];
     locationAvailability: TerritoryFilterCount[];
     vendorDayStatuses: TerritoryFilterCount[];
   };

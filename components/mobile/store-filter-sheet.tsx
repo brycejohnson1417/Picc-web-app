@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import type { PinColorMode } from '@/lib/territory/pin-colors';
 import type { TerritoryFilterCount } from '@/lib/territory/types';
@@ -10,20 +11,27 @@ interface StoreFilterSheetProps {
   onClose: () => void;
   statuses: TerritoryFilterCount[];
   reps: TerritoryFilterCount[];
+  referralSources: TerritoryFilterCount[];
   vendorDayStatuses: TerritoryFilterCount[];
   locationAvailabilityOptions: TerritoryFilterCount[];
   selectedStatuses: string[];
   selectedReps: string[];
+  selectedReferralSources: string[];
+  includeNoReferralSource: boolean;
   selectedVendorDayStatuses: string[];
   locationAvailability: 'all' | 'available' | 'unavailable';
   hasSampleOrderDate: boolean;
+  noLastSampleDeliveryDate: boolean;
   sampleAccountTypeFilter: 'all' | 'customers' | 'non_customers';
   lastOrderDateFilter: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
   onToggleStatus: (value: string) => void;
   onToggleRep: (value: string) => void;
+  onToggleReferralSource: (value: string) => void;
+  onSetIncludeNoReferralSource: (value: boolean) => void;
   onToggleVendorDayStatus: (value: string) => void;
   onSetLocationAvailability: (value: 'all' | 'available' | 'unavailable') => void;
   onSetHasSampleOrderDate: (value: boolean) => void;
+  onSetNoLastSampleDeliveryDate: (value: boolean) => void;
   onSetSampleAccountTypeFilter: (value: 'all' | 'customers' | 'non_customers') => void;
   onSetLastOrderDateFilter: (value: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months') => void;
   pinColorMode: PinColorMode;
@@ -39,20 +47,27 @@ export function StoreFilterSheet({
   onClose,
   statuses,
   reps,
+  referralSources,
   vendorDayStatuses,
   locationAvailabilityOptions,
   selectedStatuses,
   selectedReps,
+  selectedReferralSources,
+  includeNoReferralSource,
   selectedVendorDayStatuses,
   locationAvailability,
   hasSampleOrderDate,
+  noLastSampleDeliveryDate,
   sampleAccountTypeFilter,
   lastOrderDateFilter,
   onToggleStatus,
   onToggleRep,
+  onToggleReferralSource,
+  onSetIncludeNoReferralSource,
   onToggleVendorDayStatus,
   onSetLocationAvailability,
   onSetHasSampleOrderDate,
+  onSetNoLastSampleDeliveryDate,
   onSetSampleAccountTypeFilter,
   onSetLastOrderDateFilter,
   pinColorMode,
@@ -62,6 +77,8 @@ export function StoreFilterSheet({
   onClearAll,
   savedFiltersLabel = null,
 }: StoreFilterSheetProps) {
+  const [referralSearch, setReferralSearch] = useState('');
+
   if (!open) {
     return null;
   }
@@ -69,9 +86,12 @@ export function StoreFilterSheet({
   const activeFilters =
     selectedStatuses.length +
     selectedReps.length +
+    selectedReferralSources.length +
+    (includeNoReferralSource ? 1 : 0) +
     selectedVendorDayStatuses.length +
     (locationAvailability === 'all' ? 0 : 1) +
     (hasSampleOrderDate ? 1 : 0) +
+    (noLastSampleDeliveryDate ? 1 : 0) +
     (sampleAccountTypeFilter === 'all' ? 0 : 1) +
     (lastOrderDateFilter === 'all' ? 0 : 1);
   const hasActiveFilters = activeFilters > 0;
@@ -126,6 +146,30 @@ export function StoreFilterSheet({
             selected={selectedReps}
             onToggle={onToggleRep}
           />
+          <SearchableFilterSection
+            title="Referral Source"
+            searchValue={referralSearch}
+            onSearchChange={setReferralSearch}
+            options={referralSources.map((entry) => ({ label: entry.value, value: entry.value, count: entry.count }))}
+            selected={selectedReferralSources}
+            onToggle={onToggleReferralSource}
+            emptyLabel="No referral sources yet."
+          />
+          <section className="mb-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onSetIncludeNoReferralSource(!includeNoReferralSource)}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-[13px] font-medium',
+                  includeNoReferralSource ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                )}
+              >
+                No referral source
+              </button>
+            </div>
+            <p className="mt-2 text-[12px] text-[#72757d]">Use this to show stores where the CRM referral source is blank.</p>
+          </section>
           <FilterSection
             title="Vendor Day Status"
             options={vendorDayStatuses.map((entry) => ({ label: entry.value, value: entry.value, count: entry.count }))}
@@ -172,6 +216,16 @@ export function StoreFilterSheet({
                 )}
               >
                 Has sample order date
+              </button>
+              <button
+                type="button"
+                onClick={() => onSetNoLastSampleDeliveryDate(!noLastSampleDeliveryDate)}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-[13px] font-medium',
+                  noLastSampleDeliveryDate ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                )}
+              >
+                No last sample delivery date
               </button>
               {[
                 { value: 'customers', label: 'Sampled customers' },
@@ -291,6 +345,71 @@ function FilterSection({
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function SearchableFilterSection({
+  title,
+  searchValue,
+  onSearchChange,
+  options,
+  selected,
+  onToggle,
+  emptyLabel,
+}: {
+  title: string;
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+  options: Array<{ label: string; value: string; count: number }>;
+  selected: string[];
+  onToggle: (value: string) => void;
+  emptyLabel: string;
+}) {
+  const filteredOptions = useMemo(() => {
+    const needle = searchValue.trim().toLowerCase();
+    if (!needle) {
+      return options;
+    }
+    return options.filter((option) => option.label.toLowerCase().includes(needle));
+  }, [options, searchValue]);
+
+  return (
+    <section className="mb-4">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">{title}</h3>
+        <p className="text-[12px] text-[#7b7e87]">
+          {selected.length > 0 ? `${selected.length} selected` : 'Optional'}
+        </p>
+      </div>
+      <input
+        type="search"
+        value={searchValue}
+        onChange={(event) => onSearchChange(event.target.value)}
+        placeholder="Search referral sources"
+        className="mb-3 h-10 w-full rounded-lg border border-[#c3c5cb] bg-white px-3 text-[13px] text-[#2f3640] outline-none placeholder:text-[#8a8d95] focus:border-[#cd3814]"
+      />
+      <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-[#d7d8dd] bg-[#f7f7f9] p-2">
+        {filteredOptions.length === 0 ? <p className="px-2 py-1 text-[13px] text-[#7b7e87]">{emptyLabel}</p> : null}
+        {filteredOptions.map((option) => {
+          const active = selected.includes(option.value);
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onToggle(option.value)}
+              className={cn(
+                'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-[13px] font-medium',
+                active ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#cfd2d8] bg-white text-[#42454c]',
+              )}
+            >
+              <span className="pr-3">{option.label}</span>
+              <span className={cn('shrink-0 text-[12px]', active ? 'text-white/80' : 'text-[#7f828b]')}>{option.count}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[12px] text-[#72757d]">Leave this empty to show all referral sources.</p>
     </section>
   );
 }
