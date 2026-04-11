@@ -50,10 +50,10 @@ This matrix should be updated after every meaningful implementation batch.
 | DSP-003 | Dispatch | No-show detection after 30-minute grace period | Addendum + PLAN 6 | implemented | Maintenance job logic exists |
 | DSP-004 | Dispatch | Rep approval gate and rep self-claim behavior | Original ask + earlier plans | partial | Rep approval gate now exists; rep self-claim and territory-level defaults still missing |
 | DSP-005 | Dispatch | Auto-dispatch configuration per rep/territory | Original ask | missing | Not built |
-| EXE-001 | Execution | BA-first mobile workflow for offers/today/detail/check-in/check-out/uploads/pay/history | Original ask + PLAN 6 | partial | Large single workspace exists, not separated into polished role surfaces |
+| EXE-001 | Execution | BA-first mobile workflow for offers/today/detail/check-in/check-out/uploads/pay/history | Original ask + PLAN 6 | implemented | BA workflow now has dedicated offers/today/uploads/pay/history sections and a focused assignment detail surface |
 | EXE-002 | Execution | Best-effort GPS with location flags | Addendum + PLAN 6 | implemented | Non-blocking geolocation flow exists |
 | EXE-003 | Execution | Offline queued execution/artifacts with sync state | Addendum + PLAN 6 | partial | IndexedDB queue exists; richer sync states and retry UX incomplete |
-| EXE-004 | Execution | Setup photo, end photo, checkout notes required | Original ask + PLAN 6 | partial | UI prompts exist; enforcement needs stronger server-side completeness checks |
+| EXE-004 | Execution | Setup photo, end photo, checkout notes required | Original ask + PLAN 6 | implemented | Server-side checkout validation now requires setup photo, end photo, traffic, engagement, and checkout notes unless artifacts are still queued offline |
 | EXE-005 | Execution | Context-sensitive micro-training | Original ask | missing | Not built |
 | EXE-006 | Execution | Live status board for ops | Original ask | partial | Home page now surfaces live assignment status, but not yet as a real-time map/dot board |
 | PEN-001 | Penny Bundle | Enforce no report, no credit | Original ask + later plans | partial | Proof requirement exists in flow direction, downstream credit system incomplete |
@@ -64,7 +64,7 @@ This matrix should be updated after every meaningful implementation batch.
 | SET-003 | Settlement | Finance exports and pay-period closing on 1st/15th | Original ask + PLAN 4/6 | partial | Pay-period batching exists and batches can be marked exported; file export output is still missing |
 | SET-004 | Settlement | Worker running balance | Original ask + PLAN 2/6 | implemented | Running balance now comes from payroll line items rather than UI-only sums |
 | SET-005 | Settlement | Disputed pay/credit resolution workflow | Addendum + PLAN 4/6 | partial | Payroll dispute state and API are present; credit dispute handling is still missing |
-| NOT-001 | Notion | Async idempotent vendor-day archive mirror | PLAN 3/6 | implemented | Core sync exists |
+| NOT-001 | Notion | Async idempotent vendor-day archive mirror | PLAN 3/6 | implemented | Core sync exists and archive page links are now surfaced directly in vendor-day BA/ops views |
 | NOT-002 | Notion | Retry/dead-letter/sync health tooling for archive | PLAN 3/6 | partial | Some sync-run/checkpoint support exists; full ops tooling incomplete |
 | NOT-003 | Notion | Backfill historical vendor days from archive into Postgres | PLAN 4/6 | missing | Not built |
 | ROI-001 | ROI | 30-day pre/post ROI snapshot model | PLAN 2/3/4/6 | implemented | ROI snapshots now sync from checked-out assignments |

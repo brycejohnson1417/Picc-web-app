@@ -28,6 +28,8 @@ export type VendorDayExecution = {
   checkInAt: string | null;
   checkOutAt: string | null;
   pendingArtifactSync: boolean;
+  notionArchivePageId?: string | null;
+  notionArchiveUrl?: string | null;
   pennyBundleStatus: string | null;
   trafficLevel: string | null;
   budtenderEngagementScore: number | null;
@@ -48,6 +50,8 @@ export type VendorDayAssignment = {
   travelMinutesOneWay: number | null;
   travelMilesOneWay: number | null;
   passOffReason: string | null;
+  notionArchivePageId?: string | null;
+  notionArchiveUrl?: string | null;
   execution?: VendorDayExecution | null;
   request?: {
     account: VendorDayAccount;
@@ -83,6 +87,8 @@ export type VendorDayRequest = {
   approvedAt: string | null;
   priorityScore: number;
   notes: string | null;
+  notionArchivePageId?: string | null;
+  notionArchiveUrl?: string | null;
   offers: VendorDayOffer[];
   assignments: VendorDayAssignment[];
 };

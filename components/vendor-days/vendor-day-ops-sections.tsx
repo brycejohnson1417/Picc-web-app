@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { FormEvent } from 'react';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Textarea } from '@/components/ui';
 import {
@@ -195,6 +196,13 @@ export function VendorDayQueueSection({
                     {formatDateTime(request.requestedStart)} · {request.requestedDurationHours} hours · score {request.priorityScore}
                   </p>
                   {request.notes ? <p className="mt-2 text-sm text-[#4a5260]">{request.notes}</p> : null}
+                  {request.notionArchiveUrl ? (
+                    <p className="mt-2">
+                      <Link href={request.notionArchiveUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-[#3659b0] hover:underline">
+                        Open Notion vendor-day archive
+                      </Link>
+                    </p>
+                  ) : null}
                   {request.status === 'AWAITING_REP_APPROVAL' ? <p className="mt-2 text-sm text-[#4a5260]">Rep approval is required before dispatch can open concurrent BA offers.</p> : null}
                   {activeAssignment ? (
                     <p className="mt-2 text-sm text-[#4a5260]">
@@ -267,6 +275,13 @@ export function VendorDayFieldBoard({
               </div>
               <p className="mt-1 text-sm text-[#5d6672]">{formatShortDate(assignment.scheduledStart)}</p>
               <p className="mt-1 text-sm text-[#5d6672]">{assignment.request?.account.city ?? '—'}</p>
+              {assignment.notionArchiveUrl ? (
+                <p className="mt-2">
+                  <Link href={assignment.notionArchiveUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-[#3659b0] hover:underline">
+                    Open Notion archive
+                  </Link>
+                </p>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge variant={proofState.hasCheckInPhoto ? 'success' : 'secondary'}>Setup</Badge>
                 <Badge variant={proofState.hasCheckOutPhoto ? 'success' : 'secondary'}>End</Badge>
@@ -379,6 +394,13 @@ export function VendorDayOpsHistorySection({
                 <Badge variant={statusVariant(assignment.status)}>{readableStatus(assignment.status)}</Badge>
               </div>
               <p className="mt-1 text-sm text-[#5d6672]">{formatShortDate(assignment.scheduledStart)}</p>
+              {assignment.notionArchiveUrl ? (
+                <p className="mt-2">
+                  <Link href={assignment.notionArchiveUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-[#3659b0] hover:underline">
+                    Open Notion archive
+                  </Link>
+                </p>
+              ) : null}
               <p className="mt-2 text-sm text-[#5d6672]">{formatCurrency(Number(assignment.eventPayAmount ?? 0) + Number(assignment.travelPayAmount ?? 0))}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge variant={proofState.hasCheckInPhoto ? 'success' : 'secondary'}>Setup</Badge>

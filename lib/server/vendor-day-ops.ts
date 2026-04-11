@@ -62,6 +62,11 @@ function normalizeStatus(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? '';
 }
 
+function notionPageUrl(pageId: string | null | undefined) {
+  if (!pageId) return null;
+  return `https://www.notion.so/${pageId.replace(/-/g, '')}`;
+}
+
 async function syncVendorDayArchiveSafely(sync: () => Promise<unknown>) {
   try {
     await sync();
@@ -991,7 +996,24 @@ export async function checkOutVendorDay(input: {
   }
 
   const artifactCount = assignment.execution?.artifacts.filter((artifact) => artifact.type === VendorDayArtifactType.POS_REPORT || artifact.type === VendorDayArtifactType.SCREENSHOT).length ?? 0;
+  const hasCheckInPhoto = (assignment.execution?.artifacts ?? []).some((artifact) => artifact.type === VendorDayArtifactType.CHECK_IN_PHOTO);
+  const hasCheckOutPhoto = (assignment.execution?.artifacts ?? []).some((artifact) => artifact.type === VendorDayArtifactType.CHECK_OUT_PHOTO);
   const bundleActive = ['accepted', 'offered', 'pending credit'].includes(normalizeStatus(input.pennyBundleStatus));
+  if (!input.pendingArtifactSync && !hasCheckInPhoto) {
+    throw new Error('Setup photo is required before checkout');
+  }
+  if (!input.pendingArtifactSync && !hasCheckOutPhoto) {
+    throw new Error('End photo is required before checkout');
+  }
+  if (!input.checkOutNotes?.trim()) {
+    throw new Error('Checkout notes are required before checkout');
+  }
+  if (!input.trafficLevel?.trim()) {
+    throw new Error('Traffic level is required before checkout');
+  }
+  if (input.budtenderEngagementScore == null) {
+    throw new Error('Budtender engagement score is required before checkout');
+  }
   if ((assignment.request.pennyBundleRequested || bundleActive) && artifactCount === 0 && !input.pendingArtifactSync) {
     throw new Error('Penny Bundle proof is required before checkout');
   }
@@ -1191,10 +1213,69 @@ export async function listVendorDayWorkspaceData(input: {
         }),
   ]);
 
+  const requestIds = requests.map((request) => request.id);
+  const assignmentIds = assignments.map((assignment) => assignment.id);
+  const executionIds = assignments.map((assignment) => assignment.execution?.id).filter((value): value is string => Boolean(value));
+
+  const archiveMaps = await prisma.externalRecordMap.findMany({
+    where: {
+      orgId: input.orgId,
+      provider: 'NOTION',
+      OR: [
+        ...(requestIds.length > 0 ? [{ localModel: 'VendorDayRequest', externalId: { in: requestIds } }] : []),
+        ...(assignmentIds.length > 0 ? [{ localModel: 'VendorDayAssignment', externalId: { in: assignmentIds } }] : []),
+        ...(executionIds.length > 0 ? [{ localModel: 'VendorDayExecution', externalId: { in: executionIds } }] : []),
+      ],
+    },
+    select: {
+      localModel: true,
+      externalId: true,
+      localId: true,
+    },
+  });
+
+  const requestArchiveMap = new Map(
+    archiveMaps.filter((entry) => entry.localModel === 'VendorDayRequest').map((entry) => [entry.externalId, entry.localId]),
+  );
+  const assignmentArchiveMap = new Map(
+    archiveMaps.filter((entry) => entry.localModel === 'VendorDayAssignment').map((entry) => [entry.externalId, entry.localId]),
+  );
+  const executionArchiveMap = new Map(
+    archiveMaps.filter((entry) => entry.localModel === 'VendorDayExecution').map((entry) => [entry.externalId, entry.localId]),
+  );
+
+  const enrichedRequests = requests.map((request) => {
+    const pageId = requestArchiveMap.get(request.id) ?? null;
+    return {
+      ...request,
+      notionArchivePageId: pageId,
+      notionArchiveUrl: notionPageUrl(pageId),
+    };
+  });
+
+  const enrichedAssignments = assignments.map((assignment) => {
+    const assignmentPageId = assignmentArchiveMap.get(assignment.id) ?? null;
+    const executionPageId = assignment.execution?.id ? executionArchiveMap.get(assignment.execution.id) ?? null : null;
+    const requestPageId = requestArchiveMap.get(assignment.requestId) ?? null;
+    const notionArchivePageId = assignmentPageId ?? executionPageId ?? requestPageId;
+    return {
+      ...assignment,
+      notionArchivePageId,
+      notionArchiveUrl: notionPageUrl(notionArchivePageId),
+      execution: assignment.execution
+        ? {
+            ...assignment.execution,
+            notionArchivePageId: executionPageId ?? notionArchivePageId,
+            notionArchiveUrl: notionPageUrl(executionPageId ?? notionArchivePageId),
+          }
+        : assignment.execution,
+    };
+  });
+
   return {
     viewerWorkerProfileId: worker?.id ?? null,
-    requests,
-    assignments,
+    requests: enrichedRequests,
+    assignments: enrichedAssignments,
     accounts,
     workers,
   };

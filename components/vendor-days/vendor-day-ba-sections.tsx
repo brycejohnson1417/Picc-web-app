@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Textarea } from '@/components/ui';
 import {
@@ -183,6 +184,16 @@ export function VendorDayAssignmentDetailSection({
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-xl font-semibold text-[#18212d]">{assignment.request?.account.name ?? 'Vendor day assignment'}</h3>
               <Badge variant={statusVariant(assignment.status)}>{readableStatus(assignment.status)}</Badge>
+              {assignment.notionArchiveUrl ? (
+                <Link
+                  href={assignment.notionArchiveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-[#d9e1ef] bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#3659b0] hover:bg-[#f5f8ff]"
+                >
+                  Open Notion Archive
+                </Link>
+              ) : null}
             </div>
             <p className="mt-2 text-sm text-[#5d6672]">
               {formatDateTime(assignment.scheduledStart)} to {formatDateTime(assignment.scheduledEnd)}
@@ -311,6 +322,9 @@ export function VendorDayAssignmentDetailSection({
                     </select>
                   </div>
                   <Textarea value={checkOutNotes} onChange={(event) => onCheckOutNotesChange(event.target.value)} placeholder="Customer highlights, objections, missing displays, and restock callouts" />
+                  <p className="text-xs text-[#66707d]">
+                    Checkout requires setup photo, end photo, traffic level, engagement score, checkout notes, and POS proof when Penny Bundle ran.
+                  </p>
                   <Button className="w-full" variant="outline" onClick={onCheckOut}>
                     {assignment.execution?.checkOutAt ? 'Update Check-Out' : 'Check Out'}
                   </Button>
@@ -381,7 +395,19 @@ export function VendorDayUploadsSection({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-[22px] border border-[#dfe4eb] bg-[#fbfcfe] p-4">
-            <p className="text-lg font-semibold text-[#18212d]">{assignment.request?.account.name ?? 'Vendor day assignment'}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-lg font-semibold text-[#18212d]">{assignment.request?.account.name ?? 'Vendor day assignment'}</p>
+              {assignment.notionArchiveUrl ? (
+                <Link
+                  href={assignment.notionArchiveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-[#d9e1ef] bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#3659b0] hover:bg-[#f5f8ff]"
+                >
+                  Notion
+                </Link>
+              ) : null}
+            </div>
             <p className="mt-1 text-sm text-[#5d6672]">{formatDateTime(assignment.scheduledStart)}</p>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
@@ -534,6 +560,13 @@ export function VendorDayHistorySection({
                 <div>
                   <p className="text-base font-semibold text-[#18212d]">{assignment.request?.account.name ?? 'Vendor day assignment'}</p>
                   <p className="mt-1 text-sm text-[#5d6672]">{formatShortDate(assignment.scheduledStart)}</p>
+                  {assignment.notionArchiveUrl ? (
+                    <p className="mt-2">
+                      <Link href={assignment.notionArchiveUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-[#3659b0] hover:underline">
+                        Open Notion archive
+                      </Link>
+                    </p>
+                  ) : null}
                 </div>
                 <div className="text-right">
                   <Badge variant={statusVariant(assignment.status)}>{readableStatus(assignment.status)}</Badge>
