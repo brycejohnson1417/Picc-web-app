@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, Check, ChevronRight, GripHorizontal, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, GripHorizontal, ListChecks, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -189,7 +189,7 @@ export function RouteMobile() {
             </button>
           ) : (
             <button type="button" className="grid h-10 w-10 place-items-center" onClick={() => setShowAddModal(true)} aria-label="Choose route accounts">
-              <Plus className="h-10 w-10" />
+              <ListChecks className="h-8 w-8" />
             </button>
           )
         }
