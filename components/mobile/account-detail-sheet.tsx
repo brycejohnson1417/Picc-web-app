@@ -13,7 +13,14 @@ import { cn } from '@/lib/utils';
 
 type DetailTab = 'detail' | 'location' | 'notes' | 'history';
 const STORE_DETAIL_CACHE_PREFIX = 'territory-store-detail:';
-const storeDetailMemoryCache = new Map<string, TerritoryStoreDetailResponse>();
+const STORE_DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type StoreDetailCacheEntry = {
+  fetchedAt: number;
+  detail: TerritoryStoreDetailResponse;
+};
+
+const storeDetailMemoryCache = new Map<string, StoreDetailCacheEntry>();
 
 function formatCheckInLabel(value: string | null | undefined) {
   if (!value) return 'No check-ins';
@@ -42,6 +49,15 @@ function formatDateTimeLabel(value: string | null | undefined, fallback: string)
   return date.toLocaleString();
 }
 
+function formatCurrency(value: number | null | undefined) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  }).format(value);
+}
+
 function cleanContactField(value: string | null | undefined) {
   if (!value) return undefined;
   const trimmed = value.trim();
@@ -59,7 +75,10 @@ function toDialablePhone(value: string | null | undefined) {
 function readCachedStoreDetail(storeId: string) {
   const memoryValue = storeDetailMemoryCache.get(storeId);
   if (memoryValue) {
-    return memoryValue;
+    return {
+      detail: memoryValue.detail,
+      isFresh: Date.now() - memoryValue.fetchedAt < STORE_DETAIL_CACHE_TTL_MS,
+    };
   }
 
   if (typeof window === 'undefined') {
@@ -72,27 +91,42 @@ function readCachedStoreDetail(storeId: string) {
       return null;
     }
 
-    const parsed = JSON.parse(raw) as TerritoryStoreDetailResponse;
-    if (parsed?.store?.id !== storeId) {
+    const parsed = JSON.parse(raw) as StoreDetailCacheEntry | TerritoryStoreDetailResponse;
+    const entry: StoreDetailCacheEntry =
+      'detail' in parsed
+        ? parsed
+        : {
+            detail: parsed,
+            fetchedAt: 0,
+          };
+
+    if (entry.detail?.store?.id !== storeId) {
       return null;
     }
 
-    storeDetailMemoryCache.set(storeId, parsed);
-    return parsed;
+    storeDetailMemoryCache.set(storeId, entry);
+    return {
+      detail: entry.detail,
+      isFresh: Date.now() - entry.fetchedAt < STORE_DETAIL_CACHE_TTL_MS,
+    };
   } catch {
     return null;
   }
 }
 
 function writeCachedStoreDetail(detail: TerritoryStoreDetailResponse) {
-  storeDetailMemoryCache.set(detail.store.id, detail);
+  const entry = {
+    detail,
+    fetchedAt: Date.now(),
+  };
+  storeDetailMemoryCache.set(detail.store.id, entry);
 
   if (typeof window === 'undefined') {
     return;
   }
 
   try {
-    window.sessionStorage.setItem(`${STORE_DETAIL_CACHE_PREFIX}${detail.store.id}`, JSON.stringify(detail));
+    window.sessionStorage.setItem(`${STORE_DETAIL_CACHE_PREFIX}${detail.store.id}`, JSON.stringify(entry));
   } catch {
     // Ignore storage failures and keep the in-memory cache hot.
   }
@@ -155,11 +189,16 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
 
     const cachedDetail = readCachedStoreDetail(store.id);
     if (cachedDetail) {
-      setDetail(cachedDetail);
-      hydrateDrafts(cachedDetail.store);
+      setDetail(cachedDetail.detail);
+      hydrateDrafts(cachedDetail.detail.store);
     } else {
       setDetail(null);
       hydrateDrafts(store);
+    }
+
+    if (cachedDetail?.isFresh) {
+      setLoadingDetail(false);
+      return;
     }
 
     const controller = new AbortController();
@@ -169,7 +208,6 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
       try {
         const response = await fetch(`/api/territory/stores/${store.id}`, {
           signal: controller.signal,
-          cache: 'no-store',
         });
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
@@ -251,6 +289,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   const contactLabel = crm?.contact || contacts.map((contact) => contact.name).join(', ') || '—';
   const contactEmailLabel = crm?.contactEmail || crm?.primaryContactEmail || contacts[0]?.email || '—';
   const contactPhoneLabel = crm?.contactPhone || crm?.primaryContactPhone || contacts[0]?.phone || '—';
+  const recentOrders = detail?.analytics.recentOrders ?? [];
 
   async function copyAddress() {
     if (!addressValue || addressValue === 'No address') {
@@ -527,6 +566,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                 <SectionRow label="Last Contacted / Last Check-in" value={combinedLastTouchpoints} />
                 <SectionRow label="Last Sample Order Date" value={formatDateLabel(crm?.lastSampleOrderDate ?? null, '—')} />
                 <SectionRow label="Last Order Date" value={formatDateLabel(crm?.lastOrderDate ?? null, '—')} />
+                <SectionRow label="Last Order Amount" value={formatCurrency(crm?.lastOrderAmount)} />
                 <SectionRow label="Referral Source" value={crm?.referralSource || '—'} />
                 <SectionRow label="Contact" value={contactLabel} />
                 <SectionRow label="Contact Email" value={contactEmailLabel} />
@@ -729,6 +769,27 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                       {checkIn.createdByLabel ? ` · ${checkIn.createdByLabel}` : ''}
                     </p>
                     <p className="text-[14px] text-[#5e6169]">{checkIn.notePreview || 'No notes captured.'}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="border-b border-[#c6c7cb] px-5 py-4">
+                <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">Nabis Orders</p>
+                {recentOrders.length === 0 ? <p className="mt-1 text-[16px] text-[#1d1f23]">No linked Nabis orders found.</p> : null}
+                {recentOrders.map((order) => (
+                  <div key={order.id} className="mt-2 rounded-lg border border-[#c7c8cd] bg-[#f3f3f6] px-3 py-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[15px] font-semibold text-[#1d1f23]">Order {order.orderNumber}</p>
+                        <p className="text-[13px] text-[#5e6169]">
+                          {formatDateLabel(order.createdDate, 'No order date')} · {order.status}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-[15px] font-semibold text-[#1d1f23]">{formatCurrency(order.total)}</p>
+                    </div>
+                    <p className="mt-1 text-[13px] text-[#5e6169]">
+                      {order.deliveryDate ? `Delivery ${formatDateLabel(order.deliveryDate, '—')}` : 'Delivery date unavailable'}
+                      {order.salesRep ? ` · ${order.salesRep}` : ''}
+                    </p>
                   </div>
                 ))}
               </div>

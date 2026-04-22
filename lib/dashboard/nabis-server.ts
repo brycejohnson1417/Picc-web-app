@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { prisma } from '@/lib/db/prisma';
-import { getNabisSyncFreshness, syncNabisRetailersAndOrders } from '@/lib/server/nabis-sync';
+import { getNabisSyncFreshness, syncNabisOrders } from '@/lib/server/nabis-sync';
 import { excludedInternalTransferRetailers } from '@/lib/nabis/internal-transfers';
 import type { NabisDashboardMetadata, NabisDashboardResponse, SerializedNabisOrder } from '@/lib/dashboard/nabis-types';
 
@@ -66,7 +66,7 @@ export async function getDashboardPayload(input: {
   actor?: { clerkUserId?: string | null; email?: string | null };
 }) {
   if (input.forceRefresh) {
-    await syncNabisRetailersAndOrders(input.orgId, input.actor, { syncCrm: false });
+    await syncNabisOrders(input.orgId, input.actor);
   }
 
   const rows = await prisma.nabisOrder.findMany({

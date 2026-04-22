@@ -350,7 +350,7 @@ export function NabisSalesDashboard() {
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="inline-flex items-center gap-3 rounded-full border border-[#d9dce2] bg-white px-5 py-3 text-sm font-medium text-[#39414d] shadow-sm">
           <Loader2 className="h-4 w-4 animate-spin text-[#1d5eea]" />
-          Syncing live orders from the Nabis NY API...
+          Loading local Nabis order cache...
         </div>
       </div>
     );

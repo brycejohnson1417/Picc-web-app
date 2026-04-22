@@ -99,7 +99,7 @@ export default function RequestVendorDayPage() {
     <main className="min-h-screen bg-[linear-gradient(180deg,#f5f6f8_0%,#eef2f6_100%)] px-4 py-10">
       <div className="mx-auto max-w-3xl space-y-6">
         <header className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#c93412]">PICC Internal Platform</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#c93412]">PICC New York</p>
           <h1 className="text-4xl font-bold text-[#17181c]">Create a store vendor day request</h1>
           <p className="max-w-2xl text-sm text-[#5f6672]">
             Internal users can submit a store request into the dispatch queue here. This domain is internal-only; stores do not get a public request flow on `piccnewyork.org`.

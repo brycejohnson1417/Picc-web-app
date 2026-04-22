@@ -26,7 +26,11 @@ export async function GET(_request: Request, context: { params: Promise<{ storeI
 
   try {
     const detail = await loadTerritoryStoreDetail(storeId);
-    return NextResponse.json(detail);
+    return NextResponse.json(detail, {
+      headers: {
+        'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load store detail';
     return NextResponse.json({ error: message }, { status: message === 'Store not found' ? 404 : 500 });

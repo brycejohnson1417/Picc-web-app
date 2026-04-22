@@ -4,14 +4,14 @@ import './globals.css';
 import { Providers } from '@/components/layout/providers';
 
 export const metadata: Metadata = {
-  applicationName: 'PICC Internal Platform',
-  title: 'PICC Internal Platform',
+  applicationName: 'PICC New York',
+  title: 'PICC New York',
   description: 'Internal PICC platform for vendor days, dispatch, proof, payroll, accounts, and ROI.',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'PICC Internal Platform',
+    title: 'PICC New York',
   },
   formatDetection: {
     telephone: false,

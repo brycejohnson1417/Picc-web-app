@@ -1,5 +1,6 @@
 import 'server-only';
 
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import type {
   TerritoryStoreCheckIn,
@@ -17,6 +18,9 @@ type CachedContactRow = TerritoryStoreContact & {
 type NotionPropertyValue = {
   title?: Array<{ plain_text?: string }>;
   rich_text?: Array<{ plain_text?: string }>;
+  email?: string | null;
+  phone_number?: string | null;
+  url?: string | null;
   select?: { name?: string } | null;
   status?: { name?: string } | null;
   people?: Array<{ name?: string; person?: { email?: string | null } | null }>;
@@ -28,6 +32,13 @@ type NotionPropertyValue = {
     boolean?: boolean | null;
     date?: { start?: string | null } | null;
   } | null;
+  rollup?: {
+    type?: 'string' | 'number' | 'date' | 'array';
+    string?: string | null;
+    number?: number | null;
+    date?: { start?: string | null } | null;
+    array?: NotionPropertyValue[];
+  } | null;
   number?: number | null;
   checkbox?: boolean;
 };
@@ -35,6 +46,8 @@ type NotionPropertyValue = {
 type NotionPageResponse = {
   properties?: Record<string, NotionPropertyValue>;
 };
+
+const CANCELED_ORDER_STATUSES = new Set(['CANCELED', 'CANCELLED', 'VOID', 'VOIDED', 'REJECTED', 'REFUNDED']);
 
 type TerritoryStoreDetailServiceDeps = {
   getTerritorySnapshot: () => Promise<{ stores: TerritoryStorePin[] }>;
@@ -73,7 +86,7 @@ function readNumberProperty(property: NotionPropertyValue | undefined) {
   return null;
 }
 
-function readTextFromAnyProperty(property: NotionPropertyValue | undefined) {
+function readTextFromAnyProperty(property: NotionPropertyValue | undefined): string {
   if (!property) return '';
 
   const title = (property.title ?? []).map((item) => item?.plain_text ?? '').join('').trim();
@@ -82,6 +95,9 @@ function readTextFromAnyProperty(property: NotionPropertyValue | undefined) {
   const richText = (property.rich_text ?? []).map((item) => item?.plain_text ?? '').join('').trim();
   if (richText) return richText;
 
+  if (property.email) return property.email.trim();
+  if (property.phone_number) return property.phone_number.trim();
+  if (property.url) return property.url.trim();
   if (property.select?.name) return property.select.name.trim();
   if (property.status?.name) return property.status.name.trim();
 
@@ -98,6 +114,13 @@ function readTextFromAnyProperty(property: NotionPropertyValue | undefined) {
   if (property.formula?.type === 'string' && property.formula.string) return property.formula.string.trim();
   if (property.formula?.type === 'date' && property.formula.date?.start) return property.formula.date.start;
   if (property.formula?.type === 'number' && typeof property.formula.number === 'number') return String(property.formula.number);
+  if (property.rollup?.type === 'string' && property.rollup.string) return property.rollup.string.trim();
+  if (property.rollup?.type === 'date' && property.rollup.date?.start) return property.rollup.date.start;
+  if (property.rollup?.type === 'number' && typeof property.rollup.number === 'number') return String(property.rollup.number);
+  if (property.rollup?.type === 'array' && Array.isArray(property.rollup.array)) {
+    const values: string[] = property.rollup.array.map(readTextFromAnyProperty).filter(Boolean);
+    if (values.length > 0) return values.join(', ');
+  }
   if (typeof property.number === 'number') return String(property.number);
   if (typeof property.checkbox === 'boolean') return property.checkbox ? 'Yes' : 'No';
 
@@ -111,6 +134,27 @@ function toIsoDate(value: string) {
   return date.toISOString();
 }
 
+function dateToIso(value: Date | null | undefined) {
+  return value ? value.toISOString() : null;
+}
+
+function normalizeIdentity(value: string | null | undefined) {
+  const clean = value?.trim().toLowerCase();
+  return clean || null;
+}
+
+function uniqueOrderFilters(filters: Prisma.NabisOrderWhereInput[]) {
+  const seen = new Set<string>();
+  return filters.filter((filter) => {
+    const key = JSON.stringify(filter);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServiceDeps) {
   async function loadStoreCrmFields(store: TerritoryStorePin, contacts: CachedContactRow[]) {
     const page = await deps.notionRequest<NotionPageResponse>(`/pages/${store.notionPageId}`);
@@ -118,19 +162,19 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
     const firstContact = contacts[0];
 
     const contactText = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Contact']));
-    const contactEmail = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Contact Email', 'Email']));
-    const contactPhone = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Contact Phone', 'Phone']));
+    const contactEmail = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Contact Email', 'Contact Email (1)', 'Email', 'Nabis POC Email', 'Billing AP Email', 'VD Contact Email']));
+    const contactPhone = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Contact Phone', 'Contact Number', 'Phone', 'Nabis POC Phone', 'Billing AP Phone', 'VD Contact Number']));
     const primaryContactName = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact Name', 'Primary Contact']));
     const primaryContactBuyer = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact / Buyer', 'Primary Contact Buyer', 'Buyer']));
-    const primaryContactEmail = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact Email', 'Buyer Email', 'Contact Email']));
-    const primaryContactPhone = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact Phone', 'Buyer Phone', 'Contact Phone']));
+    const primaryContactEmail = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact Email', 'Buyer Email', 'Contact Email', 'Contact Email (1)', 'Nabis POC Email']));
+    const primaryContactPhone = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Primary Contact Phone', 'Buyer Phone', 'Contact Phone', 'Contact Number', 'Nabis POC Phone']));
     const rep = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Rep', 'PICC Rep', 'Sales Rep']));
     const accountManager = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Account Manager', 'Manager']));
-    const piccCreditStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['PICC Credit Status', 'Credit Status']));
+    const piccCreditStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['PICC Credit Status', 'Credit Status', 'Nabis Credit Rating', 'PICC Credit Status (Formula)', 'PICC Credit Status (1)']));
     const accountStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Account Status']));
     const lastOrderAmount = readNumberProperty(propertyValueByCandidates(properties, ['Last Order Amount', 'Latest Order Amount', 'Order Amount']));
     const lastContacted = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Last Contacted', 'Last Contact Date']));
-    const lastDeliveryDate = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Last Delivery Date', 'Most Recent Delivery Date']));
+    const lastDeliveryDate = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Last Delivery Date', 'Most Recent Delivery Date', 'Last Order Delivery Date']));
     const lastSampleOrderDate = readTextFromAnyProperty(
       propertyValueByCandidates(properties, ['Last Sample Order Date', 'Sample Order Date', 'Last Sample Date']),
     );
@@ -138,10 +182,10 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
     const referralSource = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Referral Source', 'Lead Source', 'Source']));
     const customerSince = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Customer Since', 'Customer Since Date', 'Start Date']));
     const pennyBundlePromoStatus = readTextFromAnyProperty(
-      propertyValueByCandidates(properties, ['Penny Bundle Promo Status', 'Penny Bundle Status', 'Penny Bundle']),
+      propertyValueByCandidates(properties, ['Penny Bundle Promo Status', 'Penny Bundle Status', 'Penny Bundle', 'Penny Bundle Promo']),
     );
     const pppStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['PPP Status']));
-    const headsetConnectionStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Headset Connection Status', 'Headset Status']));
+    const headsetConnectionStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Headset Connection Status', 'Headset Status', 'Headset Connection']));
     const productTracking = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Product Tracking']));
     const displayTracking = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Display Tracking']));
 
@@ -165,7 +209,7 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
       lastSampleOrderDate: toIsoDate(lastSampleOrderDate) ?? null,
       lastOrderDate: toIsoDate(lastOrderDate) ?? null,
       referralSource: referralSource || null,
-      customerSince: toIsoDate(customerSince) ?? customerSince ?? null,
+      customerSince: customerSince ? (toIsoDate(customerSince) ?? customerSince) : null,
       pennyBundlePromoStatus: pennyBundlePromoStatus || null,
       pppStatus: pppStatus || null,
       headsetConnectionStatus: headsetConnectionStatus || null,
@@ -174,25 +218,62 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
     };
   }
 
-  async function loadStoreMonthlyAnalytics(store: TerritoryStorePin) {
-    const orFilters: Array<{ licensedLocationId?: string; licensedLocationName?: string }> = [];
+  async function loadStoreNabisOrderSummary(store: TerritoryStorePin) {
+    const accountCandidates = await prisma.account.findMany({
+      where: {
+        OR: [
+          { notionPageId: store.notionPageId },
+          store.licenseNumber?.trim() ? { licenseNumber: store.licenseNumber.trim() } : undefined,
+          store.name.trim() ? { name: { equals: store.name.trim(), mode: 'insensitive' } } : undefined,
+        ].filter(Boolean) as Prisma.AccountWhereInput[],
+      },
+      select: {
+        id: true,
+        licensedLocationId: true,
+        nabisRetailerId: true,
+      },
+      take: 5,
+    });
+    const account = accountCandidates.find((candidate) => candidate.licensedLocationId || candidate.nabisRetailerId) ?? accountCandidates[0] ?? null;
+
+    const orFilters: Prisma.NabisOrderWhereInput[] = [];
+    if (account?.id) {
+      orFilters.push({ accountId: account.id });
+    }
+    if (account?.licensedLocationId?.trim()) {
+      orFilters.push({ licensedLocationId: account.licensedLocationId.trim() });
+    }
+    if (account?.nabisRetailerId?.trim()) {
+      orFilters.push({ nabisRetailerId: account.nabisRetailerId.trim() });
+    }
     if (store.licenseNumber?.trim()) {
       orFilters.push({ licensedLocationId: store.licenseNumber.trim() });
     }
-    orFilters.push({ licensedLocationName: store.name });
+    if (store.name.trim()) {
+      orFilters.push({ licensedLocationName: { equals: store.name.trim(), mode: 'insensitive' } });
+    }
+
+    const uniqueFilters = uniqueOrderFilters(orFilters);
 
     const rows = await prisma.nabisOrder.findMany({
       where: {
-        OR: orFilters,
+        OR: uniqueFilters,
+        isInternalTransfer: false,
+        NOT: [...CANCELED_ORDER_STATUSES].map((status) => ({ status })),
       },
       select: {
+        id: true,
+        externalOrderId: true,
+        orderNumber: true,
+        licensedLocationName: true,
+        orderCreatedDate: true,
         deliveryDate: true,
         createdAt: true,
+        status: true,
         orderTotal: true,
+        salesRep: true,
       },
-      orderBy: {
-        deliveryDate: 'asc',
-      },
+      orderBy: [{ orderCreatedDate: 'desc' }, { deliveryDate: 'desc' }, { createdAt: 'desc' }],
     });
 
     const now = new Date();
@@ -209,7 +290,7 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
     );
 
     for (const row of rows) {
-      const date = row.deliveryDate ?? row.createdAt;
+      const date = row.orderCreatedDate ?? row.deliveryDate ?? row.createdAt;
       const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
       const bucket = buckets.get(key);
       if (!bucket) {
@@ -222,7 +303,30 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
       bucket.revenue += orderTotal;
     }
 
-    return [...buckets.values()];
+    const latestOrder = rows[0] ?? null;
+
+    return {
+      monthly: [...buckets.values()],
+      recentOrders: rows.slice(0, 6).map((row) => ({
+        id: row.id,
+        orderNumber: row.orderNumber ?? row.externalOrderId,
+        createdDate: dateToIso(row.orderCreatedDate),
+        deliveryDate: dateToIso(row.deliveryDate),
+        status: row.status ?? 'UNKNOWN',
+        total: row.orderTotal ? Number(row.orderTotal) : 0,
+        salesRep: row.salesRep,
+        customerName: row.licensedLocationName,
+      })),
+      lastOrderDate: dateToIso(latestOrder?.orderCreatedDate),
+      lastDeliveryDate: dateToIso(latestOrder?.deliveryDate),
+      lastOrderAmount: latestOrder?.orderTotal ? Number(latestOrder.orderTotal) : null,
+      matchedAccountId: account?.id ?? null,
+      matchedBy: account?.id
+        ? 'account'
+        : uniqueFilters.some((filter) => normalizeIdentity(String((filter as { licensedLocationName?: { equals?: string } }).licensedLocationName?.equals ?? '')) === normalizeIdentity(store.name))
+          ? 'name'
+          : 'identifier',
+    };
   }
 
   async function loadTerritoryStoreDetail(storeId: string): Promise<TerritoryStoreDetailResponse> {
@@ -245,7 +349,7 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
 
     contacts.sort((a, b) => a.name.localeCompare(b.name));
 
-    const [checkIns, vendorDays, crm, analytics] = await Promise.all([
+    const [checkIns, vendorDays, crm, orderSummary] = await Promise.all([
       deps.loadStoreCheckIns(store),
       deps.loadStoreVendorDaySummary(store),
       loadStoreCrmFields(store, contacts).catch(() => ({
@@ -273,8 +377,21 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
         productTracking: null,
         displayTracking: null,
       })),
-      loadStoreMonthlyAnalytics(store).then((monthly) => ({ monthly })).catch(() => ({
+      loadStoreNabisOrderSummary(store).catch(() => ({
         monthly: [] as Array<{ month: string; orderCount: number; orderTotal: number; revenue: number }>,
+        recentOrders: [] as Array<{
+          id: string;
+          orderNumber: string;
+          createdDate: string | null;
+          deliveryDate: string | null;
+          status: string;
+          total: number;
+          salesRep: string | null;
+          customerName: string | null;
+        }>,
+        lastOrderDate: null as string | null,
+        lastDeliveryDate: null as string | null,
+        lastOrderAmount: null as number | null,
       })),
     ]);
 
@@ -291,14 +408,22 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
       })),
       checkIns,
       vendorDays,
-      crm,
-      analytics,
+      crm: {
+        ...crm,
+        lastOrderAmount: crm.lastOrderAmount ?? orderSummary.lastOrderAmount,
+        lastDeliveryDate: crm.lastDeliveryDate ?? orderSummary.lastDeliveryDate,
+        lastOrderDate: crm.lastOrderDate ?? orderSummary.lastOrderDate,
+      },
+      analytics: {
+        monthly: orderSummary.monthly,
+        recentOrders: orderSummary.recentOrders,
+      },
     };
   }
 
   return {
     loadStoreCrmFields,
-    loadStoreMonthlyAnalytics,
+    loadStoreNabisOrderSummary,
     loadTerritoryStoreDetail,
   };
 }

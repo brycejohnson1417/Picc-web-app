@@ -5,7 +5,7 @@ import { evaluateUserAccess } from '@/lib/auth/access-policy';
 import { AUTH_BYPASS_MODE } from '@/lib/config/runtime';
 
 export const metadata: Metadata = {
-  title: 'PICC Internal Platform',
+  title: 'PICC New York',
   description: 'Internal PICC operating system for accounts, routing, vendor days, dispatch, payroll, and field execution.',
 };
 

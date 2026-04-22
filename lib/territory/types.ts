@@ -132,6 +132,16 @@ export interface TerritoryStoreDetailResponse {
       orderTotal: number;
       revenue: number;
     }>;
+    recentOrders: Array<{
+      id: string;
+      orderNumber: string;
+      createdDate: string | null;
+      deliveryDate: string | null;
+      status: string;
+      total: number;
+      salesRep: string | null;
+      customerName: string | null;
+    }>;
   };
 }
 
