@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { TerritoryBoundaryListResponse, TerritoryMarkerListResponse, TerritoryStoresResponse } from '@/lib/territory/types';
 
@@ -58,7 +59,7 @@ export interface TerritoryStoreQueryInput {
   refreshNonce: number;
 }
 
-function buildStoresSearchParams(input: TerritoryStoreQueryInput) {
+function buildStoresSearchParams(input: TerritoryStoreQueryInput, options: { forceRefresh?: boolean } = {}) {
   const params = new URLSearchParams();
   if (input.search) params.set('q', input.search);
   for (const status of input.selectedStatuses) params.append('status', status);
@@ -71,12 +72,17 @@ function buildStoresSearchParams(input: TerritoryStoreQueryInput) {
   if (input.noLastSampleDeliveryDate) params.set('noLastSampleDeliveryDate', '1');
   if (input.sampleAccountTypeFilter !== 'all') params.set('sampleAccountTypeFilter', input.sampleAccountTypeFilter);
   if (input.lastOrderDateFilter !== 'all') params.set('lastOrderDateFilter', input.lastOrderDateFilter);
-  if (input.refreshNonce > 0) params.set('refresh', '1');
+  if (options.forceRefresh) params.set('refresh', '1');
   return params;
 }
 
 export function useTerritoryData(input: TerritoryStoreQueryInput) {
+  const consumedRefreshNonceRef = useRef(0);
+  const shouldForceRefresh = input.refreshNonce > 0 && input.refreshNonce !== consumedRefreshNonceRef.current;
   const storesUrl = `/api/territory/stores?${buildStoresSearchParams(input).toString()}`;
+  const requestStoresUrl = shouldForceRefresh
+    ? `/api/territory/stores?${buildStoresSearchParams(input, { forceRefresh: true }).toString()}`
+    : storesUrl;
   const cachedStores = readCachedJson<TerritoryStoresResponse>(storesUrl);
   const cachedBoundaries = readCachedJson<TerritoryBoundaryListResponse>('/api/territory/boundaries');
   const cachedMarkers = readCachedJson<TerritoryMarkerListResponse>('/api/territory/markers');
@@ -98,9 +104,15 @@ export function useTerritoryData(input: TerritoryStoreQueryInput) {
       input.refreshNonce,
     ],
     queryFn: async () => {
-      const payload = await fetchJson<TerritoryStoresResponse>(storesUrl, 'Failed to load stores');
-      writeCachedJson(storesUrl, payload);
-      return payload;
+      try {
+        const payload = await fetchJson<TerritoryStoresResponse>(requestStoresUrl, 'Failed to load stores');
+        writeCachedJson(storesUrl, payload);
+        return payload;
+      } finally {
+        if (shouldForceRefresh) {
+          consumedRefreshNonceRef.current = input.refreshNonce;
+        }
+      }
     },
     initialData: cachedStores,
     staleTime: STORES_STALE_MS,
