@@ -24,7 +24,7 @@ export function MobileHeader({ title, left, right, children, className }: Mobile
           <div className="min-w-16">{left}</div>
           {title ? (
             <div className="absolute left-1/2 -translate-x-1/2 text-center">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6a7583]">PICC Internal Platform</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6a7583]">PICC New York</p>
               <h1 className="text-[16px] font-semibold tracking-[0.2px] text-[#18212d] md:text-[18px]">{title}</h1>
             </div>
           ) : null}

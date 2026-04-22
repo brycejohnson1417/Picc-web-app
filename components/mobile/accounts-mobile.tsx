@@ -1,11 +1,10 @@
 'use client';
 
-import { AlertTriangle, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { useAppAccess } from '@/components/auth/app-access-provider';
 import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
 import { MobileHeader } from '@/components/mobile/mobile-header';
@@ -21,7 +20,6 @@ function firstLetter(name: string) {
 }
 
 export function AccountsMobile() {
-  const appAccess = useAppAccess();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
@@ -147,16 +145,7 @@ export function AccountsMobile() {
     <div className="min-h-[calc(100dvh-92px)] bg-[linear-gradient(180deg,#f7f9fc_0%,#eef2f7_100%)]">
       <MobileHeader
         title="Accounts"
-        right={appAccess.canEdit ? (
-          <button
-            type="button"
-            className="text-[42px] leading-none"
-            onClick={() => toast.message('Create account is available in desktop mode.')}
-            aria-label="Create account"
-          >
-            <Plus className="ml-auto h-9 w-9" />
-          </button>
-        ) : null}
+        right={null}
       >
         <SegmentedControl
           value={scope}

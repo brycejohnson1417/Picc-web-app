@@ -99,7 +99,7 @@ export function AppShell({
             <div className="flex items-center gap-2">
               <div className="rounded-2xl border border-[#d7dde7] bg-white px-3 py-2 shadow-[0_8px_24px_rgba(31,35,43,0.06)]">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6a7583]">PICC</p>
-                <p className="text-[12px] font-semibold tracking-[0.02em] text-[#18212d]">Internal Platform</p>
+                <p className="text-[12px] font-semibold tracking-[0.02em] text-[#18212d]">PICC New York</p>
               </div>
               <span className="rounded-full border border-[#c7cfde] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#304153]">
                 {roleLabel(access.role)}

@@ -188,7 +188,7 @@ export function RouteMobile() {
               {savedEditing ? 'Done' : 'Edit'}
             </button>
           ) : (
-            <button type="button" className="grid h-10 w-10 place-items-center" onClick={() => setShowAddModal(true)} aria-label="Add location">
+            <button type="button" className="grid h-10 w-10 place-items-center" onClick={() => setShowAddModal(true)} aria-label="Choose route accounts">
               <Plus className="h-10 w-10" />
             </button>
           )
@@ -209,16 +209,16 @@ export function RouteMobile() {
           {selectedStops.length === 0 ? (
             <div className="px-10 py-12 text-center">
               <h2 className="text-[56px] font-semibold text-[#5f5d5e]">Let&apos;s hit the road!</h2>
-              <p className="mt-4 text-[22px] leading-8 text-[#606066]">Build your route by adding accounts, then optimize for driving or transit.</p>
+              <p className="mt-4 text-[22px] leading-8 text-[#606066]">Build your route from existing accounts, then optimize for driving or transit.</p>
               <button onClick={() => setShowAddModal(true)} className="mt-8 w-full rounded-[38px] bg-[#4f8edf] px-6 py-4 text-[23px] font-semibold text-white">
-                + Add Location
+                Choose Accounts
               </button>
             </div>
           ) : (
             <>
               <div className="border-b border-[#c9cad0] px-6 py-5">
                 <button onClick={() => setShowAddModal(true)} className="w-full rounded-[38px] bg-[#4f8edf] px-6 py-4 text-[23px] font-semibold text-white">
-                  + Add Location
+                  Choose Accounts
                 </button>
                 <p className="mt-3 text-center text-[20px] font-semibold text-[#595c62]">
                   <Check className="mr-2 inline h-6 w-6" /> Route Updated
@@ -419,7 +419,6 @@ function AddLocationModal({
   selectedStopIds: string[];
   onToggleStop: (id: string) => void;
 }) {
-  const [mode, setMode] = useState<'accounts' | 'quick-stop'>('accounts');
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const filtered = useMemo(() => {
@@ -446,29 +445,17 @@ function AddLocationModal({
     <div className="fixed inset-0 z-[5200] bg-black/35">
       <div className="mx-auto h-full max-w-[var(--app-shell-max)] bg-[#e6e6e9]">
         <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
-          <div className="mb-2 flex items-center justify-between text-sm opacity-90">
-            <span className="font-semibold">12:18</span>
-            <span className="font-semibold">100%</span>
-          </div>
           <div className="relative flex items-center justify-between py-2">
             <button onClick={onClose} className="min-w-14 text-left" aria-label="Close">
               <X className="h-8 w-8" />
             </button>
-            <h1 className="absolute left-1/2 -translate-x-1/2 text-[28px] font-semibold">Add Locations</h1>
-            <span className="min-w-14 text-right text-[24px] text-white/45">Add to route</span>
+            <h1 className="absolute left-1/2 -translate-x-1/2 text-[24px] font-semibold">Choose Accounts</h1>
+            <span className="min-w-14 text-right text-[16px] font-semibold text-white/70">Route</span>
           </div>
-          <SegmentedControl
-            value={mode}
-            onChange={(value) => setMode(value as 'accounts' | 'quick-stop')}
-            options={[
-              { value: 'accounts', label: 'Accounts' },
-              { value: 'quick-stop', label: 'Quick Stop' },
-            ]}
-          />
         </div>
 
         <div className="px-4 py-3">
-          <MobileSearch value={search} onChange={onSearchChange} placeholder="Search Locations" />
+          <MobileSearch value={search} onChange={onSearchChange} placeholder="Search Accounts" />
         </div>
 
         <div className="relative h-[calc(100vh-320px)] overflow-auto border-t border-[#c8c9ce] pb-8">
