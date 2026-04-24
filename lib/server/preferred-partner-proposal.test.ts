@@ -179,6 +179,79 @@ describe('calculatePreferredPartnerProposalDraft', () => {
     });
   });
 
+  it('allows #Juan single demand to fall back to Ichi singles only', () => {
+    const rows: PreferredPartnerProposalInputRow[] = [
+      buildRow({
+        productName: 'Juan Roll Golden Hour Pre Roll 1g',
+        totalUnitsSold: 10,
+        minimumSuggestedOrder: 140,
+      }),
+      buildRow({
+        productName: 'Juan Roll Midnight Affair Pre Roll 1g',
+        totalUnitsSold: 10,
+        minimumSuggestedOrder: 210,
+      }),
+    ];
+
+    const draft = calculatePreferredPartnerProposalDraft({
+      rows,
+      inventoryRows: [
+        buildInventoryRow({ skuCode: 'IR-SS', skuName: 'ICHI-ROLL | Uninfused Pre-roll | 1G SINGLE | Super Slushie', casePackSize: 10, pricePerUnit: 4.5, availableUnits: 50 }),
+        buildInventoryRow({ skuCode: 'IR-TW', skuName: 'ICHI-ROLL | Uninfused Pre-roll | 1G SINGLE | Time Warp', casePackSize: 10, pricePerUnit: 4.5, availableUnits: 50 }),
+      ],
+      historicalOrders: [
+        {
+          orderDate: '2026-04-01',
+          breakdownRows: [{ priceKey: '#Juan-Roll|Single|1g', quantity: 100 }],
+          lines: [
+            { productName: 'Juan Roll Golden Hour Pre Roll 1g', quantity: 50, priceKey: '#Juan-Roll|Single|1g' },
+            { productName: 'Juan Roll Midnight Affair Pre Roll 1g', quantity: 50, priceKey: '#Juan-Roll|Single|1g' },
+          ],
+        },
+      ],
+    });
+
+    expect(quantityByPriceKey(draft)).toMatchObject({
+      'Ichi-Roll|Single|1g': 100,
+    });
+    expect(quantityByPriceKey(draft)['#Juan-Roll|Single|1g']).toBeUndefined();
+    expect(draft.lines.every((line) => line.priceKey === 'Ichi-Roll|Single|1g')).toBe(true);
+    expect(draft.lines.every((line) => line.quantity % line.casePackSize === 0)).toBe(true);
+    expect(draft.omittedDemandFamilies).toEqual([]);
+  });
+
+  it('allows #Juan pack demand to fall back to Ichi packs only', () => {
+    const rows: PreferredPartnerProposalInputRow[] = [
+      buildRow({
+        productName: 'Juan Roll Happy Purps Pre Rolls 4pk 4g',
+        totalUnitsSold: 9,
+        minimumSuggestedOrder: 14,
+      }),
+    ];
+
+    const draft = calculatePreferredPartnerProposalDraft({
+      rows,
+      inventoryRows: [
+        buildInventoryRow({ skuCode: 'IR-AH4', skuName: 'ICHI-ROLL | Uninfused Pre-roll | 4-PACK (4G) | Afterglow Haze', casePackSize: 5, pricePerUnit: 14.4, availableUnits: 20 }),
+      ],
+      historicalOrders: [
+        {
+          orderDate: '2026-04-01',
+          breakdownRows: [{ priceKey: '#Juan-Roll|4-Pack|4g', quantity: 15 }],
+          lines: [{ productName: 'Juan Roll Happy Purps Pre Rolls 4pk 4g', quantity: 15, priceKey: '#Juan-Roll|4-Pack|4g' }],
+        },
+      ],
+    });
+
+    expect(quantityByPriceKey(draft)).toMatchObject({
+      'Ichi-Roll|4-Pack|4g': 15,
+    });
+    expect(quantityByPriceKey(draft)['#Juan-Roll|4-Pack|4g']).toBeUndefined();
+    expect(draft.lines.every((line) => line.priceKey === 'Ichi-Roll|4-Pack|4g')).toBe(true);
+    expect(draft.lines.every((line) => line.quantity % line.casePackSize === 0)).toBe(true);
+    expect(draft.omittedDemandFamilies).toEqual([]);
+  });
+
   it('matches the known Culture House family totals and keeps whole-case line quantities', () => {
     const rows: PreferredPartnerProposalInputRow[] = [
       buildRow({ productName: 'Juan Roll Golden Hour Pre Roll 1g', totalUnitsSold: 58, minimumSuggestedOrder: 88 }),

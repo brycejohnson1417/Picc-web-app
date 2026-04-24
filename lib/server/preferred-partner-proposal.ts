@@ -165,6 +165,13 @@ type FamilyHistory = {
   }>;
 };
 
+const SINGLE_SUBSTITUTION_PRICE_KEYS = new Map<string, string[]>([
+  ['#Juan-Roll|Single|1g', ['Ichi-Roll|Single|1g']],
+  ['Ichi-Roll|Single|1g', ['#Juan-Roll|Single|1g']],
+  ['#Juan-Roll|4-Pack|4g', ['Ichi-Roll|4-Pack|4g']],
+  ['Ichi-Roll|4-Pack|4g', ['#Juan-Roll|4-Pack|4g']],
+]);
+
 export type PreferredPartnerProposalResponse = {
   ok: true;
   accountId: string | null;
@@ -539,6 +546,10 @@ function resolveFamilyTargetUnits(family: FamilyDemand, history: FamilyHistory |
   }
 
   return roundFamilyTarget(Math.max(1, history.lastQuantity), family.price);
+}
+
+function candidatePriceKeysForFamily(priceKey: string) {
+  return [priceKey, ...(SINGLE_SUBSTITUTION_PRICE_KEYS.get(priceKey) ?? [])];
 }
 
 export function buildProposalFamilies(rows: PreferredPartnerProposalInputRow[], restockIntervalDays = PPP_RESTOCK_INTERVAL_DAYS) {
@@ -929,7 +940,8 @@ export function calculatePreferredPartnerProposalDraft(input: {
       }
     }
 
-    const familyCandidates = [...(candidatesByPriceKey.get(family.priceKey) ?? [])]
+    const familyCandidates = candidatePriceKeysForFamily(family.priceKey)
+      .flatMap((priceKey) => candidatesByPriceKey.get(priceKey) ?? [])
       .map((candidate) => ({
         candidate,
         score: scoreCandidate(candidate, family, allocationHistory),
