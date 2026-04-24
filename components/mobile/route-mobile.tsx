@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, Check, ChevronRight, GripHorizontal, ListChecks, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronRight, ListChecks, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -99,8 +99,21 @@ export function RouteMobile() {
   const totalDistanceMeters = activeOptimized?.totalDistanceMeters ?? legs.reduce((sum, leg) => sum + leg.distanceMeters, 0);
   const totalDurationSeconds = activeOptimized?.totalDurationSeconds ?? legs.reduce((sum, leg) => sum + leg.durationSeconds, 0);
 
+  function moveStop(stopId: string, direction: 'up' | 'down') {
+    const currentOrder = orderedStops.map((stop) => stop.id);
+    const currentIndex = currentOrder.indexOf(stopId);
+    if (currentIndex < 0) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= currentOrder.length) return;
+
+    const nextOrder = [...currentOrder];
+    [nextOrder[currentIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[currentIndex]];
+    routePlan.setOrderedStopIds(nextOrder);
+  }
+
   async function optimizeRoute() {
-    if (selectedStops.length < 2) {
+    if (orderedStops.length < 2) {
       toast.error('Add at least 2 locations to optimize.');
       return;
     }
@@ -112,7 +125,7 @@ export function RouteMobile() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: optMode,
-          stops: selectedStops.map((stop) => ({ id: stop.id, name: stop.name, lat: stop.lat, lng: stop.lng })),
+          stops: orderedStops.map((stop) => ({ id: stop.id, name: stop.name, lat: stop.lat, lng: stop.lng })),
         }),
       });
       const payload = await response.json();
@@ -258,8 +271,27 @@ export function RouteMobile() {
                         Travel {formatDuration(previousLeg?.durationSeconds ?? 0)} · {formatDistance(previousLeg?.distanceMeters ?? 0)}
                       </p>
                     ) : null}
-                    <div className="grid grid-cols-[34px_38px_86px_74px_1fr_28px] items-center gap-2 border-b border-[#cbccd2] px-4 py-3">
-                      <GripHorizontal className="h-6 w-6 text-[#b8b9be]" />
+                    <div className="grid grid-cols-[36px_38px_86px_74px_1fr_28px] items-center gap-2 border-b border-[#cbccd2] px-4 py-3">
+                      <div className="flex flex-col items-center gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Move ${stop.name} up`}
+                          className="grid h-4 w-4 place-items-center rounded text-[#7d8088] disabled:text-[#c9cad0]"
+                          onClick={() => moveStop(stop.id, 'up')}
+                          disabled={index === 0}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Move ${stop.name} down`}
+                          className="grid h-4 w-4 place-items-center rounded text-[#7d8088] disabled:text-[#c9cad0]"
+                          onClick={() => moveStop(stop.id, 'down')}
+                          disabled={index === orderedStops.length - 1}
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </button>
+                      </div>
                       <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-[#41b64b] text-[18px] font-semibold text-[#2c7f31]">{index + 1}</span>
                       <div>
                         <p className="text-[17px] font-semibold text-[#4d4f55]">{timeLabel}</p>
@@ -310,17 +342,30 @@ export function RouteMobile() {
             <ActionIconButton label={optimizing ? '...' : 'optimize'} onClick={optimizeRoute} icon={<RotateCcw className="h-7 w-7" />} disabled={optimizing} />
             <ActionIconButton
               label="save"
-              onClick={() => {
+              onClick={async () => {
                 if (selectedStops.length === 0) {
                   toast.error('Add at least 1 location before saving.');
                   return;
                 }
-                const name = `Route ${new Date().toLocaleDateString()}`;
-                routePlan.saveCurrentRoute(name, {
-                  mode: optMode,
-                  optimizedRoute: activeOptimized,
-                });
-                toast.success('Route saved');
+                const suggestedName = `Route ${new Date().toLocaleDateString()}`;
+                const name = window.prompt('Name this route', suggestedName);
+                if (name === null) {
+                  return;
+                }
+                if (!name.trim()) {
+                  toast.error('Enter a route name before saving.');
+                  return;
+                }
+
+                try {
+                  await routePlan.saveCurrentRoute(name, {
+                    mode: optMode,
+                    optimizedRoute: activeOptimized,
+                  });
+                  toast.success('Route saved');
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : 'Failed to save route');
+                }
               }}
               icon={<Save className="h-7 w-7" />}
             />
@@ -360,6 +405,14 @@ function SavedRoutesList({ editing, onLoadRoute }: { editing: boolean; onLoadRou
     return routePlan.savedRoutes.filter((route) => route.name.toLowerCase().includes(q));
   }, [routePlan.savedRoutes, search]);
 
+  if (routePlan.savedRoutesLoading && routePlan.savedRoutes.length === 0) {
+    return <p className="px-6 py-8 text-[22px] text-[#6f7178]">Loading saved routes...</p>;
+  }
+
+  if (routePlan.savedRoutesError && routePlan.savedRoutes.length === 0) {
+    return <p className="px-6 py-8 text-[22px] text-[#6f7178]">{routePlan.savedRoutesError}</p>;
+  }
+
   if (routePlan.savedRoutes.length === 0) {
     return <p className="px-6 py-8 text-[22px] text-[#6f7178]">No saved routes yet.</p>;
   }
@@ -389,7 +442,14 @@ function SavedRoutesList({ editing, onLoadRoute }: { editing: boolean; onLoadRou
                 type="button"
                 aria-label={`Delete ${route.name}`}
                 className="grid h-10 w-10 place-items-center rounded-xl text-[#c14a4a]"
-                onClick={() => routePlan.deleteSavedRoute(route.id)}
+                onClick={async () => {
+                  try {
+                    await routePlan.deleteSavedRoute(route.id);
+                    toast.success('Route deleted');
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : 'Failed to delete route');
+                  }
+                }}
               >
                 <Trash2 className="h-6 w-6" />
               </button>

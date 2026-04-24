@@ -194,6 +194,7 @@ async function computeGoogleRoute(input: {
   const intermediates = input.stops.slice(1, -1);
   const billedOptimizeSku = input.optimize && intermediates.length > 1;
   const travelMode = input.mode === 'bike' ? 'BICYCLE' : 'DRIVE';
+  const routingPreference = input.mode === 'car' ? (billedOptimizeSku ? 'TRAFFIC_UNAWARE' : 'TRAFFIC_AWARE_OPTIMAL') : 'TRAFFIC_UNAWARE';
   const pendingCostUsd =
     estimateGoogleUsageCostUsd('routes_compute', 1) +
     (billedOptimizeSku ? estimateGoogleUsageCostUsd('routes_optimize', 1) : 0);
@@ -238,7 +239,7 @@ async function computeGoogleRoute(input: {
           },
         })),
         travelMode,
-        routingPreference: input.mode === 'car' ? 'TRAFFIC_AWARE_OPTIMAL' : 'TRAFFIC_UNAWARE',
+        routingPreference,
         optimizeWaypointOrder: billedOptimizeSku,
         polylineQuality: 'HIGH_QUALITY',
         languageCode: 'en-US',

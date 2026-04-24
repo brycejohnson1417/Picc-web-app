@@ -124,8 +124,31 @@ export function TerritoryClient() {
     resetRouteOptimization();
   }
 
+  function moveRouteStop(storeId: string, direction: 'up' | 'down') {
+    setRouteState((current) => {
+      const currentOrder = current.orderedStopIds.length > 0 ? [...current.orderedStopIds] : [...current.selectedStopIds];
+      const currentIndex = currentOrder.indexOf(storeId);
+      if (currentIndex < 0) {
+        return current;
+      }
+
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= currentOrder.length) {
+        return current;
+      }
+
+      [currentOrder[currentIndex], currentOrder[targetIndex]] = [currentOrder[targetIndex], currentOrder[currentIndex]];
+
+      return {
+        ...current,
+        orderedStopIds: currentOrder,
+      };
+    });
+    resetRouteOptimization();
+  }
+
   async function handleOptimizeRoute() {
-    if (selectedStops.length < 2) {
+    if (orderedStops.length < 2) {
       toast.error('Select at least 2 stops before optimizing.');
       return;
     }
@@ -139,7 +162,7 @@ export function TerritoryClient() {
         },
         body: JSON.stringify({
           mode: routeMode,
-          stops: selectedStops.map((stop) => ({
+          stops: orderedStops.map((stop) => ({
             id: stop.id,
             name: stop.name,
             lat: stop.lat,
@@ -345,6 +368,7 @@ export function TerritoryClient() {
                   setRouteState((current) => removeRouteStop(current, storeId));
                   resetRouteOptimization();
                 }}
+                onMoveStop={moveRouteStop}
                 onClearStops={() => {
                   setRouteState((current) => clearRouteStops(current));
                   resetRouteOptimization();

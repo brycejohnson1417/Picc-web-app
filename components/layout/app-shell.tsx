@@ -59,7 +59,6 @@ export function AppShell({
   const pathname = usePathname();
   const isTerritoryRoute = pathname === '/territory' || pathname.startsWith('/territory/');
   const routePlan = useRoutePlan();
-  const { signOut } = useClerk();
   const [commandMounted, setCommandMounted] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const tabs = access.role === 'BRAND_AMBASSADOR' ? brandAmbassadorTabs : defaultTabs;
@@ -114,16 +113,7 @@ export function AppShell({
                     <Settings className="h-4 w-4" />
                     Settings
                   </Link>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]"
-                    onClick={() => {
-                      void signOut({ redirectUrl: '/sign-in' });
-                    }}
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Sign Out
-                  </button>
+                  <SignOutAction />
                 </div>
               </details>
             </div>
@@ -158,5 +148,41 @@ export function AppShell({
         </nav>
       </div>
     </AppAccessProvider>
+  );
+}
+
+function SignOutAction() {
+  const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+  if (!hasClerk) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-[#a0a7b3]"
+      >
+        <LogOut className="h-4 w-4" />
+        Sign Out
+      </button>
+    );
+  }
+
+  return <ClerkSignOutAction />;
+}
+
+function ClerkSignOutAction() {
+  const { signOut } = useClerk();
+
+  return (
+    <button
+      type="button"
+      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]"
+      onClick={() => {
+        void signOut({ redirectUrl: '/sign-in' });
+      }}
+    >
+      <LogOut className="h-4 w-4" />
+      Sign Out
+    </button>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Bike, Car, ExternalLink, Navigation2, Trash2, Train } from 'lucide-react';
+import { ArrowDown, ArrowUp, Bike, Car, ExternalLink, Navigation2, Trash2, Train } from 'lucide-react';
 import { Button } from '@/components/ui';
 import type { RouteMode, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,7 @@ interface RouteSheetProps {
   onOptimize: () => void;
   onLaunchDirections: () => void;
   onRemoveStop: (storeId: string) => void;
+  onMoveStop: (storeId: string, direction: 'up' | 'down') => void;
   onClearStops: () => void;
 }
 
@@ -31,6 +32,7 @@ export function RouteSheet({
   onOptimize,
   onLaunchDirections,
   onRemoveStop,
+  onMoveStop,
   onClearStops,
 }: RouteSheetProps) {
   return (
@@ -80,6 +82,19 @@ export function RouteSheet({
         ) : (
           orderedStops.map((stop, index) => (
             <div key={stop.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-900">
+              <div className="flex flex-col gap-0.5">
+                <button type="button" onClick={() => onMoveStop(stop.id, 'up')} disabled={index === 0} className="rounded p-0.5 text-slate-500 disabled:text-slate-300">
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMoveStop(stop.id, 'down')}
+                  disabled={index === orderedStops.length - 1}
+                  className="rounded p-0.5 text-slate-500 disabled:text-slate-300"
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                </button>
+              </div>
               <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-900 text-[11px] font-semibold text-white">{index + 1}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{stop.name}</p>

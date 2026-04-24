@@ -138,30 +138,36 @@ function getMissingEnv() {
 }
 
 async function ensureDemoWorkspace() {
-  await prisma.organizationWorkspace.upsert({
-    where: { id: DEMO_ORG_ID },
-    update: {},
-    create: {
-      id: DEMO_ORG_ID,
-      clerkOrgId: DEMO_ORG_ID,
-      name: 'PICC Demo Workspace',
-    },
-  });
+  try {
+    await prisma.organizationWorkspace.upsert({
+      where: { id: DEMO_ORG_ID },
+      update: {},
+      create: {
+        id: DEMO_ORG_ID,
+        clerkOrgId: DEMO_ORG_ID,
+        name: 'PICC Demo Workspace',
+      },
+    });
 
-  await prisma.membership.upsert({
-    where: {
-      orgId_clerkUserId: {
+    await prisma.membership.upsert({
+      where: {
+        orgId_clerkUserId: {
+          orgId: DEMO_ORG_ID,
+          clerkUserId: DEMO_USER_ID,
+        },
+      },
+      update: { active: true, role: Role.ADMIN },
+      create: {
         orgId: DEMO_ORG_ID,
         clerkUserId: DEMO_USER_ID,
+        role: Role.ADMIN,
+        source: DEMO_MODE ? 'DEMO_MODE' : 'AUTH_BYPASS_MODE',
+        active: true,
       },
-    },
-    update: { active: true, role: Role.ADMIN },
-    create: {
-      orgId: DEMO_ORG_ID,
-      clerkUserId: DEMO_USER_ID,
-      role: Role.ADMIN,
-      source: DEMO_MODE ? 'DEMO_MODE' : 'AUTH_BYPASS_MODE',
-      active: true,
-    },
-  });
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Demo workspace bootstrap skipped because the database is unavailable.', error);
+    }
+  }
 }

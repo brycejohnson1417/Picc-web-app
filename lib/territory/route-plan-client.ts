@@ -8,7 +8,10 @@ export interface SavedRoute {
   name: string;
   stopIds: string[];
   createdAt: string;
+  updatedAt?: string;
   mode?: RouteMode;
+  totalDistanceMeters?: number;
+  totalDurationSeconds?: number;
   optimizedRoute?: TerritoryOptimizedRouteResponse | null;
 }
 
@@ -83,7 +86,14 @@ function readStorage(): RoutePlanStorage {
           const candidate = route as SavedRoute;
           const modeIsValid = candidate.mode === undefined || isValidRouteMode(candidate.mode);
           const optimizedRouteIsValid = candidate.optimizedRoute === undefined || candidate.optimizedRoute === null || isValidOptimizedRoute(candidate.optimizedRoute);
-          return typeof candidate.id === 'string' && typeof candidate.name === 'string' && isValidStringArray(candidate.stopIds) && typeof candidate.createdAt === 'string' && modeIsValid && optimizedRouteIsValid;
+          return (
+            typeof candidate.id === 'string' &&
+            typeof candidate.name === 'string' &&
+            isValidStringArray(candidate.stopIds) &&
+            typeof candidate.createdAt === 'string' &&
+            modeIsValid &&
+            optimizedRouteIsValid
+          );
         })
       : [];
 
@@ -112,19 +122,20 @@ function uniqueIds(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function routeFingerprint(route: SavedRoute) {
+  return `${route.name.trim().toLowerCase()}|${route.mode ?? ''}|${route.stopIds.join('|')}`;
+}
+
+function mergeSavedRoutes(remoteRoutes: SavedRoute[], cachedRoutes: SavedRoute[]) {
+  const remoteFingerprints = new Set(remoteRoutes.map(routeFingerprint));
+  const localOnlyRoutes = cachedRoutes.filter((route) => route.id.startsWith('route_') && !remoteFingerprints.has(routeFingerprint(route)));
+  return [...remoteRoutes, ...localOnlyRoutes].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
 export function useRoutePlan() {
   const [state, setState] = useState<RoutePlanStorage>(INITIAL_STATE);
-
-  useEffect(() => {
-    const refresh = () => setState(readStorage());
-    refresh();
-    window.addEventListener(EVENT_NAME, refresh);
-    window.addEventListener('storage', refresh);
-    return () => {
-      window.removeEventListener(EVENT_NAME, refresh);
-      window.removeEventListener('storage', refresh);
-    };
-  }, []);
+  const [savedRoutesLoading, setSavedRoutesLoading] = useState(true);
+  const [savedRoutesError, setSavedRoutesError] = useState<string | null>(null);
 
   const updateState = useCallback((updater: (prev: RoutePlanStorage) => RoutePlanStorage) => {
     const next = updater(readStorage());
@@ -143,6 +154,45 @@ export function useRoutePlan() {
     setState(normalized);
   }, []);
 
+  const refreshSavedRoutes = useCallback(async () => {
+    setSavedRoutesLoading(true);
+    setSavedRoutesError(null);
+
+    try {
+      const response = await fetch('/api/territory/saved-routes', {
+        cache: 'no-store',
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; routes?: SavedRoute[] };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Failed to load saved routes');
+      }
+
+      const remoteRoutes = Array.isArray(payload.routes) ? payload.routes : [];
+      updateState((prev) => ({
+        ...prev,
+        savedRoutes: mergeSavedRoutes(remoteRoutes, prev.savedRoutes),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load saved routes';
+      setSavedRoutesError(message);
+    } finally {
+      setSavedRoutesLoading(false);
+    }
+  }, [updateState]);
+
+  useEffect(() => {
+    const refresh = () => setState(readStorage());
+    refresh();
+    void refreshSavedRoutes();
+    window.addEventListener(EVENT_NAME, refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener(EVENT_NAME, refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, [refreshSavedRoutes]);
+
   const orderedStopIds = useMemo(() => {
     if (state.orderedStopIds.length > 0) {
       return state.orderedStopIds;
@@ -155,6 +205,8 @@ export function useRoutePlan() {
     orderedStopIds,
     savedRoutes: state.savedRoutes,
     optimizedRoute: state.optimizedRoute,
+    savedRoutesLoading,
+    savedRoutesError,
     selectedCount: state.selectedStopIds.length,
     toggleStop: (stopId: string) =>
       updateState((prev) => {
@@ -200,27 +252,51 @@ export function useRoutePlan() {
         ...prev,
         optimizedRoute: null,
       })),
-    saveCurrentRoute: (
+    refreshSavedRoutes,
+    saveCurrentRoute: async (
       name: string,
       options?: {
         mode?: RouteMode;
         optimizedRoute?: TerritoryOptimizedRouteResponse | null;
       },
-    ) =>
+    ) => {
+      const current = readStorage();
+      const stopIds = (current.orderedStopIds.length > 0 ? current.orderedStopIds : current.selectedStopIds).filter(Boolean);
+      if (stopIds.length === 0) {
+        throw new Error('Add at least 1 location before saving.');
+      }
+
+      const response = await fetch('/api/territory/saved-routes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name.trim() || `Route ${new Date().toLocaleDateString()}`,
+          mode: options?.mode ?? current.optimizedRoute?.mode ?? 'car',
+          stopIds,
+          totalDistanceMeters: options?.optimizedRoute?.totalDistanceMeters ?? current.optimizedRoute?.totalDistanceMeters ?? 0,
+          totalDurationSeconds: options?.optimizedRoute?.totalDurationSeconds ?? current.optimizedRoute?.totalDurationSeconds ?? 0,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; route?: SavedRoute };
+
+      if (!response.ok || !payload.route) {
+        throw new Error(payload.error ?? 'Failed to save route');
+      }
+
+      const savedRoute: SavedRoute = {
+        ...payload.route,
+        optimizedRoute: options?.optimizedRoute ?? current.optimizedRoute,
+      };
+
       updateState((prev) => ({
         ...prev,
-        savedRoutes: [
-          {
-            id: `route_${Date.now()}`,
-            name: name.trim() || `Route ${new Date().toLocaleDateString()}`,
-            stopIds: prev.orderedStopIds.length > 0 ? prev.orderedStopIds : prev.selectedStopIds,
-            createdAt: new Date().toISOString(),
-            mode: options?.mode,
-            optimizedRoute: options?.optimizedRoute ?? prev.optimizedRoute,
-          },
-          ...prev.savedRoutes,
-        ].slice(0, 100),
-      })),
+        savedRoutes: [savedRoute, ...prev.savedRoutes.filter((route) => route.id !== savedRoute.id)].slice(0, 100),
+      }));
+
+      return savedRoute;
+    },
     loadSavedRoute: (routeId: string) =>
       updateState((prev) => {
         const route = prev.savedRoutes.find((item) => item.id === routeId);
@@ -232,10 +308,27 @@ export function useRoutePlan() {
           optimizedRoute: route.optimizedRoute ?? null,
         };
       }),
-    deleteSavedRoute: (routeId: string) =>
+    deleteSavedRoute: async (routeId: string) => {
+      if (routeId.startsWith('route_')) {
+        updateState((prev) => ({
+          ...prev,
+          savedRoutes: prev.savedRoutes.filter((route) => route.id !== routeId),
+        }));
+        return;
+      }
+
+      const response = await fetch(`/api/territory/saved-routes/${encodeURIComponent(routeId)}`, {
+        method: 'DELETE',
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Failed to delete saved route');
+      }
+
       updateState((prev) => ({
         ...prev,
         savedRoutes: prev.savedRoutes.filter((route) => route.id !== routeId),
-      })),
+      }));
+    },
   };
 }
