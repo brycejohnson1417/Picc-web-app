@@ -4,7 +4,8 @@ import * as XLSX from 'xlsx';
 import { resolveAccountIdentity } from '@/lib/server/account-identity';
 import { loadNabisDaysOffRows, loadNyInventoryRows, loadNyWarehouseRows } from '@/lib/server/nabis-api';
 import { loadTerritoryStoreDetail } from '@/lib/server/notion-territory';
-import { matchPreferredPartnerPrice, preferredPartnerPriceKey, type PreferredPartnerPrice } from '@/lib/preferred-partner/pricing';
+import { getPreferredPartnerSavings } from '@/lib/server/preferred-partner-savings';
+import { matchPreferredPartnerPrice, preferredPartnerPriceKey, PREFERRED_PARTNER_PRICING, type PreferredPartnerPrice } from '@/lib/preferred-partner/pricing';
 
 const NY_WHOLESALE_EXCISE_TAX_RATE = 0.09;
 const NABIS_SELLER_NAME = 'California Fragrance Company Inc.';
@@ -135,6 +136,33 @@ type WarehouseSummary = {
   name: string;
   region: string | null;
   label: string;
+};
+
+type HistoricalOrderLine = {
+  productName: string;
+  quantity: number;
+  priceKey: string | null;
+};
+
+type HistoricalOrder = {
+  orderDate: string | null;
+  breakdownRows: Array<{
+    priceKey: string;
+    quantity: number;
+  }>;
+  lines: HistoricalOrderLine[];
+};
+
+type FamilyHistory = {
+  orderCount: number;
+  lastQuantity: number;
+  averageQuantity: number;
+  maxQuantity: number;
+  recentProductNames: string[];
+  lastLineTargets: Array<{
+    productName: string;
+    quantity: number;
+  }>;
 };
 
 export type PreferredPartnerProposalResponse = {
@@ -446,6 +474,73 @@ function recentDateWithinDays(value: string | null, days: number) {
   return now - date.getTime() <= days * 24 * 60 * 60 * 1000;
 }
 
+function sortHistoricalOrders(orders: HistoricalOrder[]) {
+  return [...orders].sort((left, right) => {
+    const leftTime = left.orderDate ? new Date(left.orderDate).getTime() : 0;
+    const rightTime = right.orderDate ? new Date(right.orderDate).getTime() : 0;
+    return rightTime - leftTime;
+  });
+}
+
+function buildFamilyHistory(orders: HistoricalOrder[]) {
+  const byKey = new Map<string, FamilyHistory>();
+  const sortedOrders = sortHistoricalOrders(orders);
+
+  for (const order of sortedOrders) {
+    const namesByPriceKey = new Map<string, string[]>();
+    const lineTargetsByPriceKey = new Map<string, Array<{ productName: string; quantity: number }>>();
+    for (const line of order.lines) {
+      if (!line.priceKey) continue;
+      const current = namesByPriceKey.get(line.priceKey) ?? [];
+      current.push(line.productName);
+      namesByPriceKey.set(line.priceKey, current);
+      const currentTargets = lineTargetsByPriceKey.get(line.priceKey) ?? [];
+      currentTargets.push({
+        productName: line.productName,
+        quantity: line.quantity,
+      });
+      lineTargetsByPriceKey.set(line.priceKey, currentTargets);
+    }
+
+    for (const row of order.breakdownRows) {
+      if (!row.priceKey || row.quantity <= 0) continue;
+      const current = byKey.get(row.priceKey);
+      const recentNames = namesByPriceKey.get(row.priceKey) ?? [];
+      if (!current) {
+        byKey.set(row.priceKey, {
+          orderCount: 1,
+          lastQuantity: row.quantity,
+          averageQuantity: row.quantity,
+          maxQuantity: row.quantity,
+          recentProductNames: [...new Set(recentNames)].slice(0, 8),
+          lastLineTargets: (lineTargetsByPriceKey.get(row.priceKey) ?? []).slice(0, 12),
+        });
+        continue;
+      }
+
+      const nextOrderCount = current.orderCount + 1;
+      current.averageQuantity = roundMoney((current.averageQuantity * current.orderCount + row.quantity) / nextOrderCount);
+      current.orderCount = nextOrderCount;
+      current.maxQuantity = Math.max(current.maxQuantity, row.quantity);
+      current.recentProductNames = [...new Set([...current.recentProductNames, ...recentNames])].slice(0, 8);
+    }
+  }
+
+  return byKey;
+}
+
+function resolveFamilyTargetUnits(family: FamilyDemand, history: FamilyHistory | null) {
+  if (!history || history.maxQuantity <= 0) {
+    return family.targetUnits;
+  }
+
+  if (family.kind === 'strategic-add') {
+    return roundFamilyTarget(Math.max(family.targetUnits, history.lastQuantity), family.price);
+  }
+
+  return roundFamilyTarget(Math.max(1, history.lastQuantity), family.price);
+}
+
 export function buildProposalFamilies(rows: PreferredPartnerProposalInputRow[], restockIntervalDays = PPP_RESTOCK_INTERVAL_DAYS) {
   const byKey = new Map<string, FamilyDemand>();
   const unmatchedProducts: string[] = [];
@@ -640,17 +735,23 @@ function aggregateLiveCandidates(rows: Array<Record<string, unknown>>) {
   return [...candidates.values()];
 }
 
-function scoreCandidate(candidate: LiveCandidate, family: FamilyDemand) {
+function scoreCandidate(candidate: LiveCandidate, family: FamilyDemand, history: FamilyHistory | null) {
   const sourceNames = [...family.rows, ...family.strategicRows].map((row) => row.productName);
   const bestNameScore = sourceNames.reduce((best, name) => Math.max(best, tokenOverlapScore(candidate.productName, name)), 0);
   const strategicBoost = family.strategicRows.some((row) => tokenOverlapScore(candidate.productName, row.productName) > 0.45) ? 0.35 : 0;
+  const historicalBoost =
+    history?.recentProductNames.some((name) => tokenOverlapScore(candidate.productName, name) > 0.45) ? 0.55 : 0;
   const availabilityBoost = Math.min(candidate.availableUnits / 500, 0.25);
-  return bestNameScore + strategicBoost + availabilityBoost;
+  return bestNameScore + strategicBoost + historicalBoost + availabilityBoost;
 }
 
-function chooseCandidateCount(family: FamilyDemand, availableCount: number) {
+function chooseCandidateCount(family: FamilyDemand, availableCount: number, history: FamilyHistory | null) {
   if (availableCount <= 1) {
     return availableCount;
+  }
+  const historicalCount = history?.lastLineTargets.length ?? 0;
+  if (historicalCount > 0) {
+    return Math.min(availableCount, Math.max(1, historicalCount));
   }
   if (family.price.size === '4-Pack' || family.price.size === '5-Pack') {
     return family.targetUnits > 10 ? 2 : 1;
@@ -661,50 +762,136 @@ function chooseCandidateCount(family: FamilyDemand, availableCount: number) {
   return 1;
 }
 
-function allocateUnits(totalUnits: number, count: number, available: number[]) {
-  if (count <= 0 || totalUnits <= 0) {
+function allocateWholeCaseUnits(totalUnits: number, casePackSizes: number[], availableUnits: number[]) {
+  if (totalUnits <= 0 || casePackSizes.length === 0) {
     return [];
   }
-  if (count === 1) {
-    return [Math.max(1, Math.min(totalUnits, available[0] ?? totalUnits))];
+  const allocations = new Array(casePackSizes.length).fill(0);
+  const availableCases = casePackSizes.map((size, index) => Math.floor((availableUnits[index] ?? 0) / Math.max(1, size)));
+  const totalAvailableUnits = availableCases.reduce((sum, cases, index) => sum + cases * Math.max(1, casePackSizes[index]), 0);
+  let remainingUnits = Math.min(totalUnits, totalAvailableUnits);
+
+  for (let index = 0; index < casePackSizes.length; index += 1) {
+    const casePack = Math.max(1, casePackSizes[index]);
+    if (availableCases[index] <= 0 || remainingUnits < casePack) {
+      continue;
+    }
+    allocations[index] = casePack;
+    remainingUnits -= casePack;
   }
 
-  const allocations = new Array(count).fill(0);
-  const weights = available.map((value) => Math.max(1, value));
-  const totalWeight = weights.reduce((sum, value) => sum + value, 0);
-  let assigned = 0;
-
-  for (let index = 0; index < count; index += 1) {
-    const rawShare = Math.floor((totalUnits * weights[index]) / totalWeight);
-    allocations[index] = Math.min(available[index] ?? rawShare, rawShare);
-    assigned += allocations[index];
+  let wrote = true;
+  while (wrote) {
+    wrote = false;
+    for (let index = 0; index < casePackSizes.length; index += 1) {
+      const casePack = Math.max(1, casePackSizes[index]);
+      if (remainingUnits < casePack) {
+        continue;
+      }
+      const maxUnits = availableCases[index] * casePack;
+      if (allocations[index] + casePack > maxUnits) {
+        continue;
+      }
+      allocations[index] += casePack;
+      remainingUnits -= casePack;
+      wrote = true;
+    }
   }
 
-  let remainder = totalUnits - assigned;
-  while (remainder > 0) {
-    let wrote = false;
-    for (let index = 0; index < count && remainder > 0; index += 1) {
-      if (allocations[index] < (available[index] ?? totalUnits)) {
-        allocations[index] += 1;
-        remainder -= 1;
-        wrote = true;
+  return allocations;
+}
+
+function roundToWholeCases(quantity: number, casePackSize: number, availableUnits: number) {
+  const casePack = Math.max(1, casePackSize);
+  const capped = Math.min(quantity, availableUnits);
+  if (capped < casePack) {
+    return 0;
+  }
+  const rounded = Math.round(capped / casePack) * casePack;
+  const safeRounded = Math.max(casePack, Math.min(rounded, Math.floor(availableUnits / casePack) * casePack));
+  return safeRounded;
+}
+
+function historicalQuantityForCandidate(candidate: LiveCandidate, history: FamilyHistory | null) {
+  if (!history || history.lastLineTargets.length === 0) {
+    return null;
+  }
+  let bestScore = 0;
+  let bestQuantity: number | null = null;
+  for (const target of history.lastLineTargets) {
+    const score = tokenOverlapScore(candidate.productName, target.productName);
+    if (score > bestScore) {
+      bestScore = score;
+      bestQuantity = target.quantity;
+    }
+  }
+  return bestScore >= 0.45 ? bestQuantity : null;
+}
+
+function allocateUnitsFromHistory(
+  totalUnits: number,
+  selected: LiveCandidate[],
+  history: FamilyHistory | null,
+) {
+  const allocations = selected.map((candidate) => {
+    const historicalQuantity = historicalQuantityForCandidate(candidate, history);
+    if (historicalQuantity == null) {
+      return 0;
+    }
+    return roundToWholeCases(historicalQuantity, candidate.casePackSize, candidate.availableUnits);
+  });
+
+  let allocated = allocations.reduce((sum, value) => sum + value, 0);
+  if (allocated === 0) {
+    return allocations;
+  }
+
+  if (allocated > totalUnits) {
+    const sortedIndexes = allocations
+      .map((value, index) => ({ index, value }))
+      .sort((left, right) => right.value - left.value);
+    for (const entry of sortedIndexes) {
+      const casePack = selected[entry.index]?.casePackSize ?? 1;
+      while (allocations[entry.index] > 0 && allocated > totalUnits) {
+        allocations[entry.index] -= casePack;
+        allocated -= casePack;
+      }
+      if (allocated <= totalUnits) {
+        break;
       }
     }
-    if (!wrote) {
-      break;
+  }
+
+  let wrote = true;
+  while (allocated < totalUnits && wrote) {
+    wrote = false;
+    for (let index = 0; index < selected.length; index += 1) {
+      const candidate = selected[index];
+      const casePack = candidate.casePackSize;
+      if (allocated + casePack > totalUnits) {
+        continue;
+      }
+      if (allocations[index] + casePack > candidate.availableUnits) {
+        continue;
+      }
+      allocations[index] += casePack;
+      allocated += casePack;
+      wrote = true;
     }
   }
 
-  return allocations.map((value) => Math.max(0, value));
+  return allocations;
 }
 
 export function calculatePreferredPartnerProposalDraft(input: {
   rows: PreferredPartnerProposalInputRow[];
   inventoryRows: Array<Record<string, unknown>>;
   restockIntervalDays?: number;
+  historicalOrders?: HistoricalOrder[];
 }) {
   const restockIntervalDays = input.restockIntervalDays ?? PPP_RESTOCK_INTERVAL_DAYS;
   const { families, unmatchedProducts } = buildProposalFamilies(input.rows, restockIntervalDays);
+  const familyHistory = buildFamilyHistory(input.historicalOrders ?? []);
   const liveCandidates = aggregateLiveCandidates(input.inventoryRows);
   const candidatesByPriceKey = new Map<string, LiveCandidate[]>();
   for (const candidate of liveCandidates) {
@@ -718,6 +905,9 @@ export function calculatePreferredPartnerProposalDraft(input: {
   const omittedDemandFamilies: string[] = [];
 
   for (const family of families) {
+    const history = familyHistory.get(family.priceKey) ?? null;
+    const allocationHistory = history;
+    const allocationTargetUnits = resolveFamilyTargetUnits(family, history);
     if (family.rows.length > 0) {
       for (const row of family.rows) {
         const avgUnitsPerDay = row.avgUnitsPerDay ?? 0;
@@ -742,7 +932,7 @@ export function calculatePreferredPartnerProposalDraft(input: {
     const familyCandidates = [...(candidatesByPriceKey.get(family.priceKey) ?? [])]
       .map((candidate) => ({
         candidate,
-        score: scoreCandidate(candidate, family),
+        score: scoreCandidate(candidate, family, allocationHistory),
       }))
       .sort((left, right) => {
         if (right.score !== left.score) {
@@ -759,13 +949,23 @@ export function calculatePreferredPartnerProposalDraft(input: {
       continue;
     }
 
-    const selectedCount = chooseCandidateCount(family, familyCandidates.length);
-    const selected = familyCandidates.slice(0, selectedCount).map((entry) => entry.candidate);
-    const allocations = allocateUnits(
-      family.targetUnits,
-      selected.length,
-      selected.map((candidate) => candidate.availableUnits),
-    );
+    const selectedCount = chooseCandidateCount(family, familyCandidates.length, allocationHistory);
+    let selected = familyCandidates.slice(0, selectedCount).map((entry) => entry.candidate);
+    while (
+      selected.length > 1 &&
+      selected.reduce((sum, candidate) => sum + candidate.casePackSize, 0) > allocationTargetUnits
+    ) {
+      selected = selected.slice(0, -1);
+    }
+    const historyAllocations = allocateUnitsFromHistory(allocationTargetUnits, selected, allocationHistory);
+    const allocations =
+      historyAllocations.some((value) => value > 0)
+        ? historyAllocations
+        : allocateWholeCaseUnits(
+            allocationTargetUnits,
+            selected.map((candidate) => candidate.casePackSize),
+            selected.map((candidate) => candidate.availableUnits),
+          );
 
     selected.forEach((candidate, index) => {
       const quantity = allocations[index] ?? 0;
@@ -812,25 +1012,29 @@ export function calculatePreferredPartnerProposalDraft(input: {
     groupedBreakdown.set(line.priceKey, current);
   }
 
-  const breakdownRows = families
-    .map((family): PreferredPartnerProposalBreakdownRow => {
-      const priceLines = groupedBreakdown.get(family.priceKey) ?? [];
+  const breakdownRows = PREFERRED_PARTNER_PRICING
+    .map((price): PreferredPartnerProposalBreakdownRow | null => {
+      const priceKey = preferredPartnerPriceKey(price);
+      const priceLines = groupedBreakdown.get(priceKey) ?? [];
       const quantity = priceLines.reduce((sum, line) => sum + line.quantity, 0);
+      if (quantity <= 0) {
+        return null;
+      }
       const currentPromoTotal = roundMoney(priceLines.reduce((sum, line) => sum + line.lineTotal, 0));
       return {
-        priceKey: family.priceKey,
-        brand: family.price.displayBrand,
-        size: family.price.weight,
+        priceKey,
+        brand: price.displayBrand,
+        size: price.weight,
         quantity,
-        standardWholesale: family.price.standardWholesale,
+        standardWholesale: price.standardWholesale,
         currentPromoPrice: quantity > 0 ? roundMoney(currentPromoTotal / quantity) : null,
-        pppPrice: family.price.preferredWholesale,
-        standardWholesaleTotal: roundMoney(family.price.standardWholesale * quantity),
+        pppPrice: price.preferredWholesale,
+        standardWholesaleTotal: roundMoney(price.standardWholesale * quantity),
         currentPromoTotal,
-        pppPricingTotal: roundMoney(family.price.preferredWholesale * quantity),
+        pppPricingTotal: roundMoney(price.preferredWholesale * quantity),
       };
     })
-    .filter((row) => row.quantity > 0)
+    .filter((row): row is PreferredPartnerProposalBreakdownRow => Boolean(row))
     .sort((left, right) => left.brand.localeCompare(right.brand));
 
   const currentPromoTotal = roundMoney(lines.reduce((sum, line) => sum + line.lineTotal, 0));
@@ -942,17 +1146,34 @@ export async function getPreferredPartnerProposal(input: {
     throw error;
   }
 
-  const [detail, inventoryResult, warehouseRows, daysOffRows] = await Promise.all([
+  const [detail, inventoryResult, warehouseRows, daysOffRows, savingsHistory] = await Promise.all([
     loadTerritoryStoreDetail(resolved.notionPageId),
     loadNyInventoryRows(),
     loadNyWarehouseRows(),
     loadNabisDaysOffRows(),
+    getPreferredPartnerSavings({
+      orgId: input.orgId,
+      accountIdOrPageId: input.accountIdOrPageId,
+      year: new Date().getFullYear(),
+    }).catch(() => null),
   ]);
 
   const generatedAt = new Date();
   const draft = calculatePreferredPartnerProposalDraft({
     rows: parsedRows,
     inventoryRows: inventoryResult.rows,
+    historicalOrders: savingsHistory?.orders?.map((order) => ({
+      orderDate: order.orderDate,
+      breakdownRows: order.breakdownRows.map((row) => ({
+        priceKey: row.priceKey,
+        quantity: row.quantity,
+      })),
+      lines: order.lines.map((line) => ({
+        productName: line.productName,
+        quantity: line.quantity,
+        priceKey: line.priceKey,
+      })),
+    })),
   });
   const primaryContactName = detail.crm.primaryContactName || detail.crm.primaryContactBuyer || detail.contacts[0]?.name || null;
   const salesRepName = firstTruthy(detail.crm.rep, detail.store.repNames[0]);
