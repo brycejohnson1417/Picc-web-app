@@ -24,7 +24,7 @@ export const PREFERRED_PARTNER_PRICING: PreferredPartnerPrice[] = [
 ];
 
 const BRAND_ALIASES: Record<string, string[]> = {
-  Chopsticks: ['chopsticks'],
+  Chopsticks: ['chopsticks', 'chopstix', 'chopstick'],
   'Ichi-Roll': ['ichi roll', 'ichiroll'],
   '#Juan-Roll': ['juan roll', 'juanroll', '#juan roll', '#juanroll'],
   'Smack.': ['smack'],

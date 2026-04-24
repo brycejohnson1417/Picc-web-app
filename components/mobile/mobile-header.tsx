@@ -12,6 +12,8 @@ interface MobileHeaderProps {
 }
 
 export function MobileHeader({ title, left, right, children, className }: MobileHeaderProps) {
+  const hasTopBar = Boolean(title || left || right);
+
   return (
     <header
       className={cn(
@@ -19,17 +21,19 @@ export function MobileHeader({ title, left, right, children, className }: Mobile
         className,
       )}
     >
-      <div className="px-3 pb-3 pt-[max(8px,env(safe-area-inset-top))] md:px-5">
-        <div className="grid min-h-[40px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-          <div className="min-w-0">{left}</div>
-          {title ? (
-            <div className="min-w-0 text-center">
-              <h1 className="text-[16px] font-semibold tracking-[0.2px] text-[#18212d] md:text-[18px]">{title}</h1>
-            </div>
-          ) : null}
-          <div className="flex min-w-0 justify-end text-right">{right}</div>
-        </div>
-        {children ? <div className="mt-3">{children}</div> : null}
+      <div className="px-3 pb-3 pt-[max(8px,env(safe-area-inset-top))] md:px-5 md:pb-2 md:pt-2">
+        {hasTopBar ? (
+          <div className="grid min-h-[40px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+            <div className="min-w-0">{left}</div>
+            {title ? (
+              <div className="min-w-0 text-center">
+                <h1 className="text-[16px] font-semibold tracking-[0.2px] text-[#18212d] md:text-[18px]">{title}</h1>
+              </div>
+            ) : null}
+            <div className="flex min-w-0 justify-end text-right">{right}</div>
+          </div>
+        ) : null}
+        {children ? <div className={cn(hasTopBar ? 'mt-3' : '')}>{children}</div> : null}
       </div>
     </header>
   );

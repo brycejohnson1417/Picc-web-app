@@ -660,13 +660,9 @@ export function TerritoryMobile() {
   }
 
   return (
-    <div className="relative min-h-[calc(100dvh-76px)] bg-[#e6e6e9]">
-      <MobileHeader
-        className="z-[2600]"
-        left={<span />}
-        right={null}
-      >
-        <div className="mx-auto flex w-full max-w-[560px] items-center gap-2">
+    <div className="relative min-h-[calc(100dvh-76px)] bg-[#e6e6e9] lg:min-h-[calc(100dvh-64px)]">
+      <MobileHeader className="z-[2600]">
+        <div className="mx-auto flex w-full max-w-[560px] items-center gap-2 lg:max-w-none">
           <SegmentedControl
             value={view}
             onChange={(value) => setView(value as 'map' | 'list')}
@@ -680,7 +676,7 @@ export function TerritoryMobile() {
       </MobileHeader>
 
       {view === 'map' ? (
-        <div className="relative h-[calc(100dvh-162px)] min-h-[360px] md:h-[calc(100dvh-146px)] lg:h-[calc(100dvh-138px)]">
+        <div className="relative h-[calc(100dvh-122px)] min-h-[360px] md:h-[calc(100dvh-116px)] lg:h-[calc(100dvh-112px)]">
           <MapRenderBoundary onReset={() => setRefreshNonce((value) => value + 1)}>
             <TerritoryMapMobile
               stores={mapStores}

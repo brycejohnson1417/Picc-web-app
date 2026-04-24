@@ -78,6 +78,20 @@ describe('Preferred Partner savings math', () => {
     ).toMatchObject({ brand: 'O-Yeah', size: '5-Pack', preferredWholesale: 14 });
   });
 
+  it('maps malformed Chopsticks naming back to the 2-pack PPP family', () => {
+    expect(
+      matchPreferredPartnerPrice({
+        skuName: 'CHOPSTIX | Infused Pre-roll | .5G SINGLE | OG Kush (S)',
+      }),
+    ).toMatchObject({ brand: 'Chopsticks', size: '2 (.5g)', preferredWholesale: 4 });
+
+    expect(
+      matchPreferredPartnerPrice({
+        skuName: 'CHOPSTICKS | Infused Pre-roll | .5G SINGLE | OG Kush (S)',
+      }),
+    ).toMatchObject({ brand: 'Chopsticks', size: '2 (.5g)', preferredWholesale: 4 });
+  });
+
   it('uses tax-inclusive order total, ignores credit memos, and excludes surcharge', () => {
     const [order] = calculatePreferredPartnerOrdersFromRows([
       {
