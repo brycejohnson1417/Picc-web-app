@@ -7,6 +7,7 @@ import { useClerk } from '@clerk/nextjs';
 import { BarChart3, CalendarDays, House, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AppAccessProvider, type AppAccessState } from '@/components/auth/app-access-provider';
+import { InteractionTracker } from '@/components/layout/interaction-tracker';
 import { RoleSwitcher } from '@/components/layout/role-switcher';
 import { cn } from '@/lib/utils';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
@@ -78,18 +79,15 @@ export function AppShell({
 
   return (
     <AppAccessProvider value={access}>
+      <InteractionTracker />
       <div className="min-h-[100dvh] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_34%),linear-gradient(180deg,#d7d8dc_0%,#c9cacf_100%)] px-0 md:px-3 lg:px-5">
         {commandMounted ? <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} /> : null}
         <div className="mx-auto min-h-[100dvh] max-w-[var(--app-shell-max)] bg-[#e6e6e9] shadow-[0_0_0_1px_rgba(0,0,0,0.12)] md:min-h-[calc(100dvh-24px)] md:overflow-hidden md:rounded-[28px] md:shadow-[0_20px_60px_rgba(31,35,43,0.18)]">
-          <header className="sticky top-0 z-[3000] flex items-center justify-between border-b border-[#d7dde7] bg-[linear-gradient(180deg,rgba(249,251,255,0.96)_0%,rgba(241,245,250,0.94)_100%)] px-3 py-2 text-[#1f232b] backdrop-blur-xl">
+          <header className="sticky top-0 z-[3000] flex items-center justify-between gap-3 border-b border-[#d7dde7] bg-[linear-gradient(180deg,rgba(249,251,255,0.96)_0%,rgba(241,245,250,0.94)_100%)] px-3 py-2 text-[#1f232b] backdrop-blur-xl">
             <div className="flex items-center gap-2">
               <div className="rounded-2xl border border-[#d7dde7] bg-white px-3 py-2 shadow-[0_8px_24px_rgba(31,35,43,0.06)]">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6a7583]">PICC</p>
-                <p className="text-[12px] font-semibold tracking-[0.02em] text-[#18212d]">PICC New York</p>
+                <p className="text-[13px] font-semibold tracking-[0.01em] text-[#18212d]">PiCC New York</p>
               </div>
-              <span className="rounded-full border border-[#c7cfde] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#304153]">
-                {roleLabel(access.role)}
-              </span>
               <RoleSwitcher activeRole={access.role} availableRoles={access.availableRoles} />
               {access.testModeEnabled ? (
                 <span className="rounded-full border border-[#d9a696] bg-[#fff2ec] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#b33a1d]">
@@ -108,6 +106,10 @@ export function AppShell({
                   Profile
                 </summary>
                 <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[170px] rounded-xl border border-[#d3d9e2] bg-white p-1.5 shadow-[0_18px_45px_rgba(31,35,43,0.18)]">
+                  <div className="rounded-lg px-3 py-2 text-[11px] font-medium text-[#5c6674]">
+                    Current Role
+                    <div className="mt-1 text-sm font-semibold text-[#18212d]">{roleLabel(access.role)}</div>
+                  </div>
                   <Link href="/settings" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
                     <Settings className="h-4 w-4" />
                     Settings

@@ -198,6 +198,17 @@ export function AccountsMobile() {
                     >
                       <p className="truncate text-[20px] font-semibold text-[#15171c]">{store.name}</p>
                       <p className="mt-1 truncate text-[15px] text-[#6b7280]">{store.locationAddress ?? store.locationLabel ?? 'No address'}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-[#eef3fb] px-3 py-1 text-[12px] font-semibold text-[#304153]">
+                          Rep: {store.repNames.length > 0 ? store.repNames.join(', ') : 'Unassigned'}
+                        </span>
+                        <span
+                          className="rounded-full px-3 py-1 text-[12px] font-semibold text-white"
+                          style={{ backgroundColor: store.statusColor || '#5f6b7a' }}
+                        >
+                          {store.status || 'Status unknown'}
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>

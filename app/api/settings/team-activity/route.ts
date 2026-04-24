@@ -1,213 +1,309 @@
+import { Prisma } from '@prisma/client';
 import { guard } from '@/lib/auth/api-guard';
 import { prisma } from '@/lib/db/prisma';
 
 export const dynamic = 'force-dynamic';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const INTERACTION_ACTIONS = ['interaction.click', 'interaction.keydown', 'navigation.view'] as const;
 
-type MemberSummary = {
+type TeamMemberSummary = {
   id: string;
   displayName: string;
   email: string | null;
-  lastLoginAt: string | null;
-  loginCount30d: number;
-  activityCount30d: number;
-  checkInCount30d: number;
-  vendorDayCount30d: number;
-  totalActions30d: number;
+  role: string | null;
+  lastInteractionAt: string | null;
+  interactionCount30d: number;
+  clickCount30d: number;
+  keydownCount30d: number;
+  pageViewCount30d: number;
+  activeDays30d: number;
+  activeMinutes30d: number;
 };
 
-export async function GET() {
+type RecentInteraction = {
+  id: string;
+  happenedAt: string;
+  actor: string;
+  action: 'click' | 'keydown' | 'navigation';
+  label: string;
+  detail: string | null;
+  path: string | null;
+};
+
+type InteractionSummaryRow = {
+  memberId: string;
+  email: string | null;
+  lastInteractionAt: Date | null;
+  interactionCount30d: bigint | number;
+  clickCount30d: bigint | number;
+  keydownCount30d: bigint | number;
+  pageViewCount30d: bigint | number;
+  activeDays30d: bigint | number;
+  activeMinutes30d: bigint | number;
+};
+
+function toMemberId(clerkUserId: string | null | undefined, email: string | null | undefined) {
+  if (clerkUserId) return clerkUserId;
+  if (email) return `email:${email.trim().toLowerCase()}`;
+  return null;
+}
+
+function toCount(value: bigint | number | null | undefined) {
+  if (typeof value === 'bigint') return Number(value);
+  return typeof value === 'number' ? value : 0;
+}
+
+function parseMetadata(metadata: Prisma.JsonValue | null): Record<string, unknown> {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return {};
+  }
+  return metadata as Record<string, unknown>;
+}
+
+function readText(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function formatInteraction(
+  row: {
+    id: string;
+    actorClerkUserId: string | null;
+    actorEmail: string | null;
+    action: string;
+    reason: string | null;
+    metadata: Prisma.JsonValue | null;
+    createdAt: Date;
+  },
+  labelMap: Map<string, { displayName: string; email: string | null }>,
+): RecentInteraction {
+  const metadata = parseMetadata(row.metadata);
+  const memberId = toMemberId(row.actorClerkUserId, row.actorEmail);
+  const actor = memberId ? labelMap.get(memberId)?.displayName ?? row.actorEmail ?? memberId : 'Unknown user';
+  const path = readText(metadata, 'path');
+  const detail = readText(metadata, 'detail');
+  const targetLabel = readText(metadata, 'targetLabel');
+  const key = readText(metadata, 'key');
+
+  if (row.action === 'interaction.click') {
+    return {
+      id: row.id,
+      happenedAt: row.createdAt.toISOString(),
+      actor,
+      action: 'click',
+      label: row.reason ?? (targetLabel ? `Clicked ${targetLabel}` : 'Clicked UI element'),
+      detail,
+      path,
+    };
+  }
+
+  if (row.action === 'interaction.keydown') {
+    return {
+      id: row.id,
+      happenedAt: row.createdAt.toISOString(),
+      actor,
+      action: 'keydown',
+      label: row.reason ?? (key ? `Pressed ${key}` : 'Pressed key'),
+      detail,
+      path,
+    };
+  }
+
+  return {
+    id: row.id,
+    happenedAt: row.createdAt.toISOString(),
+    actor,
+    action: 'navigation',
+    label: row.reason ?? (path ? `Viewed ${path}` : 'Viewed page'),
+    detail,
+    path,
+  };
+}
+
+export async function GET(request: Request) {
   const ctx = await guard(['ADMIN', 'OPS_TEAM']);
   if ('error' in ctx) return ctx.error;
 
   const since = new Date(Date.now() - THIRTY_DAYS_MS);
+  const url = new URL(request.url);
+  const requestedMemberId = url.searchParams.get('memberId')?.trim() || null;
 
-  const [sessions, activityLogs, vendorDayEvents, checkIns] = await Promise.all([
+  const [memberships, sessions, summaryRows, recentRows] = await Promise.all([
+    prisma.membership.findMany({
+      where: {
+        orgId: ctx.orgId,
+        active: true,
+      },
+      select: {
+        clerkUserId: true,
+        role: true,
+      },
+    }),
     prisma.appSessionAudit.findMany({
       where: {
         orgId: ctx.orgId,
-        lastSeenAt: { gte: since },
       },
       orderBy: { lastSeenAt: 'desc' },
       select: {
         clerkUserId: true,
         email: true,
         displayName: true,
-        firstSeenAt: true,
         lastSeenAt: true,
       },
     }),
-    prisma.activityLog.findMany({
+    prisma.$queryRaw<InteractionSummaryRow[]>`
+      SELECT
+        COALESCE("actorClerkUserId", CONCAT('email:', LOWER("actorEmail"))) AS "memberId",
+        MAX(LOWER("actorEmail")) AS "email",
+        MAX("createdAt") AS "lastInteractionAt",
+        COUNT(*)::int AS "interactionCount30d",
+        COUNT(*) FILTER (WHERE action = 'interaction.click')::int AS "clickCount30d",
+        COUNT(*) FILTER (WHERE action = 'interaction.keydown')::int AS "keydownCount30d",
+        COUNT(*) FILTER (WHERE action = 'navigation.view')::int AS "pageViewCount30d",
+        COUNT(DISTINCT DATE_TRUNC('day', "createdAt"))::int AS "activeDays30d",
+        COUNT(DISTINCT DATE_TRUNC('minute', "createdAt"))::int AS "activeMinutes30d"
+      FROM "AuditEvent"
+      WHERE "orgId" = ${ctx.orgId}
+        AND "createdAt" >= ${since}
+        AND action IN (${Prisma.join(INTERACTION_ACTIONS)})
+      GROUP BY 1
+    `,
+    prisma.auditEvent.findMany({
       where: {
         orgId: ctx.orgId,
         createdAt: { gte: since },
+        action: { in: [...INTERACTION_ACTIONS] },
       },
       orderBy: { createdAt: 'desc' },
-      take: 200,
+      take: 24,
       select: {
+        id: true,
         actorClerkUserId: true,
-        title: true,
-        description: true,
-        createdAt: true,
-        account: {
-          select: {
-            name: true,
-          },
-        },
-      },
-    }),
-    prisma.vendorDayEvent.findMany({
-      where: {
-        orgId: ctx.orgId,
-        createdAt: { gte: since },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      select: {
-        createdBy: true,
-        repName: true,
-        eventDate: true,
-        createdAt: true,
-        account: {
-          select: {
-            name: true,
-          },
-        },
-      },
-    }),
-    prisma.checkIn.findMany({
-      where: {
-        orgId: ctx.orgId,
-        createdAt: { gte: since },
-        createdByEmail: { not: null },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      select: {
-        createdByEmail: true,
-        noteText: true,
+        actorEmail: true,
+        action: true,
+        reason: true,
+        metadata: true,
         createdAt: true,
       },
     }),
   ]);
 
-  const memberMap = new Map<string, MemberSummary>();
-  const emailToMemberId = new Map<string, string>();
-
-  const getOrCreateMember = (id: string, displayName: string, email: string | null) => {
-    const existing = memberMap.get(id);
-    if (existing) {
-      if (!existing.email && email) {
-        existing.email = email;
-      }
-      if ((!existing.displayName || existing.displayName === existing.id) && displayName) {
-        existing.displayName = displayName;
-      }
-      return existing;
-    }
-
-    const next: MemberSummary = {
-      id,
-      displayName,
-      email,
-      lastLoginAt: null,
-      loginCount30d: 0,
-      activityCount30d: 0,
-      checkInCount30d: 0,
-      vendorDayCount30d: 0,
-      totalActions30d: 0,
-    };
-    memberMap.set(id, next);
-    if (email) {
-      emailToMemberId.set(email.toLowerCase(), id);
-    }
-    return next;
-  };
+  const roleMap = new Map(memberships.map((membership) => [membership.clerkUserId, membership.role]));
+  const labelMap = new Map<string, { displayName: string; email: string | null }>();
 
   for (const session of sessions) {
-    const displayName = session.displayName?.trim() || session.email?.trim() || session.clerkUserId;
-    const email = session.email?.trim().toLowerCase() || null;
-    const summary = getOrCreateMember(session.clerkUserId, displayName, email);
-    summary.loginCount30d += 1;
-    summary.lastLoginAt = !summary.lastLoginAt || new Date(session.lastSeenAt).getTime() > new Date(summary.lastLoginAt).getTime()
-      ? session.lastSeenAt.toISOString()
-      : summary.lastLoginAt;
+    const memberId = toMemberId(session.clerkUserId, session.email);
+    if (!memberId || labelMap.has(memberId)) continue;
+    labelMap.set(memberId, {
+      displayName: session.displayName?.trim() || session.email?.trim() || memberId,
+      email: session.email?.trim().toLowerCase() || null,
+    });
   }
 
-  for (const row of activityLogs) {
-    const summary = getOrCreateMember(row.actorClerkUserId, row.actorClerkUserId, null);
-    summary.activityCount30d += 1;
-    summary.totalActions30d += 1;
+  const summaryMap = new Map<string, TeamMemberSummary>();
+
+  for (const membership of memberships) {
+    const sessionLabel = labelMap.get(membership.clerkUserId);
+    summaryMap.set(membership.clerkUserId, {
+      id: membership.clerkUserId,
+      displayName: sessionLabel?.displayName ?? membership.clerkUserId,
+      email: sessionLabel?.email ?? null,
+      role: membership.role,
+      lastInteractionAt: null,
+      interactionCount30d: 0,
+      clickCount30d: 0,
+      keydownCount30d: 0,
+      pageViewCount30d: 0,
+      activeDays30d: 0,
+      activeMinutes30d: 0,
+    });
   }
 
-  for (const row of vendorDayEvents) {
-    const userId = row.createdBy?.trim();
-    if (!userId) continue;
-    const summary = getOrCreateMember(userId, userId, null);
-    summary.vendorDayCount30d += 1;
-    summary.totalActions30d += 1;
+  for (const row of summaryRows) {
+    const sessionLabel = labelMap.get(row.memberId);
+    const existing = summaryMap.get(row.memberId);
+    const summary: TeamMemberSummary = existing ?? {
+      id: row.memberId,
+      displayName: sessionLabel?.displayName ?? row.email ?? row.memberId,
+      email: sessionLabel?.email ?? row.email,
+      role: row.memberId.startsWith('email:') ? 'GUEST_VIEWER' : roleMap.get(row.memberId) ?? null,
+      lastInteractionAt: null,
+      interactionCount30d: 0,
+      clickCount30d: 0,
+      keydownCount30d: 0,
+      pageViewCount30d: 0,
+      activeDays30d: 0,
+      activeMinutes30d: 0,
+    };
+
+    summary.lastInteractionAt = row.lastInteractionAt ? row.lastInteractionAt.toISOString() : null;
+    summary.interactionCount30d = toCount(row.interactionCount30d);
+    summary.clickCount30d = toCount(row.clickCount30d);
+    summary.keydownCount30d = toCount(row.keydownCount30d);
+    summary.pageViewCount30d = toCount(row.pageViewCount30d);
+    summary.activeDays30d = toCount(row.activeDays30d);
+    summary.activeMinutes30d = toCount(row.activeMinutes30d);
+    summaryMap.set(summary.id, summary);
   }
 
-  for (const row of checkIns) {
-    const email = row.createdByEmail?.trim().toLowerCase();
-    if (!email) continue;
-    const memberId = emailToMemberId.get(email) ?? `email:${email}`;
-    const summary = getOrCreateMember(memberId, email, email);
-    summary.checkInCount30d += 1;
-    summary.totalActions30d += 1;
-  }
-
-  const recentEvents = [
-    ...sessions.map((session) => ({
-      id: `login-${session.clerkUserId}-${session.firstSeenAt.toISOString()}`,
-      happenedAt: session.firstSeenAt.toISOString(),
-      actor: session.displayName?.trim() || session.email?.trim() || session.clerkUserId,
-      type: 'login',
-      title: 'Signed into the app',
-      detail: session.email?.trim() || null,
-    })),
-    ...activityLogs.map((row) => ({
-      id: `activity-${row.actorClerkUserId}-${row.createdAt.toISOString()}-${row.title}`,
-      happenedAt: row.createdAt.toISOString(),
-      actor: memberMap.get(row.actorClerkUserId)?.displayName || row.actorClerkUserId,
-      type: 'update',
-      title: row.title,
-      detail: row.account?.name ? `${row.account.name}${row.description ? ` · ${row.description}` : ''}` : row.description || null,
-    })),
-    ...vendorDayEvents.map((row) => ({
-      id: `vendor-day-${row.createdBy}-${row.createdAt.toISOString()}-${row.account?.name ?? 'account'}`,
-      happenedAt: row.createdAt.toISOString(),
-      actor: row.createdBy ? memberMap.get(row.createdBy)?.displayName || row.createdBy : 'Unknown',
-      type: 'vendor-day',
-      title: 'Vendor day scheduled',
-      detail: `${row.account?.name ?? 'Unknown store'}${row.repName ? ` · ${row.repName}` : ''} · ${row.eventDate.toLocaleString()}`,
-    })),
-    ...checkIns.map((row) => {
-      const email = row.createdByEmail?.trim().toLowerCase() || '';
-      const memberId = emailToMemberId.get(email) ?? `email:${email}`;
-      return {
-        id: `check-in-${email}-${row.createdAt.toISOString()}`,
-        happenedAt: row.createdAt.toISOString(),
-        actor: memberMap.get(memberId)?.displayName || email,
-        type: 'check-in',
-        title: 'Check-in submitted',
-        detail: row.noteText?.trim() || null,
-      };
-    }),
-  ]
-    .sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime())
-    .slice(0, 30);
-
-  const teamMembers = [...memberMap.values()].sort((a, b) => {
-    const aTime = a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : 0;
-    const bTime = b.lastLoginAt ? new Date(b.lastLoginAt).getTime() : 0;
-    return bTime - aTime || b.totalActions30d - a.totalActions30d;
+  const teamMembers = [...summaryMap.values()].sort((a, b) => {
+    const aTime = a.lastInteractionAt ? new Date(a.lastInteractionAt).getTime() : 0;
+    const bTime = b.lastInteractionAt ? new Date(b.lastInteractionAt).getTime() : 0;
+    return b.interactionCount30d - a.interactionCount30d || bTime - aTime || a.displayName.localeCompare(b.displayName);
   });
+
+  if (requestedMemberId) {
+    const member = summaryMap.get(requestedMemberId) ?? null;
+    const requestedEmail = requestedMemberId.startsWith('email:') ? requestedMemberId.slice('email:'.length) : member?.email ?? null;
+    const memberFilters: Array<{ actorClerkUserId?: string; actorEmail?: string }> = requestedMemberId.startsWith('email:')
+      ? []
+      : [{ actorClerkUserId: requestedMemberId }];
+    if (requestedEmail) {
+      memberFilters.push({ actorEmail: requestedEmail });
+    }
+
+    const recentMemberRows = await prisma.auditEvent.findMany({
+      where: {
+        orgId: ctx.orgId,
+        createdAt: { gte: since },
+        action: { in: [...INTERACTION_ACTIONS] },
+        OR: memberFilters,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 120,
+      select: {
+        id: true,
+        actorClerkUserId: true,
+        actorEmail: true,
+        action: true,
+        reason: true,
+        metadata: true,
+        createdAt: true,
+      },
+    });
+
+    const topPages = new Map<string, number>();
+    for (const row of recentMemberRows) {
+      const metadata = parseMetadata(row.metadata);
+      const path = readText(metadata, 'path');
+      if (!path) continue;
+      topPages.set(path, (topPages.get(path) ?? 0) + 1);
+    }
+
+    return Response.json({
+      member,
+      recentInteractions: recentMemberRows.map((row) => formatInteraction(row, labelMap)),
+      topPages: [...topPages.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([path, count]) => ({ path, count })),
+    });
+  }
 
   return Response.json({
     teamMembers,
-    recentEvents,
+    recentInteractions: recentRows.map((row) => formatInteraction(row, labelMap)),
     meta: {
       windowDays: 30,
       teamMemberCount: teamMembers.length,
