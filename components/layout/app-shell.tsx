@@ -87,7 +87,7 @@ export function AppShell({
       <div
         className={cn(
           'min-h-[100dvh] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_34%),linear-gradient(180deg,#d7d8dc_0%,#c9cacf_100%)] px-0',
-          isFullBleedWorkspaceRoute ? 'md:px-0 lg:px-0' : 'md:px-3 lg:px-5',
+          isFullBleedWorkspaceRoute ? 'md:px-4 lg:px-6 xl:px-8' : 'md:px-3 lg:px-5',
         )}
         style={shellStyle}
       >
@@ -152,7 +152,9 @@ export function AppShell({
           <div
             className={cn(
               'mx-auto grid h-[84px] max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#243041] bg-[linear-gradient(180deg,#1f2631_0%,#171d26_100%)] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5',
-              isFullBleedWorkspaceRoute ? 'md:mb-0 md:rounded-none md:border-x-0 md:border-b-0 md:shadow-none' : 'md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]',
+              isFullBleedWorkspaceRoute
+                ? 'md:mb-3 md:max-w-[calc(100%-32px)] md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)] lg:max-w-[calc(100%-48px)] xl:max-w-[calc(100%-64px)]'
+                : 'md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]',
             )}
           >
             {tabs.map((item) => {
