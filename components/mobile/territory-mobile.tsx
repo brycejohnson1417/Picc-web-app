@@ -661,11 +661,7 @@ export function TerritoryMobile() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-[#e6e6e9]">
-      <MobileHeader
-        className="z-[2600]"
-        left={<span />}
-        right={null}
-      >
+      <MobileHeader className="z-[2600]">
         <div className="mx-auto flex w-full max-w-[560px] items-center gap-2">
           <SegmentedControl
             value={view}
