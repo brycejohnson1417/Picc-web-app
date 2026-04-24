@@ -259,10 +259,6 @@ export function RouteMobile() {
 
               {orderedStops.map((stop, index) => {
                 const previousLeg = legs[index - 1];
-                const cumulativeTravelSeconds = legs.slice(0, Math.max(0, index)).reduce((sum, leg) => sum + leg.durationSeconds, 0);
-                const etaDate = new Date();
-                etaDate.setMinutes(etaDate.getMinutes() + Math.round(cumulativeTravelSeconds / 60));
-                const timeLabel = etaDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(' ', '');
 
                 return (
                   <div key={stop.id}>
@@ -271,7 +267,7 @@ export function RouteMobile() {
                         Travel {formatDuration(previousLeg?.durationSeconds ?? 0)} · {formatDistance(previousLeg?.distanceMeters ?? 0)}
                       </p>
                     ) : null}
-                    <div className="grid grid-cols-[36px_38px_86px_74px_1fr_28px] items-center gap-2 border-b border-[#cbccd2] px-4 py-3">
+                    <div className="grid grid-cols-[36px_38px_minmax(0,1fr)_28px] items-start gap-3 border-b border-[#cbccd2] px-4 py-3">
                       <div className="flex flex-col items-center gap-1">
                         <button
                           type="button"
@@ -292,26 +288,23 @@ export function RouteMobile() {
                           <ArrowDown className="h-4 w-4" />
                         </button>
                       </div>
-                      <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-[#41b64b] text-[18px] font-semibold text-[#2c7f31]">{index + 1}</span>
-                      <div>
-                        <p className="text-[17px] font-semibold text-[#4d4f55]">{timeLabel}</p>
-                        <p className="text-[14px] text-[#979aa2]">ETA</p>
+                      <span className="mt-1 grid h-8 w-8 place-items-center rounded-full border-2 border-[#41b64b] text-[18px] font-semibold text-[#2c7f31]">{index + 1}</span>
+                      <div className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/accounts?storeId=${encodeURIComponent(stop.id)}`)}
+                          className="block w-full text-left text-[23px] font-semibold leading-[1.15] text-[#3c3e44] whitespace-normal break-words"
+                        >
+                          {stop.name}
+                        </button>
+                        <p className="mt-1 text-[14px] text-[#979aa2]">
+                          {index === 0 ? 'Start stop' : `Stop ${index + 1}`}
+                        </p>
                       </div>
-                      <div>
-                        <p className="text-[17px] font-semibold text-[#4d4f55]">{index === 0 ? 'Start' : formatDuration(previousLeg?.durationSeconds ?? 0)}</p>
-                        <p className="text-[14px] text-[#979aa2]">Leg</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/accounts?storeId=${encodeURIComponent(stop.id)}`)}
-                        className="truncate text-left text-[23px] font-semibold text-[#3c3e44]"
-                      >
-                        {stop.name}
-                      </button>
                       <button
                         type="button"
                         aria-label={`Remove ${stop.name}`}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-[#9da0a8]"
+                        className="mt-1 grid h-8 w-8 place-items-center rounded-lg text-[#9da0a8]"
                         onClick={() => routePlan.removeStop(stop.id)}
                       >
                         <Trash2 className="h-5 w-5" />
