@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
 import { BarChart3, CalendarDays, House, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { AppAccessProvider, type AppAccessState } from '@/components/auth/app-access-provider';
 import { InteractionTracker } from '@/components/layout/interaction-tracker';
 import { RoleSwitcher } from '@/components/layout/role-switcher';
@@ -41,8 +41,6 @@ const brandAmbassadorTabs: NavTab[] = [
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
 ];
 
-const FULL_BLEED_WORKSPACE_ROUTES = ['/home', '/territory', '/accounts', '/route', '/dashboard'] as const;
-
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -60,13 +58,11 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const isTerritoryRoute = pathname === '/territory' || pathname.startsWith('/territory/');
-  const isFullBleedWorkspaceRoute = FULL_BLEED_WORKSPACE_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const routePlan = useRoutePlan();
   const { signOut } = useClerk();
   const [commandMounted, setCommandMounted] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const tabs = access.role === 'BRAND_AMBASSADOR' ? brandAmbassadorTabs : defaultTabs;
-  const shellStyle = isFullBleedWorkspaceRoute ? ({ '--app-shell-max': '100%' } as CSSProperties) : undefined;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -84,22 +80,9 @@ export function AppShell({
   return (
     <AppAccessProvider value={access}>
       <InteractionTracker />
-      <div
-        className={cn(
-          'min-h-[100dvh] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_34%),linear-gradient(180deg,#d7d8dc_0%,#c9cacf_100%)] px-0',
-          isFullBleedWorkspaceRoute ? 'md:px-4 lg:px-6 xl:px-8' : 'md:px-3 lg:px-5',
-        )}
-        style={shellStyle}
-      >
+      <div className="min-h-[100dvh] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_34%),linear-gradient(180deg,#d7d8dc_0%,#c9cacf_100%)] px-0 md:px-3 lg:px-5">
         {commandMounted ? <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} /> : null}
-        <div
-          className={cn(
-            'mx-auto min-h-[100dvh] max-w-[var(--app-shell-max)] bg-[#e6e6e9] shadow-[0_0_0_1px_rgba(0,0,0,0.12)]',
-            isFullBleedWorkspaceRoute
-              ? 'md:min-h-[100dvh] md:overflow-hidden md:rounded-none md:shadow-none'
-              : 'md:min-h-[calc(100dvh-24px)] md:overflow-hidden md:rounded-[28px] md:shadow-[0_20px_60px_rgba(31,35,43,0.18)]',
-          )}
-        >
+        <div className="mx-auto min-h-[100dvh] max-w-[var(--app-shell-max)] bg-[#e6e6e9] shadow-[0_0_0_1px_rgba(0,0,0,0.12)] md:min-h-[calc(100dvh-24px)] md:overflow-hidden md:rounded-[28px] md:shadow-[0_20px_60px_rgba(31,35,43,0.18)]">
           <header className="sticky top-0 z-[3000] flex items-center justify-between gap-3 border-b border-[#d7dde7] bg-[linear-gradient(180deg,rgba(249,251,255,0.96)_0%,rgba(241,245,250,0.94)_100%)] px-3 py-2 text-[#1f232b] backdrop-blur-xl">
             <div className="flex items-center gap-2">
               <div className="rounded-2xl border border-[#d7dde7] bg-white px-3 py-2 shadow-[0_8px_24px_rgba(31,35,43,0.06)]">
@@ -149,14 +132,7 @@ export function AppShell({
         </div>
 
         <nav className="fixed bottom-0 left-0 right-0 z-[4000] text-white" aria-label="Primary navigation">
-          <div
-            className={cn(
-              'mx-auto grid h-[84px] max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#243041] bg-[linear-gradient(180deg,#1f2631_0%,#171d26_100%)] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5',
-              isFullBleedWorkspaceRoute
-                ? 'md:mb-3 md:max-w-[calc(100%-32px)] md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)] lg:max-w-[calc(100%-48px)] xl:max-w-[calc(100%-64px)]'
-                : 'md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]',
-            )}
-          >
+          <div className="mx-auto grid h-[84px] max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#243041] bg-[linear-gradient(180deg,#1f2631_0%,#171d26_100%)] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5 md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]">
             {tabs.map((item) => {
               const active = isActive(pathname, item.matchHref ?? item.href);
               const Icon = item.icon;
