@@ -660,7 +660,7 @@ export function TerritoryMobile() {
   }
 
   return (
-    <div className="relative min-h-[calc(100dvh-76px)] bg-[#e6e6e9]">
+    <div className="relative flex h-full min-h-0 flex-col bg-[#e6e6e9]">
       <MobileHeader
         className="z-[2600]"
         left={<span />}
@@ -680,7 +680,7 @@ export function TerritoryMobile() {
       </MobileHeader>
 
       {view === 'map' ? (
-        <div className="relative h-[calc(100dvh-162px)] min-h-[360px] md:h-[calc(100dvh-146px)] lg:h-[calc(100dvh-138px)]">
+        <div className="relative min-h-0 flex-1">
           <MapRenderBoundary onReset={() => setRefreshNonce((value) => value + 1)}>
             <TerritoryMapMobile
               stores={mapStores}

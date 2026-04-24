@@ -41,7 +41,7 @@ export function TerritoryListPane({
   onOpenStore,
 }: TerritoryListPaneProps) {
   return (
-    <div className="px-3 pb-28 pt-2">
+    <div className="h-full overflow-y-auto px-3 pb-28 pt-2">
       {storesQueryError ? (
         <div className="mb-3 rounded-lg border border-[#e6b3a7] bg-[#fdebe7] px-3 py-2 text-[13px] text-[#8f2410]">
           Live sync warning: {storesQueryError.message}
