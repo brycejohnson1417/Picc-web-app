@@ -155,6 +155,26 @@ function uniqueOrderFilters(filters: Prisma.NabisOrderWhereInput[]) {
   });
 }
 
+async function findMatchedAccountForStore(store: TerritoryStorePin) {
+  const accountCandidates = await prisma.account.findMany({
+    where: {
+      OR: [
+        { notionPageId: store.notionPageId },
+        store.licenseNumber?.trim() ? { licenseNumber: store.licenseNumber.trim() } : undefined,
+        store.name.trim() ? { name: { equals: store.name.trim(), mode: 'insensitive' } } : undefined,
+      ].filter(Boolean) as Prisma.AccountWhereInput[],
+    },
+    select: {
+      id: true,
+      licensedLocationId: true,
+      nabisRetailerId: true,
+    },
+    take: 5,
+  });
+
+  return accountCandidates.find((candidate) => candidate.licensedLocationId || candidate.nabisRetailerId) ?? accountCandidates[0] ?? null;
+}
+
 export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServiceDeps) {
   async function loadStoreCrmFields(store: TerritoryStorePin, contacts: CachedContactRow[]) {
     const page = await deps.notionRequest<NotionPageResponse>(`/pages/${store.notionPageId}`);
@@ -219,22 +239,7 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
   }
 
   async function loadStoreNabisOrderSummary(store: TerritoryStorePin) {
-    const accountCandidates = await prisma.account.findMany({
-      where: {
-        OR: [
-          { notionPageId: store.notionPageId },
-          store.licenseNumber?.trim() ? { licenseNumber: store.licenseNumber.trim() } : undefined,
-          store.name.trim() ? { name: { equals: store.name.trim(), mode: 'insensitive' } } : undefined,
-        ].filter(Boolean) as Prisma.AccountWhereInput[],
-      },
-      select: {
-        id: true,
-        licensedLocationId: true,
-        nabisRetailerId: true,
-      },
-      take: 5,
-    });
-    const account = accountCandidates.find((candidate) => candidate.licensedLocationId || candidate.nabisRetailerId) ?? accountCandidates[0] ?? null;
+    const account = await findMatchedAccountForStore(store);
 
     const orFilters: Prisma.NabisOrderWhereInput[] = [];
     if (account?.id) {
@@ -305,9 +310,27 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
 
     const latestOrder = rows[0] ?? null;
 
+    const matchedBy: 'account' | 'name' | 'identifier' = account?.id
+      ? 'account'
+      : uniqueFilters.some((filter) => normalizeIdentity(String((filter as { licensedLocationName?: { equals?: string } }).licensedLocationName?.equals ?? '')) === normalizeIdentity(store.name))
+        ? 'name'
+        : 'identifier';
+
     return {
+      matchedAccountId: account?.id ?? null,
+      matchedBy,
       monthly: [...buckets.values()],
       recentOrders: rows.slice(0, 6).map((row) => ({
+        id: row.id,
+        orderNumber: row.orderNumber ?? row.externalOrderId,
+        createdDate: dateToIso(row.orderCreatedDate),
+        deliveryDate: dateToIso(row.deliveryDate),
+        status: row.status ?? 'UNKNOWN',
+        total: row.orderTotal ? Number(row.orderTotal) : 0,
+        salesRep: row.salesRep,
+        customerName: row.licensedLocationName,
+      })),
+      orders: rows.slice(0, 25).map((row) => ({
         id: row.id,
         orderNumber: row.orderNumber ?? row.externalOrderId,
         createdDate: dateToIso(row.orderCreatedDate),
@@ -320,13 +343,38 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
       lastOrderDate: dateToIso(latestOrder?.orderCreatedDate),
       lastDeliveryDate: dateToIso(latestOrder?.deliveryDate),
       lastOrderAmount: latestOrder?.orderTotal ? Number(latestOrder.orderTotal) : null,
-      matchedAccountId: account?.id ?? null,
-      matchedBy: account?.id
-        ? 'account'
-        : uniqueFilters.some((filter) => normalizeIdentity(String((filter as { licensedLocationName?: { equals?: string } }).licensedLocationName?.equals ?? '')) === normalizeIdentity(store.name))
-          ? 'name'
-          : 'identifier',
     };
+  }
+
+  async function loadStoreAccountHistory(store: TerritoryStorePin) {
+    const account = await findMatchedAccountForStore(store);
+    if (!account?.id) {
+      return [];
+    }
+
+    const rows = await prisma.activityLog.findMany({
+      where: {
+        accountId: account.id,
+        type: 'ACCOUNT_UPDATED',
+      },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        description: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      createdAt: row.createdAt.toISOString(),
+      type: row.type,
+      title: row.title,
+      description: row.description ?? null,
+    }));
   }
 
   async function loadTerritoryStoreDetail(storeId: string): Promise<TerritoryStoreDetailResponse> {
@@ -349,7 +397,7 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
 
     contacts.sort((a, b) => a.name.localeCompare(b.name));
 
-    const [checkIns, vendorDays, crm, orderSummary] = await Promise.all([
+    const [checkIns, vendorDays, crm, orderSummary, accountUpdates] = await Promise.all([
       deps.loadStoreCheckIns(store),
       deps.loadStoreVendorDaySummary(store),
       loadStoreCrmFields(store, contacts).catch(() => ({
@@ -378,8 +426,20 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
         displayTracking: null,
       })),
       loadStoreNabisOrderSummary(store).catch(() => ({
+        matchedAccountId: null as string | null,
+        matchedBy: 'identifier' as const,
         monthly: [] as Array<{ month: string; orderCount: number; orderTotal: number; revenue: number }>,
         recentOrders: [] as Array<{
+          id: string;
+          orderNumber: string;
+          createdDate: string | null;
+          deliveryDate: string | null;
+          status: string;
+          total: number;
+          salesRep: string | null;
+          customerName: string | null;
+        }>,
+        orders: [] as Array<{
           id: string;
           orderNumber: string;
           createdDate: string | null;
@@ -393,6 +453,13 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
         lastDeliveryDate: null as string | null,
         lastOrderAmount: null as number | null,
       })),
+      loadStoreAccountHistory(store).catch(() => [] as Array<{
+        id: string;
+        createdAt: string;
+        type: string;
+        title: string;
+        description: string | null;
+      }>),
     ]);
 
     return {
@@ -415,8 +482,14 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
         lastOrderDate: crm.lastOrderDate ?? orderSummary.lastOrderDate,
       },
       analytics: {
+        matchedAccountId: orderSummary.matchedAccountId,
+        matchedBy: orderSummary.matchedBy,
         monthly: orderSummary.monthly,
         recentOrders: orderSummary.recentOrders,
+        orders: orderSummary.orders,
+      },
+      history: {
+        accountUpdates,
       },
     };
   }

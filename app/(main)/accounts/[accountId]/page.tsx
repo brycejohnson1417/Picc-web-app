@@ -1,6 +1,9 @@
 import { notFound } from 'next/navigation';
 import { AccountHero } from '@/components/crm/account-hero';
-import { Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
+import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-panel';
+import { PreferredPartnerProposalPanel } from '@/components/crm/preferred-partner-proposal-panel';
+import { PreferredPartnerSavingsPanel } from '@/components/crm/preferred-partner-savings-panel';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { resolveAccountIdentity } from '@/lib/server/account-identity';
 import { loadTerritoryStoreDetail } from '@/lib/server/notion-territory';
@@ -32,6 +35,8 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
 
   const detail = await loadTerritoryStoreDetail(notionPageId);
   const store = detail.store;
+  const savingsYear = new Date().getFullYear();
+  const notionUrl = `https://www.notion.so/${store.notionPageId.replace(/-/g, '')}`;
 
   return (
     <div className="space-y-6">
@@ -64,7 +69,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
               Notion page:{' '}
               <a
                 className="text-blue-600 underline"
-                href={`https://www.notion.so/${store.notionPageId.replace(/-/g, '')}`}
+                href={notionUrl}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -128,6 +133,19 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             ))}
           </CardContent>
         </Card>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <Button asChild variant="outline">
+            <a href={notionUrl} target="_blank" rel="noreferrer">
+              Open Full Record in Notion
+            </a>
+          </Button>
+        </div>
+        <PreferredPartnerProposalPanel accountId={accountId} />
+        <PreferredPartnerSavingsPanel accountId={accountId} year={savingsYear} />
+        <MockOrderProposalPanel accountId={accountId} />
       </section>
     </div>
   );

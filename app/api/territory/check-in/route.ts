@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
 import { writeActivity } from '@/lib/activity-log/write';
 import { prisma } from '@/lib/db/prisma';
-import { createTerritoryStoreCheckInComment, recordTerritoryStoreCheckIn } from '@/lib/server/notion-territory';
+import { createTerritoryStoreCheckInComment, recordTerritoryStoreCheckIn, updateTerritoryStoreFields } from '@/lib/server/notion-territory';
 import { WriteEnabledRoles } from '@/lib/types/rbac';
 
 const legacyRequestSchema = z.object({
@@ -22,6 +22,9 @@ const meetingNoteRequestSchema = z.object({
     repName: z.string().nullable().optional(),
   }),
   noteText: z.string().max(5000).optional(),
+  followUpDate: z.union([z.string().min(1), z.null()]).optional(),
+  followUpNeeded: z.union([z.boolean(), z.null()]).optional(),
+  followUpReason: z.union([z.string().max(4000), z.null()]).optional(),
   associatedContact: z
     .object({
       id: z.string().min(1).optional(),
@@ -53,11 +56,21 @@ export async function POST(request: Request) {
         mode: 'written',
         noteText: payload.noteText,
         actorEmail: access.email,
+        followUpDate: payload.followUpDate ?? null,
+        followUpNeeded: payload.followUpNeeded ?? null,
+        followUpReason: payload.followUpReason ?? null,
         associatedContact: payload.associatedContact,
       });
 
       let checkedInAt = new Date().toISOString();
       let syncWarning: string | null = null;
+      let followUpUpdateResult:
+        | {
+            followUpDate: string | null;
+            followUpNeeded: boolean | null;
+            followUpReason: string | null;
+          }
+        | null = null;
 
       try {
         const checkIn = await recordTerritoryStoreCheckIn(storeId, {
@@ -76,15 +89,44 @@ export async function POST(request: Request) {
         }
       }
 
-      if (access.orgId && access.userId) {
-        const account = await prisma.account.findFirst({
-          where: {
-            orgId: access.orgId,
-            notionPageId: payload.store.notionPageId,
-          },
-          select: { id: true },
-        });
+      if (
+        payload.followUpDate !== undefined ||
+        payload.followUpNeeded !== undefined ||
+        payload.followUpReason !== undefined
+      ) {
+        try {
+          const storeUpdate = await updateTerritoryStoreFields(storeId, {
+            followUpDate: payload.followUpDate,
+            followUpNeeded: payload.followUpNeeded,
+            followUpReason: payload.followUpReason,
+          });
+          followUpUpdateResult = {
+            followUpDate: storeUpdate.followUpDate ?? null,
+            followUpNeeded: storeUpdate.followUpNeeded ?? null,
+            followUpReason: storeUpdate.followUpReason ?? null,
+          };
+        } catch (syncError) {
+          const message = syncError instanceof Error ? syncError.message : 'Failed to update follow-up fields';
+          if (message.includes('No writable Follow-up') || message === 'Store not found') {
+            syncWarning = syncWarning ? `${syncWarning}. ${message}` : message;
+          } else {
+            throw syncError;
+          }
+        }
+      }
 
+      const account =
+        access.orgId && payload.store.notionPageId
+          ? await prisma.account.findFirst({
+              where: {
+                orgId: access.orgId,
+                notionPageId: payload.store.notionPageId,
+              },
+              select: { id: true },
+            })
+          : null;
+
+      if (access.orgId && access.userId) {
         if (account) {
           await writeActivity({
             orgId: access.orgId,
@@ -94,6 +136,27 @@ export async function POST(request: Request) {
             title: 'Territory check-in added',
             description: payload.noteText?.trim() || payload.associatedContact?.name || undefined,
           });
+
+          if (
+            payload.followUpDate !== undefined ||
+            payload.followUpNeeded !== undefined ||
+            payload.followUpReason !== undefined
+          ) {
+            await writeActivity({
+              orgId: access.orgId,
+              accountId: account.id,
+              actorClerkUserId: access.userId,
+              type: ActivityType.ACCOUNT_UPDATED,
+              title: 'Territory follow-up updated',
+              description: [
+                payload.followUpDate ? `Follow-up ${payload.followUpDate}` : null,
+                typeof payload.followUpNeeded === 'boolean' ? `Follow-up needed ${payload.followUpNeeded ? 'yes' : 'no'}` : null,
+                payload.followUpReason ? 'Follow-up reason updated' : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || undefined,
+            });
+          }
         }
       }
 
@@ -105,6 +168,9 @@ export async function POST(request: Request) {
         checkedInAt,
         mode: 'written',
         syncWarning,
+        followUpDate: followUpUpdateResult?.followUpDate ?? payload.followUpDate ?? null,
+        followUpNeeded: followUpUpdateResult?.followUpNeeded ?? payload.followUpNeeded ?? null,
+        followUpReason: followUpUpdateResult?.followUpReason ?? payload.followUpReason ?? null,
         associatedContact: payload.associatedContact
           ? {
               id: payload.associatedContact.id ?? null,

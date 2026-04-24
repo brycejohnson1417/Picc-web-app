@@ -126,6 +126,8 @@ export interface TerritoryStoreDetailResponse {
     displayTracking: string | null;
   };
   analytics: {
+    matchedAccountId: string | null;
+    matchedBy: 'account' | 'name' | 'identifier';
     monthly: Array<{
       month: string;
       orderCount: number;
@@ -141,6 +143,25 @@ export interface TerritoryStoreDetailResponse {
       total: number;
       salesRep: string | null;
       customerName: string | null;
+    }>;
+    orders: Array<{
+      id: string;
+      orderNumber: string;
+      createdDate: string | null;
+      deliveryDate: string | null;
+      status: string;
+      total: number;
+      salesRep: string | null;
+      customerName: string | null;
+    }>;
+  };
+  history: {
+    accountUpdates: Array<{
+      id: string;
+      createdAt: string;
+      type: string;
+      title: string;
+      description: string | null;
     }>;
   };
 }

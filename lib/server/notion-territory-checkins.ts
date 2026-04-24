@@ -425,6 +425,9 @@ export function createTerritoryCheckInService(deps: TerritoryCheckInServiceDeps)
       mode?: 'written' | 'voice';
       noteText?: string | null;
       actorEmail?: string | null;
+      followUpDate?: string | null;
+      followUpNeeded?: boolean | null;
+      followUpReason?: string | null;
       associatedContact?: {
         name: string;
         roleTitle?: string | null;
@@ -459,6 +462,16 @@ export function createTerritoryCheckInService(deps: TerritoryCheckInServiceDeps)
 
     if (input?.noteText?.trim()) {
       parts.push('', input.noteText.trim());
+    }
+
+    const followUpLines: string[] = [
+      input?.followUpDate?.trim() ? `Follow-up Date: ${input.followUpDate.trim()}` : null,
+      typeof input?.followUpNeeded === 'boolean' ? `Follow-up Needed: ${input.followUpNeeded ? 'Yes' : 'No'}` : null,
+      input?.followUpReason?.trim() ? `Follow-up Reason: ${input.followUpReason.trim()}` : null,
+    ].filter((value): value is string => Boolean(value));
+
+    if (followUpLines.length > 0) {
+      parts.push('', ...followUpLines);
     }
 
     const content = parts.join('\n').slice(0, 1800);
