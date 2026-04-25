@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { Role, VendorDayOfferStatus, VendorDayRequestStatus } from '@prisma/client';
+import { PreferredPartnerRepChart } from '@/components/home/preferred-partner-rep-chart';
 import { WorkspaceHero, WorkspacePage, WorkspaceSection } from '@/components/layout/workspace-page';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { prisma } from '@/lib/db/prisma';
 import { getCalendarSyncHealth } from '@/lib/server/calendar-sync-health';
 import { getNabisSyncFreshness } from '@/lib/server/nabis-sync';
+import { loadTerritoryStores } from '@/lib/server/notion-territory';
+import { preferredPartnerRepBreakdown } from '@/lib/territory/preferred-partner';
 
 function formatTimestamp(value: string | null) {
   if (!value) return 'Not synced yet';
@@ -240,6 +243,12 @@ export default async function HomePage() {
     });
   }
 
+  const preferredPartnerSummary = !isAmbassador
+    ? await loadTerritoryStores({
+        preferredPartnerFilter: 'all',
+      }).then((response) => preferredPartnerRepBreakdown(response.stores))
+    : null;
+
   return (
     <WorkspacePage>
       <WorkspaceHero
@@ -326,6 +335,27 @@ export default async function HomePage() {
           ))}
         </div>
       </WorkspaceSection>
+
+      {preferredPartnerSummary ? (
+        <WorkspaceSection
+          eyebrow="Preferred Partners"
+          title="Current preferred partners by sales rep"
+          description="Counts come from the synced territory dataset backed by the Notion Dispensary Master List CRM. Preferred Partner requires PPP Status = Approved & Connected and Headset Connection = Connected to PICC Headset."
+        >
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
+            <div className="rounded-[22px] border border-[#dce2eb] bg-[linear-gradient(180deg,#18212d_0%,#243141_100%)] p-5 text-white shadow-[0_16px_32px_rgba(24,33,45,0.14)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">Total Preferred Partners</p>
+              <p className="mt-3 text-5xl font-semibold leading-none">{preferredPartnerSummary.totalPreferredPartners}</p>
+              <p className="mt-3 text-sm text-white/78">
+                Live count across all synced accounts in territory.
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-[#dce2eb] bg-[#fbfcfe] p-4">
+              <PreferredPartnerRepChart data={preferredPartnerSummary.reps} />
+            </div>
+          </div>
+        </WorkspaceSection>
+      ) : null}
     </WorkspacePage>
   );
 }
