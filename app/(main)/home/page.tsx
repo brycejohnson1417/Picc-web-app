@@ -1,5 +1,8 @@
 import Link from 'next/link';
+import { currentUser } from '@clerk/nextjs/server';
 import { Role, VendorDayOfferStatus, VendorDayRequestStatus } from '@prisma/client';
+import { FollowUpActionBoard, type HomeFollowUpItem } from '@/components/home/follow-up-action-board';
+import { HotLeadsBoard, type HomeHotLeadItem } from '@/components/home/hot-leads-board';
 import { PreferredPartnerRepChart } from '@/components/home/preferred-partner-rep-chart';
 import { WorkspaceHero, WorkspacePage, WorkspaceSection } from '@/components/layout/workspace-page';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
@@ -25,6 +28,14 @@ function calendarStatusLabel(mode: 'healthy' | 'stale' | 'manual-only') {
   if (mode === 'healthy') return 'Healthy';
   if (mode === 'stale') return 'Stale';
   return 'Manual only';
+}
+
+function normalizeEmail(value: string | null | undefined) {
+  return value?.trim().toLowerCase() || '';
+}
+
+function normalizeStoreKey(value: string | null | undefined) {
+  return value?.replace(/-/g, '').trim().toLowerCase() || '';
 }
 
 type HomeAction = {
@@ -62,7 +73,7 @@ function buildSupportLinks(role: Role): HomeSupportLink[] {
 
 export default async function HomePage() {
   const { orgId, userId } = await requireWorkspaceContext();
-  const [membership, freshness, monthlyOrderCount, viewerWorkerProfile] = await Promise.all([
+  const [membership, freshness, monthlyOrderCount, viewerWorkerProfile, viewer] = await Promise.all([
     prisma.membership.findUnique({
       where: {
         orgId_clerkUserId: {
@@ -90,10 +101,15 @@ export default async function HomePage() {
       },
       select: { id: true, displayName: true },
     }),
+    currentUser(),
   ]);
 
   const role = membership?.role ?? Role.SALES_REP;
   const showCalendarHealth = role === Role.ADMIN || role === Role.OPS_TEAM || role === Role.FINANCE;
+  const viewerEmail = normalizeEmail(
+    viewer?.primaryEmailAddress?.emailAddress ?? viewer?.emailAddresses?.[0]?.emailAddress ?? '',
+  );
+  const viewerHasAdminOverride = role === Role.ADMIN && viewerEmail === 'bryce@piccplatform.com';
 
   const [calendarHealth, ambassadorOffers, ambassadorAssignments, requestSnapshot] = await Promise.all([
     showCalendarHealth ? getCalendarSyncHealth(orgId) : Promise.resolve(null),
@@ -243,11 +259,132 @@ export default async function HomePage() {
     });
   }
 
-  const preferredPartnerSummary = !isAmbassador
+  const territoryResponse = !isAmbassador
     ? await loadTerritoryStores({
         preferredPartnerFilter: 'all',
-      }).then((response) => preferredPartnerRepBreakdown(response.stores))
+      })
     : null;
+
+  const preferredPartnerSummary = territoryResponse
+    ? preferredPartnerRepBreakdown(territoryResponse.stores)
+    : null;
+
+  const followUpItems: HomeFollowUpItem[] = [];
+  const hotLeadItems: HomeHotLeadItem[] = [];
+  let followUpRepFilterOptions: Array<{ value: string; label: string }> = [];
+  let hotLeadRepFilterOptions: Array<{ value: string; label: string }> = [];
+  let defaultFollowUpFilter = 'all';
+
+  if (territoryResponse) {
+    const authoredStores = viewerEmail
+      ? await Promise.all([
+          prisma.checkIn.findMany({
+            where: {
+              orgId,
+              createdByEmail: {
+                equals: viewerEmail,
+                mode: 'insensitive',
+              },
+            },
+            select: {
+              storeId: true,
+            },
+          }),
+          prisma.territoryCheckInMirror.findMany({
+            where: {
+              orgId,
+              createdByEmail: {
+                equals: viewerEmail,
+                mode: 'insensitive',
+              },
+            },
+            select: {
+              storeId: true,
+              notionPageId: true,
+            },
+          }),
+        ])
+      : [[], []] as const;
+
+    const authoredStoreKeys = new Set<string>();
+    const hotLeadRepCountByName = new Map<string, number>();
+    for (const row of authoredStores[0]) {
+      authoredStoreKeys.add(normalizeStoreKey(row.storeId));
+    }
+    for (const row of authoredStores[1]) {
+      authoredStoreKeys.add(normalizeStoreKey(row.storeId));
+      authoredStoreKeys.add(normalizeStoreKey(row.notionPageId));
+    }
+
+    const repCountByName = new Map<string, number>();
+    for (const store of territoryResponse.stores) {
+      const repNames = store.repNames.length > 0 ? store.repNames : ['Unassigned'];
+
+      if (store.statusKey === 'lead - hot') {
+        for (const repName of repNames) {
+          hotLeadRepCountByName.set(repName, (hotLeadRepCountByName.get(repName) ?? 0) + 1);
+        }
+
+        hotLeadItems.push({
+          id: store.id,
+          name: store.name,
+          locationAddress: store.locationAddress ?? store.locationLabel ?? null,
+          repNames,
+          lastSampleDate: store.lastSampleDeliveryDate ?? store.lastSampleOrderDate ?? null,
+        });
+      }
+
+      if (!store.followUpNeeded) {
+        continue;
+      }
+
+      const repEmails = store.repEmails.map((value) => normalizeEmail(value)).filter(Boolean);
+      const assignedToViewer = viewerEmail ? repEmails.includes(viewerEmail) : false;
+      const authoredByViewer =
+        authoredStoreKeys.has(normalizeStoreKey(store.id)) ||
+        authoredStoreKeys.has(normalizeStoreKey(store.notionPageId));
+      const mine = assignedToViewer || authoredByViewer;
+
+      for (const repName of repNames) {
+        repCountByName.set(repName, (repCountByName.get(repName) ?? 0) + 1);
+      }
+
+      followUpItems.push({
+        id: store.id,
+        name: store.name,
+        locationAddress: store.locationAddress ?? store.locationLabel ?? null,
+        repNames,
+        status: store.status,
+        followUpDate: store.followUpDate ?? null,
+        followUpReason: store.followUpReason ?? null,
+        lastCheckIn: store.lastCheckIn ?? null,
+        mine,
+        authoredByViewer,
+      });
+    }
+
+    const mineCount = followUpItems.filter((item) => item.mine).length;
+    defaultFollowUpFilter = mineCount > 0 ? 'mine' : 'all';
+    followUpRepFilterOptions = [
+      { value: 'mine', label: `My Follow-Ups (${mineCount})` },
+      { value: 'all', label: `All Reps (${followUpItems.length})` },
+      ...[...repCountByName.entries()]
+        .sort((left, right) => left[0].localeCompare(right[0]))
+        .map(([value, count]) => ({
+          value,
+          label: `${value} (${count})`,
+        })),
+    ];
+    hotLeadRepFilterOptions = [
+      { value: 'all', label: `All Reps (${hotLeadItems.length})` },
+      ...[...hotLeadRepCountByName.entries()]
+        .sort((left, right) => left[0].localeCompare(right[0]))
+        .map(([value, count]) => ({
+          value,
+          label: `${value} (${count})`,
+        })),
+    ];
+  }
 
   return (
     <WorkspacePage>
@@ -287,43 +424,6 @@ export default async function HomePage() {
         }
       />
 
-      <WorkspaceSection
-        eyebrow="Next Action"
-        title={primaryAction.title}
-        description={primaryAction.description}
-        actions={
-          <>
-            <Link
-              href={primaryAction.href}
-              className="rounded-full bg-[#18212d] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#243141]"
-            >
-              {primaryAction.label}
-            </Link>
-            <Link
-              href={supportLinks[0].href}
-              className="rounded-full border border-[#d7dde7] bg-white px-4 py-2 text-sm font-semibold text-[#243040] transition hover:bg-[#f3f6fb]"
-            >
-              {supportLinks[0].label}
-            </Link>
-          </>
-        }
-      >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {supportLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-[20px] border border-[#dce2eb] bg-[#f8fafc] p-4 transition hover:border-[#9db8f7] hover:bg-[#f2f7ff]"
-            >
-              <p className="text-base font-semibold text-[#18212d]">{link.label}</p>
-              <p className="mt-1 text-sm leading-6 text-[#5c6674]">
-                Jump directly to the place that matters most for your current role.
-              </p>
-            </Link>
-          ))}
-        </div>
-      </WorkspaceSection>
-
       <WorkspaceSection eyebrow="Freshness" title="What is synced right now" description="The screen should feel current without forcing a full refresh every time you navigate back.">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {freshnessTiles.map((tile) => (
@@ -354,6 +454,31 @@ export default async function HomePage() {
               <PreferredPartnerRepChart data={preferredPartnerSummary.reps} />
             </div>
           </div>
+        </WorkspaceSection>
+      ) : null}
+
+      {followUpItems.length > 0 ? (
+        <WorkspaceSection
+          eyebrow="Next Action"
+          title="Overdue and current follow-ups"
+          description="Use this board to work follow-ups by owner, by rep, and by urgency instead of relying on a generic queue summary."
+        >
+          <FollowUpActionBoard
+            items={followUpItems}
+            repFilterOptions={followUpRepFilterOptions}
+            defaultFilter={defaultFollowUpFilter}
+            viewerHasAdminOverride={viewerHasAdminOverride}
+          />
+        </WorkspaceSection>
+      ) : null}
+
+      {hotLeadItems.length > 0 ? (
+        <WorkspaceSection
+          eyebrow="Hot Leads"
+          title="Hot leads by rep"
+          description="This section keeps the hottest accounts visible on the home page, sorted by sample delivery activity and linked straight into account detail."
+        >
+          <HotLeadsBoard items={hotLeadItems} repFilterOptions={hotLeadRepFilterOptions} />
         </WorkspaceSection>
       ) : null}
     </WorkspacePage>
