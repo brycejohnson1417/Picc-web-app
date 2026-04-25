@@ -1357,6 +1357,24 @@ function normalizeSnapshotPayload(payload: unknown): TerritoryStorePin[] {
         status,
         statusKey: typeof row.statusKey === 'string' && row.statusKey ? row.statusKey : normalizeStatus(status),
         statusColor: typeof row.statusColor === 'string' && row.statusColor ? row.statusColor : colorForStatus(status),
+        pppStatus: Object.prototype.hasOwnProperty.call(row, 'pppStatus') && typeof row.pppStatus === 'string' && row.pppStatus.trim() ? row.pppStatus.trim() : null,
+        pppStatusColorName:
+          Object.prototype.hasOwnProperty.call(row, 'pppStatusColorName') && typeof row.pppStatusColorName === 'string' && row.pppStatusColorName.trim()
+            ? row.pppStatusColorName.trim()
+            : null,
+        headsetConnectionStatus:
+          Object.prototype.hasOwnProperty.call(row, 'headsetConnectionStatus') &&
+          typeof row.headsetConnectionStatus === 'string' &&
+          row.headsetConnectionStatus.trim()
+            ? row.headsetConnectionStatus.trim()
+            : null,
+        headsetConnectionStatusColorName:
+          Object.prototype.hasOwnProperty.call(row, 'headsetConnectionStatusColorName') &&
+          typeof row.headsetConnectionStatusColorName === 'string' &&
+          row.headsetConnectionStatusColorName.trim()
+            ? row.headsetConnectionStatusColorName.trim()
+            : null,
+        isPreferredPartner: isPreferredPartnerFromStatuses(row.pppStatus, row.headsetConnectionStatus),
         pinKind: row.pinKind ?? pinKindForStatus(status),
         repNames: Array.isArray(row.repNames) ? row.repNames.filter((value): value is string => typeof value === 'string') : [],
         repEmails: Array.isArray(row.repEmails) ? row.repEmails.filter((value): value is string => typeof value === 'string') : [],
@@ -1390,6 +1408,18 @@ function normalizeSnapshotPayload(payload: unknown): TerritoryStorePin[] {
       };
     })
     .filter((row): row is TerritoryStorePin => row !== null);
+}
+
+function snapshotMissingPreferredPartnerFields(stores: TerritoryStorePin[]) {
+  if (stores.length === 0) {
+    return false;
+  }
+
+  return stores.some(
+    (store) =>
+      !Object.prototype.hasOwnProperty.call(store, 'pppStatus') ||
+      !Object.prototype.hasOwnProperty.call(store, 'headsetConnectionStatus'),
+  );
 }
 
 async function syncTerritorySnapshotFromNotion(input?: { maxLiveGeocodeLookups?: number }) {
@@ -1551,6 +1581,7 @@ async function getTerritorySnapshot(input?: {
     !cached ||
     cached.payload.length === 0 ||
     cached.recordsRead === 0 ||
+    snapshotMissingPreferredPartnerFields(normalizedCachedPayload) ||
     isSnapshotStale(cached.syncedAt, ttlMinutes);
 
   let geocodedThisRequest = 0;
