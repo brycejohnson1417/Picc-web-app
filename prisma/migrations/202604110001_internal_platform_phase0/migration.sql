@@ -20,40 +20,40 @@ CREATE TYPE "VendorDayArtifactType" AS ENUM ('CHECK_IN_PHOTO', 'CHECK_OUT_PHOTO'
 ALTER TYPE "IntegrationProvider" ADD VALUE 'NABIS';
 
 -- DropIndex
-DROP INDEX "Account_geoLat_geoLng_idx";
+DROP INDEX IF EXISTS "Account_geoLat_geoLng_idx";
 
 -- DropIndex
-DROP INDEX "Account_gix";
+DROP INDEX IF EXISTS "Account_gix";
 
 -- DropIndex
-DROP INDEX "Account_orgId_lastContactedAt_idx";
+DROP INDEX IF EXISTS "Account_orgId_lastContactedAt_idx";
 
 -- DropIndex
-DROP INDEX "CheckIn_gix";
+DROP INDEX IF EXISTS "CheckIn_gix";
 
 -- DropIndex
-DROP INDEX "Contact_geoLat_geoLng_idx";
+DROP INDEX IF EXISTS "Contact_geoLat_geoLng_idx";
 
 -- DropIndex
-DROP INDEX "Contact_gix";
+DROP INDEX IF EXISTS "Contact_gix";
 
 -- DropIndex
-DROP INDEX "Message_orgId_accountId_sentAt_idx";
+DROP INDEX IF EXISTS "Message_orgId_accountId_sentAt_idx";
 
 -- DropIndex
-DROP INDEX "Opportunity_orgId_status_updatedAt_idx";
+DROP INDEX IF EXISTS "Opportunity_orgId_status_updatedAt_idx";
 
 -- DropIndex
-DROP INDEX "SalesRoute_gix";
+DROP INDEX IF EXISTS "SalesRoute_gix";
 
 -- DropIndex
-DROP INDEX "Task_orgId_status_dueDate_idx";
+DROP INDEX IF EXISTS "Task_orgId_status_dueDate_idx";
 
 -- DropIndex
-DROP INDEX "Territory_gix";
+DROP INDEX IF EXISTS "Territory_gix";
 
 -- DropIndex
-DROP INDEX "TerritoryStoreReadModel_gix";
+DROP INDEX IF EXISTS "TerritoryStoreReadModel_gix";
 
 -- AlterTable
 ALTER TABLE "Account" ADD COLUMN     "licensedLocationId" TEXT,
