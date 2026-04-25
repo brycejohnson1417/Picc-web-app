@@ -23,6 +23,7 @@ import { useTerritoryData } from '@/components/mobile/use-territory-data';
 import { useTerritoryOverlays } from '@/components/mobile/use-territory-overlays';
 import { MapRenderBoundary } from '@/components/mobile/map-render-boundary';
 import { createRepColorMap, type PinColorMode } from '@/lib/territory/pin-colors';
+import type { PreferredPartnerFilter } from '@/lib/territory/preferred-partner';
 import type { TerritoryStorePin } from '@/lib/territory/types';
 import { clearSavedTerritoryFilters, countActiveTerritoryFilters, loadSavedTerritoryFilters, persistSavedTerritoryFilters, type TerritorySavedFiltersPayload } from '@/lib/territory/filter-storage';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
@@ -86,6 +87,9 @@ export function TerritoryMobile() {
   const [showRouteOnly, setShowRouteOnly] = useState(false);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedReps, setSelectedReps] = useState<string[]>([]);
+  const [selectedPppStatuses, setSelectedPppStatuses] = useState<string[]>([]);
+  const [selectedHeadsetConnectionStatuses, setSelectedHeadsetConnectionStatuses] = useState<string[]>([]);
+  const [preferredPartnerFilter, setPreferredPartnerFilter] = useState<PreferredPartnerFilter>('all');
   const [selectedReferralSources, setSelectedReferralSources] = useState<string[]>([]);
   const [includeNoReferralSource, setIncludeNoReferralSource] = useState(false);
   const [selectedVendorDayStatuses, setSelectedVendorDayStatuses] = useState<string[]>([]);
@@ -99,6 +103,9 @@ export function TerritoryMobile() {
   const [pinColorMode, setPinColorMode] = useState<PinColorMode>('status');
   const [draftStatuses, setDraftStatuses] = useState<string[]>([]);
   const [draftReps, setDraftReps] = useState<string[]>([]);
+  const [draftPppStatuses, setDraftPppStatuses] = useState<string[]>([]);
+  const [draftHeadsetConnectionStatuses, setDraftHeadsetConnectionStatuses] = useState<string[]>([]);
+  const [draftPreferredPartnerFilter, setDraftPreferredPartnerFilter] = useState<PreferredPartnerFilter>('all');
   const [draftReferralSources, setDraftReferralSources] = useState<string[]>([]);
   const [draftIncludeNoReferralSource, setDraftIncludeNoReferralSource] = useState(false);
   const [draftVendorDayStatuses, setDraftVendorDayStatuses] = useState<string[]>([]);
@@ -188,6 +195,21 @@ export function TerritoryMobile() {
     setDebouncedSearch(typeof parsed.search === 'string' ? parsed.search.trim() : '');
     setSelectedStatuses(Array.isArray(parsed.selectedStatuses) ? parsed.selectedStatuses.filter((value): value is string => typeof value === 'string') : []);
     setSelectedReps(Array.isArray(parsed.selectedReps) ? parsed.selectedReps.filter((value): value is string => typeof value === 'string') : []);
+    setSelectedPppStatuses(
+      Array.isArray(parsed.selectedPppStatuses)
+        ? parsed.selectedPppStatuses.filter((value): value is string => typeof value === 'string')
+        : [],
+    );
+    setSelectedHeadsetConnectionStatuses(
+      Array.isArray(parsed.selectedHeadsetConnectionStatuses)
+        ? parsed.selectedHeadsetConnectionStatuses.filter((value): value is string => typeof value === 'string')
+        : [],
+    );
+    setPreferredPartnerFilter(
+      parsed.preferredPartnerFilter === 'preferred' || parsed.preferredPartnerFilter === 'not_preferred'
+        ? parsed.preferredPartnerFilter
+        : 'all',
+    );
     setSelectedReferralSources(
       Array.isArray(parsed.selectedReferralSources)
         ? parsed.selectedReferralSources.filter((value): value is string => typeof value === 'string')
@@ -224,6 +246,9 @@ export function TerritoryMobile() {
     search: debouncedSearch,
     selectedStatuses,
     selectedReps,
+    selectedPppStatuses,
+    selectedHeadsetConnectionStatuses,
+    preferredPartnerFilter,
     selectedReferralSources,
     includeNoReferralSource,
     selectedVendorDayStatuses,
@@ -432,6 +457,9 @@ export function TerritoryMobile() {
   const activeFiltersCount = countActiveTerritoryFilters({
     selectedStatuses,
     selectedReps,
+    selectedPppStatuses,
+    selectedHeadsetConnectionStatuses,
+    preferredPartnerFilter,
     selectedReferralSources,
     includeNoReferralSource,
     selectedVendorDayStatuses,
@@ -446,6 +474,9 @@ export function TerritoryMobile() {
   function openFiltersSheet() {
     setDraftStatuses(selectedStatuses);
     setDraftReps(selectedReps);
+    setDraftPppStatuses(selectedPppStatuses);
+    setDraftHeadsetConnectionStatuses(selectedHeadsetConnectionStatuses);
+    setDraftPreferredPartnerFilter(preferredPartnerFilter);
     setDraftReferralSources(selectedReferralSources);
     setDraftIncludeNoReferralSource(includeNoReferralSource);
     setDraftVendorDayStatuses(selectedVendorDayStatuses);
@@ -461,6 +492,9 @@ export function TerritoryMobile() {
   function applyDraftFilters() {
     setSelectedStatuses(draftStatuses);
     setSelectedReps(draftReps);
+    setSelectedPppStatuses(draftPppStatuses);
+    setSelectedHeadsetConnectionStatuses(draftHeadsetConnectionStatuses);
+    setPreferredPartnerFilter(draftPreferredPartnerFilter);
     setSelectedReferralSources(draftReferralSources);
     setIncludeNoReferralSource(draftIncludeNoReferralSource);
     setSelectedVendorDayStatuses(draftVendorDayStatuses);
@@ -478,6 +512,9 @@ export function TerritoryMobile() {
       search: search.trim(),
       selectedStatuses,
       selectedReps,
+      selectedPppStatuses,
+      selectedHeadsetConnectionStatuses,
+      preferredPartnerFilter,
       selectedReferralSources,
       includeNoReferralSource,
       selectedVendorDayStatuses,
@@ -500,6 +537,9 @@ export function TerritoryMobile() {
     setDebouncedSearch('');
     setSelectedStatuses([]);
     setSelectedReps([]);
+    setSelectedPppStatuses([]);
+    setSelectedHeadsetConnectionStatuses([]);
+    setPreferredPartnerFilter('all');
     setSelectedReferralSources([]);
     setIncludeNoReferralSource(false);
     setSelectedVendorDayStatuses([]);
@@ -512,6 +552,9 @@ export function TerritoryMobile() {
     setPinColorMode('status');
     setDraftStatuses([]);
     setDraftReps([]);
+    setDraftPppStatuses([]);
+    setDraftHeadsetConnectionStatuses([]);
+    setDraftPreferredPartnerFilter('all');
     setDraftReferralSources([]);
     setDraftIncludeNoReferralSource(false);
     setDraftVendorDayStatuses([]);
@@ -790,11 +833,17 @@ export function TerritoryMobile() {
         onClose={() => setShowFilters(false)}
         statuses={storesQuery.data?.filters.statuses ?? []}
         reps={storesQuery.data?.filters.reps ?? []}
+        pppStatuses={storesQuery.data?.filters.pppStatuses ?? []}
+        headsetConnectionStatuses={storesQuery.data?.filters.headsetConnectionStatuses ?? []}
+        preferredPartners={storesQuery.data?.filters.preferredPartners ?? []}
         referralSources={storesQuery.data?.filters.referralSources ?? []}
         vendorDayStatuses={storesQuery.data?.filters.vendorDayStatuses ?? []}
         locationAvailabilityOptions={storesQuery.data?.filters.locationAvailability ?? []}
         selectedStatuses={draftStatuses}
         selectedReps={draftReps}
+        selectedPppStatuses={draftPppStatuses}
+        selectedHeadsetConnectionStatuses={draftHeadsetConnectionStatuses}
+        preferredPartnerFilter={draftPreferredPartnerFilter}
         selectedReferralSources={draftReferralSources}
         includeNoReferralSource={draftIncludeNoReferralSource}
         selectedVendorDayStatuses={draftVendorDayStatuses}
@@ -805,6 +854,9 @@ export function TerritoryMobile() {
         lastOrderDateFilter={draftLastOrderDateFilter}
         onToggleStatus={(value) => setDraftStatuses((current) => toggleListValue(current, value))}
         onToggleRep={(value) => setDraftReps((current) => toggleListValue(current, value))}
+        onTogglePppStatus={(value) => setDraftPppStatuses((current) => toggleListValue(current, value))}
+        onToggleHeadsetConnectionStatus={(value) => setDraftHeadsetConnectionStatuses((current) => toggleListValue(current, value))}
+        onSetPreferredPartnerFilter={setDraftPreferredPartnerFilter}
         onToggleReferralSource={(value) => setDraftReferralSources((current) => toggleListValue(current, value))}
         onSetIncludeNoReferralSource={setDraftIncludeNoReferralSource}
         onToggleVendorDayStatus={(value) => setDraftVendorDayStatuses((current) => toggleListValue(current, value))}

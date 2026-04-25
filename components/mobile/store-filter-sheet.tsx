@@ -11,11 +11,17 @@ interface StoreFilterSheetProps {
   onClose: () => void;
   statuses: TerritoryFilterCount[];
   reps: TerritoryFilterCount[];
+  pppStatuses: TerritoryFilterCount[];
+  headsetConnectionStatuses: TerritoryFilterCount[];
+  preferredPartners: TerritoryFilterCount[];
   referralSources: TerritoryFilterCount[];
   vendorDayStatuses: TerritoryFilterCount[];
   locationAvailabilityOptions: TerritoryFilterCount[];
   selectedStatuses: string[];
   selectedReps: string[];
+  selectedPppStatuses: string[];
+  selectedHeadsetConnectionStatuses: string[];
+  preferredPartnerFilter: 'all' | 'preferred' | 'not_preferred';
   selectedReferralSources: string[];
   includeNoReferralSource: boolean;
   selectedVendorDayStatuses: string[];
@@ -26,6 +32,9 @@ interface StoreFilterSheetProps {
   lastOrderDateFilter: 'all' | 'last_month' | 'last_2_months' | 'three_plus_months';
   onToggleStatus: (value: string) => void;
   onToggleRep: (value: string) => void;
+  onTogglePppStatus: (value: string) => void;
+  onToggleHeadsetConnectionStatus: (value: string) => void;
+  onSetPreferredPartnerFilter: (value: 'all' | 'preferred' | 'not_preferred') => void;
   onToggleReferralSource: (value: string) => void;
   onSetIncludeNoReferralSource: (value: boolean) => void;
   onToggleVendorDayStatus: (value: string) => void;
@@ -47,11 +56,17 @@ export function StoreFilterSheet({
   onClose,
   statuses,
   reps,
+  pppStatuses,
+  headsetConnectionStatuses,
+  preferredPartners,
   referralSources,
   vendorDayStatuses,
   locationAvailabilityOptions,
   selectedStatuses,
   selectedReps,
+  selectedPppStatuses,
+  selectedHeadsetConnectionStatuses,
+  preferredPartnerFilter,
   selectedReferralSources,
   includeNoReferralSource,
   selectedVendorDayStatuses,
@@ -62,6 +77,9 @@ export function StoreFilterSheet({
   lastOrderDateFilter,
   onToggleStatus,
   onToggleRep,
+  onTogglePppStatus,
+  onToggleHeadsetConnectionStatus,
+  onSetPreferredPartnerFilter,
   onToggleReferralSource,
   onSetIncludeNoReferralSource,
   onToggleVendorDayStatus,
@@ -86,6 +104,9 @@ export function StoreFilterSheet({
   const activeFilters =
     selectedStatuses.length +
     selectedReps.length +
+    selectedPppStatuses.length +
+    selectedHeadsetConnectionStatuses.length +
+    (preferredPartnerFilter === 'all' ? 0 : 1) +
     selectedReferralSources.length +
     (includeNoReferralSource ? 1 : 0) +
     selectedVendorDayStatuses.length +
@@ -131,7 +152,7 @@ export function StoreFilterSheet({
                 By Rep
               </button>
             </div>
-            <p className="mt-2 text-[12px] text-[#72757d]">Filter results are still applied. This only changes pin coloring.</p>
+            <p className="mt-2 text-[12px] text-[#72757d]">Filter results are still applied. This only changes pin coloring. Preferred Partner pins keep the PICC marker treatment in both modes.</p>
           </section>
 
           <FilterSection
@@ -146,6 +167,43 @@ export function StoreFilterSheet({
             selected={selectedReps}
             onToggle={onToggleRep}
           />
+          <FilterSection
+            title="PPP Status"
+            options={pppStatuses.map((entry) => ({ label: entry.value, value: entry.value, count: entry.count }))}
+            selected={selectedPppStatuses}
+            onToggle={onTogglePppStatus}
+          />
+          <FilterSection
+            title="Headset Connection"
+            options={headsetConnectionStatuses.map((entry) => ({ label: entry.value, value: entry.value, count: entry.count }))}
+            selected={selectedHeadsetConnectionStatuses}
+            onToggle={onToggleHeadsetConnectionStatus}
+          />
+          <section className="mb-4">
+            <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Preferred Partner</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onSetPreferredPartnerFilter(preferredPartnerFilter === 'preferred' ? 'all' : 'preferred')}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-[13px] font-medium',
+                  preferredPartnerFilter === 'preferred' ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                )}
+              >
+                Preferred Partner ({preferredPartners.find((entry) => entry.value === 'Preferred Partner')?.count ?? 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => onSetPreferredPartnerFilter(preferredPartnerFilter === 'not_preferred' ? 'all' : 'not_preferred')}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-[13px] font-medium',
+                  preferredPartnerFilter === 'not_preferred' ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                )}
+              >
+                Not a Preferred Partner ({preferredPartners.find((entry) => entry.value === 'Not a Preferred Partner')?.count ?? 0})
+              </button>
+            </div>
+          </section>
           <SearchableFilterSection
             title="Referral Source"
             searchValue={referralSearch}

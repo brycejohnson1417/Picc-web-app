@@ -35,6 +35,16 @@ export function TerritoryFocusedCard({
             <div className="min-w-0">
               <p className="truncate text-[18px] font-semibold leading-tight">{store.name}</p>
               <p className="truncate text-[13px] text-[#b6bac3]">{store.locationAddress ?? store.locationLabel ?? 'No address'}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="inline-flex max-w-[160px] truncate rounded-full border border-[#39a9ff]/45 bg-[#0f3654] px-2.5 py-1 text-[11px] font-semibold text-[#8fd5ff]">
+                  {store.status}
+                </span>
+                {store.isPreferredPartner ? (
+                  <span className="inline-flex rounded-full border border-black bg-black px-2.5 py-1 text-[11px] font-semibold text-white">
+                    Preferred Partner
+                  </span>
+                ) : null}
+              </div>
               {store.isApproximate ? (
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[#f1cc78]">Approximate ({store.locationPrecision})</p>
               ) : null}
@@ -43,8 +53,8 @@ export function TerritoryFocusedCard({
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
                 {store.pinKind === 'lead' ? 'Lead Status' : 'Status'}
               </p>
-              <span className="mt-1 inline-flex max-w-[132px] truncate rounded-full border border-[#39a9ff]/45 bg-[#0f3654] px-2.5 py-1 text-[11px] font-semibold text-[#8fd5ff]">
-                {store.status}
+              <span className="mt-1 inline-flex rounded-full border border-white/10 px-2 py-1 text-[11px] font-semibold text-white/70">
+                {store.repNames[0] ?? 'Unassigned'}
               </span>
             </div>
           </div>
@@ -52,7 +62,7 @@ export function TerritoryFocusedCard({
         <div className="grid grid-cols-[1fr_56px_56px_56px] border-b border-[#30333b]">
           <button type="button" className="flex items-center gap-2 px-3 py-2 text-[14px] text-[#d5d9e1]" onClick={() => onMessageRep(store)}>
             <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: pinColorForStore(store, pinColorMode, repColorMap) }} />
-            {store.repNames[0] ?? 'Unassigned'}
+            Message rep
           </button>
           <a
             href={notionPageUrl}

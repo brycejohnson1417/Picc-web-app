@@ -39,6 +39,7 @@ export interface TerritoryStorePin {
   status: string;
   statusKey: string;
   statusColor: string;
+  statusColorName?: string | null;
   pinKind: 'lead' | 'customer' | 'other';
   repNames: string[];
   repEmails: string[];
@@ -68,6 +69,10 @@ export interface TerritoryStorePin {
   lastSampleDeliveryDate?: string | null;
   lastOrderDate?: string | null;
   referralSource: string | null;
+  pppStatus?: string | null;
+  pppStatusColorName?: string | null;
+  headsetConnectionStatus?: string | null;
+  headsetConnectionStatusColorName?: string | null;
   isPreferredPartner?: boolean | null;
   followUpDate?: string | null;
   followUpNeeded?: boolean | null;
@@ -112,6 +117,7 @@ export interface TerritoryStoreDetailResponse {
     accountManager: string | null;
     piccCreditStatus: string | null;
     accountStatus: string | null;
+    accountStatusColorName?: string | null;
     lastOrderAmount: number | null;
     lastContacted: string | null;
     lastDeliveryDate: string | null;
@@ -121,7 +127,9 @@ export interface TerritoryStoreDetailResponse {
     customerSince: string | null;
     pennyBundlePromoStatus: string | null;
     pppStatus: string | null;
+    pppStatusColorName?: string | null;
     headsetConnectionStatus: string | null;
+    headsetConnectionStatusColorName?: string | null;
     productTracking: string | null;
     displayTracking: string | null;
   };
@@ -200,6 +208,9 @@ export interface TerritoryStoresResponse {
   filters: {
     statuses: TerritoryFilterCount[];
     reps: TerritoryFilterCount[];
+    pppStatuses: TerritoryFilterCount[];
+    headsetConnectionStatuses: TerritoryFilterCount[];
+    preferredPartners: TerritoryFilterCount[];
     referralSources: TerritoryFilterCount[];
     locationAvailability: TerritoryFilterCount[];
     vendorDayStatuses: TerritoryFilterCount[];

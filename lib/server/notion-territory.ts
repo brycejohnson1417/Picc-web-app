@@ -33,6 +33,7 @@ import {
   type TerritoryStorePin,
   type TerritoryStoresResponse,
 } from '@/lib/territory/types';
+import { isPreferredPartnerFromStatuses } from '@/lib/territory/preferred-partner';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
@@ -117,9 +118,10 @@ type NotionPropertyValue = {
   email?: string | null;
   number?: number | null;
   checkbox?: boolean | null;
-  select?: { name?: string | null } | null;
+  select?: { name?: string | null; color?: string | null } | null;
   status?: {
     name?: string;
+    color?: string | null;
   } | null;
   date?: {
     start?: string | null;
@@ -305,6 +307,16 @@ function readEmailProperty(property: NotionPropertyValue | undefined) {
 
 function readDateStartProperty(property: NotionPropertyValue | undefined) {
   return typeof property?.date?.start === 'string' ? property.date.start : '';
+}
+
+function readSelectLikeColorProperty(property: NotionPropertyValue | undefined) {
+  if (property?.status?.color?.trim()) {
+    return property.status.color.trim().toLowerCase();
+  }
+  if (property?.select?.color?.trim()) {
+    return property.select.color.trim().toLowerCase();
+  }
+  return null;
 }
 
 function readRollupItems(property: NotionPropertyValue | undefined): NotionPropertyValue[] {
@@ -1148,6 +1160,7 @@ async function mapNotionPageToTerritoryStore(
   const name = textFromTitleProperty(properties['Dispensary Name']) || 'Untitled Store';
   const statusName = properties['Account Status']?.status?.name ?? 'Unspecified';
   const statusKey = normalizeStatus(statusName);
+  const statusColorName = readSelectLikeColorProperty(properties['Account Status']);
   const repProperty =
     (propertyByCandidates('rep', 'picc rep', 'sales rep') as NotionPropertyValue | undefined) ?? properties['Rep'];
   const repValues = readPeopleValuesProperty(repProperty);
@@ -1191,20 +1204,20 @@ async function mapNotionPageToTerritoryStore(
     null;
   const referralSource =
     readTextFromAnyProperty((propertyByCandidates('referral source') as NotionPropertyValue | undefined) ?? properties['Referral Source']) || null;
+  const pppStatusProperty = (propertyByCandidates('ppp status') as NotionPropertyValue | undefined) ?? properties['PPP Status'];
+  const pppStatus = readTextFromAnyProperty(pppStatusProperty) || null;
+  const pppStatusColorName = readSelectLikeColorProperty(pppStatusProperty);
+  const headsetConnectionProperty =
+    (propertyByCandidates('headset connection status', 'headset status', 'headset connection') as NotionPropertyValue | undefined) ??
+    properties['Headset Connection'];
+  const headsetConnectionStatus = readTextFromAnyProperty(headsetConnectionProperty) || null;
+  const headsetConnectionStatusColorName = readSelectLikeColorProperty(headsetConnectionProperty);
   const followUpDate = readDateStartProperty((propertyByCandidates('follow-up date', 'follow up date') as NotionPropertyValue | undefined) ?? properties['Follow-up Date']) || null;
   const followUpNeeded = readBooleanProperty((propertyByCandidates('follow-up needed', 'follow up needed') as NotionPropertyValue | undefined) ?? properties['Follow-up Needed']);
   const followUpReason = readTextFromAnyProperty((propertyByCandidates('follow-up reason', 'follow up reason') as NotionPropertyValue | undefined) ?? properties['Follow-up Reason']) || null;
   const notes = textFromRichTextProperty((propertyByCandidates('notes', 'account notes', 'store notes') as NotionPropertyValue | undefined) ?? properties.Notes) || null;
   const lastCheckIn = readDateStartProperty((propertyByCandidates('last check-in', 'last check in', 'last visit') as NotionPropertyValue | undefined) ?? properties['Last Check-in']) || null;
-  const isPreferredPartner = readBooleanProperty(
-    (propertyByCandidates(
-      'picc preferred partner',
-      'preferred partner',
-      'is picc preferred partner',
-      'preferred picc partner',
-    ) as NotionPropertyValue | undefined) ??
-      properties['PICC Preferred Partner'],
-  );
+  const isPreferredPartner = isPreferredPartnerFromStatuses(pppStatus, headsetConnectionStatus);
 
   const fallbackAddress = firstNonEmpty([fullAddress, placeAddress, [address1, city, stateField, zipcode].filter(Boolean).join(', '), placeName]);
   const inferredCity = firstNonEmpty([city, parseCityFromAddress(fallbackAddress)]);
@@ -1274,6 +1287,7 @@ async function mapNotionPageToTerritoryStore(
     status: statusName,
     statusKey,
     statusColor: colorForStatus(statusName),
+    statusColorName,
     pinKind: pinKindForStatus(statusName),
     repNames,
     repEmails,
@@ -1292,6 +1306,10 @@ async function mapNotionPageToTerritoryStore(
     phoneNumber,
     email,
     referralSource,
+    pppStatus,
+    pppStatusColorName,
+    headsetConnectionStatus,
+    headsetConnectionStatusColorName,
     vendorDayStatus,
     lastSampleOrderDate,
     lastSampleDeliveryDate,
@@ -2163,6 +2181,9 @@ export async function territoryConnectionCheck() {
 export async function loadTerritoryStores(input?: {
   statuses?: string[];
   reps?: string[];
+  pppStatuses?: string[];
+  headsetConnectionStatuses?: string[];
+  preferredPartnerFilter?: 'all' | 'preferred' | 'not_preferred';
   referralSources?: string[];
   includeNoReferralSource?: boolean;
   vendorDayStatuses?: TerritoryVendorDayStatusFilter;
@@ -2190,6 +2211,9 @@ export async function loadTerritoryStores(input?: {
   const selection = {
     statuses: input?.statuses,
     reps: input?.reps,
+    pppStatuses: input?.pppStatuses,
+    headsetConnectionStatuses: input?.headsetConnectionStatuses,
+    preferredPartnerFilter: input?.preferredPartnerFilter,
     referralSources: input?.referralSources,
     includeNoReferralSource: input?.includeNoReferralSource,
     query: input?.query,
@@ -2209,6 +2233,7 @@ export async function loadTerritoryStores(input?: {
       status: snapshotStore?.status ?? store.status,
       statusKey: snapshotStore?.statusKey ?? store.statusKey,
       statusColor: snapshotStore?.statusColor ?? store.statusColor,
+      statusColorName: snapshotStore?.statusColorName ?? store.statusColorName ?? null,
       pinKind: snapshotStore?.pinKind ?? store.pinKind,
       repNames: snapshotStore?.repNames ?? store.repNames,
       repEmails: snapshotStore?.repEmails ?? store.repEmails,
@@ -2217,6 +2242,12 @@ export async function loadTerritoryStores(input?: {
       phoneNumber: snapshotStore?.phoneNumber ?? store.phoneNumber,
       email: snapshotStore?.email ?? store.email,
       referralSource: snapshotStore?.referralSource ?? store.referralSource,
+      pppStatus: snapshotStore?.pppStatus ?? store.pppStatus ?? null,
+      pppStatusColorName: snapshotStore?.pppStatusColorName ?? store.pppStatusColorName ?? null,
+      headsetConnectionStatus: snapshotStore?.headsetConnectionStatus ?? store.headsetConnectionStatus ?? null,
+      headsetConnectionStatusColorName:
+        snapshotStore?.headsetConnectionStatusColorName ?? store.headsetConnectionStatusColorName ?? null,
+      isPreferredPartner: snapshotStore?.isPreferredPartner ?? store.isPreferredPartner ?? false,
       vendorDayStatus: snapshotStore?.vendorDayStatus ?? store.vendorDayStatus,
       lastSampleOrderDate: snapshotStore?.lastSampleOrderDate ?? store.lastSampleOrderDate,
       lastSampleDeliveryDate: snapshotStore?.lastSampleDeliveryDate ?? store.lastSampleDeliveryDate,

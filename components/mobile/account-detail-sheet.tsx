@@ -10,6 +10,7 @@ import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-pan
 import { PreferredPartnerProposalPanel } from '@/components/crm/preferred-partner-proposal-panel';
 import { PreferredPartnerSavingsPanel } from '@/components/crm/preferred-partner-savings-panel';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
+import { NotionOptionChip } from '@/components/shared/notion-option-chip';
 import { Button, Textarea } from '@/components/ui';
 import type { TerritoryStoreContact, TerritoryStoreDetailResponse, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
@@ -276,6 +277,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   const activeStore = detail?.store ?? store;
   const contacts = detail?.contacts ?? [];
   const crm = detail?.crm;
+  const isPreferredPartner = Boolean(activeStore.isPreferredPartner);
   const navigateUrl = `https://www.google.com/maps/dir/?api=1&destination=${activeStore.lat},${activeStore.lng}`;
   const notionUrl = `https://www.notion.so/${activeStore.notionPageId.replace(/-/g, '')}`;
   const addressValue = activeStore.locationAddress ?? activeStore.locationLabel ?? 'No address';
@@ -565,10 +567,31 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
         <div className="flex-1 overflow-y-auto pb-[132px]">
           <div className="border-y border-[#c6c7cb] bg-[#e6e6e9] px-5 py-4">
             <h2 className="text-[24px] font-semibold leading-tight text-[#111217]">{activeStore.name}</h2>
-            <div className="mt-2">
-              <span className="inline-flex rounded-full border border-[#d8b3aa] bg-[#fff1ed] px-3 py-1 text-[13px] font-semibold uppercase tracking-wide text-[#a83216]">
-                {crm?.accountStatus || activeStore.status}
-              </span>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <StatusField
+                label="Account Status"
+                value={crm?.accountStatus || activeStore.status}
+                colorName={crm?.accountStatusColorName}
+                fallbackHex={activeStore.statusColor}
+              />
+              <StatusField
+                label="PPP Status"
+                value={crm?.pppStatus || activeStore.pppStatus || '—'}
+                colorName={crm?.pppStatusColorName ?? activeStore.pppStatusColorName}
+              />
+              <StatusField
+                label="Headset Connection"
+                value={crm?.headsetConnectionStatus || activeStore.headsetConnectionStatus || '—'}
+                colorName={crm?.headsetConnectionStatusColorName ?? activeStore.headsetConnectionStatusColorName}
+              />
+              {isPreferredPartner ? (
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8c9098]">Program</p>
+                  <span className="inline-flex rounded-full border border-black bg-black px-3 py-1 text-[12px] font-semibold text-white">
+                    Preferred Partner
+                  </span>
+                </div>
+              ) : null}
             </div>
             <p className="mt-2 text-[15px] text-[#7c8089]">{addressValue}</p>
             {loadingDetail ? <p className="mt-2 text-[13px] text-[#6e7078]">Syncing account details...</p> : null}
@@ -997,6 +1020,25 @@ function SectionRow({ label, value, strong = false }: { label: string; value: st
     <div>
       <p className="text-[13px] uppercase tracking-wide text-[#8c9098]">{label}</p>
       <p className={cn('mt-1 text-[16px] leading-snug text-[#1d1f23]', strong ? 'font-semibold' : '')}>{value || '—'}</p>
+    </div>
+  );
+}
+
+function StatusField({
+  label,
+  value,
+  colorName,
+  fallbackHex,
+}: {
+  label: string;
+  value: string;
+  colorName?: string | null;
+  fallbackHex?: string | null;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8c9098]">{label}</p>
+      <NotionOptionChip label={value} colorName={colorName} fallbackHex={fallbackHex} />
     </div>
   );
 }

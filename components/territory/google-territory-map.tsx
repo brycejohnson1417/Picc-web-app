@@ -321,8 +321,8 @@ function markerScale({
 
 const fallbackMarkerIconCache = new Map<string, string>();
 
-function fallbackMarkerIcon(fillColor: string, approximate: boolean, scale = 1) {
-  const key = `${fillColor}|${approximate ? 'approx' : 'exact'}|${scale}`;
+function fallbackMarkerIcon(fillColor: string, approximate: boolean, preferredPartner: boolean, scale = 1) {
+  const key = `${fillColor}|${approximate ? 'approx' : 'exact'}|${preferredPartner ? 'preferred' : 'standard'}|${scale}`;
   const existing = fallbackMarkerIconCache.get(key);
   if (existing) {
     return existing;
@@ -330,10 +330,13 @@ function fallbackMarkerIcon(fillColor: string, approximate: boolean, scale = 1) 
 
   const width = Math.round(30 * scale);
   const height = Math.round(38 * scale);
-  const stroke = approximate ? '#111827' : '#ffffff';
+  const stroke = preferredPartner ? '#111111' : approximate ? '#111827' : '#ffffff';
+  const glyph = preferredPartner
+    ? `<text x="15" y="15.5" text-anchor="middle" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#ffffff">P</text>`
+    : `<circle cx="15" cy="13" r="4" fill="white" fill-opacity="${approximate ? '0.65' : '0.95'}"/>`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 30 38">
-    <path d="M15 1C8.37258 1 3 6.37258 3 13C3 22 15 37 15 37C15 37 27 22 27 13C27 6.37258 21.6274 1 15 1Z" fill="${fillColor}" stroke="${stroke}" stroke-width="2"/>
-    <circle cx="15" cy="13" r="4" fill="white" fill-opacity="${approximate ? '0.65' : '0.95'}"/>
+    <path d="M15 1C8.37258 1 3 6.37258 3 13C3 22 15 37 15 37C15 37 27 22 27 13C27 6.37258 21.6274 1 15 1Z" fill="${fillColor}" stroke="${stroke}" stroke-width="${preferredPartner ? '2.6' : '2'}"/>
+    ${glyph}
   </svg>`;
   const encoded = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   fallbackMarkerIconCache.set(key, encoded);
@@ -599,8 +602,10 @@ export function GoogleTerritoryMap({
             const highlighted = highlightedStoreId === store.id;
             const selected = selectedSet.has(store.id);
             const approximate = Boolean(store.isApproximate);
-            const glyph = approximate ? '≈' : '';
+            const preferredPartner = Boolean(store.isPreferredPartner);
+            const glyph = preferredPartner ? 'P' : approximate ? '≈' : '';
             const scale = markerScale({ focused, highlighted, selected, approximate });
+            const borderColor = preferredPartner ? '#111111' : approximate ? '#111827' : '#ffffff';
 
             if (useAdvancedMarkers) {
               return (
@@ -612,7 +617,7 @@ export function GoogleTerritoryMap({
                 >
                   <Pin
                     background={pinColorForStore(store, pinColorMode, repColorMap)}
-                    borderColor={approximate ? '#111827' : '#ffffff'}
+                    borderColor={borderColor}
                     glyphColor="#ffffff"
                     scale={scale}
                     glyph={glyph}
@@ -629,7 +634,7 @@ export function GoogleTerritoryMap({
                 title={store.name}
                 opacity={approximate ? 0.78 : 1}
                 icon={{
-                  url: fallbackMarkerIcon(pinColorForStore(store, pinColorMode, repColorMap), approximate, scale),
+                  url: fallbackMarkerIcon(pinColorForStore(store, pinColorMode, repColorMap), approximate, preferredPartner, scale),
                 }}
               />
             );

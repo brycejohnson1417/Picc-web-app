@@ -48,6 +48,9 @@ export interface TerritoryStoreQueryInput {
   search: string;
   selectedStatuses: string[];
   selectedReps: string[];
+  selectedPppStatuses: string[];
+  selectedHeadsetConnectionStatuses: string[];
+  preferredPartnerFilter: 'all' | 'preferred' | 'not_preferred';
   selectedReferralSources: string[];
   includeNoReferralSource: boolean;
   selectedVendorDayStatuses: string[];
@@ -64,6 +67,11 @@ function buildStoresSearchParams(input: TerritoryStoreQueryInput, options: { for
   if (input.search) params.set('q', input.search);
   for (const status of input.selectedStatuses) params.append('status', status);
   for (const rep of input.selectedReps) params.append('rep', rep);
+  for (const pppStatus of input.selectedPppStatuses) params.append('pppStatus', pppStatus);
+  for (const headsetConnectionStatus of input.selectedHeadsetConnectionStatuses) {
+    params.append('headsetConnectionStatus', headsetConnectionStatus);
+  }
+  if (input.preferredPartnerFilter !== 'all') params.set('preferredPartner', input.preferredPartnerFilter);
   for (const referralSource of input.selectedReferralSources) params.append('referralSource', referralSource);
   if (input.includeNoReferralSource) params.set('noReferralSource', '1');
   for (const vendorDayStatus of input.selectedVendorDayStatuses) params.append('vendorDayStatus', vendorDayStatus);
@@ -93,6 +101,9 @@ export function useTerritoryData(input: TerritoryStoreQueryInput) {
       input.search,
       input.selectedStatuses.join('|'),
       input.selectedReps.join('|'),
+      input.selectedPppStatuses.join('|'),
+      input.selectedHeadsetConnectionStatuses.join('|'),
+      input.preferredPartnerFilter,
       input.selectedReferralSources.join('|'),
       input.includeNoReferralSource ? 'no-referral' : 'with-referral',
       input.selectedVendorDayStatuses.join('|'),

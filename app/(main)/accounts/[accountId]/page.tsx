@@ -3,6 +3,7 @@ import { AccountHero } from '@/components/crm/account-hero';
 import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-panel';
 import { PreferredPartnerProposalPanel } from '@/components/crm/preferred-partner-proposal-panel';
 import { PreferredPartnerSavingsPanel } from '@/components/crm/preferred-partner-savings-panel';
+import { NotionOptionChip } from '@/components/shared/notion-option-chip';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { resolveAccountIdentity } from '@/lib/server/account-identity';
@@ -60,6 +61,26 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             <CardTitle>Live Account Detail</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
+            <div className="flex flex-wrap gap-2 pb-2">
+              <NotionOptionChip
+                label={detail.crm.accountStatus ?? store.status}
+                colorName={detail.crm.accountStatusColorName}
+                fallbackHex={store.statusColor}
+              />
+              <NotionOptionChip
+                label={detail.crm.pppStatus ?? store.pppStatus ?? 'PPP Status: —'}
+                colorName={detail.crm.pppStatusColorName ?? store.pppStatusColorName}
+              />
+              <NotionOptionChip
+                label={detail.crm.headsetConnectionStatus ?? store.headsetConnectionStatus ?? 'Headset: —'}
+                colorName={detail.crm.headsetConnectionStatusColorName ?? store.headsetConnectionStatusColorName}
+              />
+              {store.isPreferredPartner ? (
+                <span className="inline-flex rounded-full border border-black bg-black px-3 py-1 text-xs font-semibold text-white">
+                  Preferred Partner
+                </span>
+              ) : null}
+            </div>
             <p>Status: <strong>{store.status}</strong></p>
             <p>License: <strong>{store.licenseNumber ?? '—'}</strong></p>
             <p>Last check-in: <strong>{store.lastCheckIn ? new Date(store.lastCheckIn).toLocaleString() : 'No check-ins'}</strong></p>

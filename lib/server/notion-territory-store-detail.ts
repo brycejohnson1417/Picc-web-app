@@ -21,8 +21,8 @@ type NotionPropertyValue = {
   email?: string | null;
   phone_number?: string | null;
   url?: string | null;
-  select?: { name?: string } | null;
-  status?: { name?: string } | null;
+  select?: { name?: string; color?: string | null } | null;
+  status?: { name?: string; color?: string | null } | null;
   people?: Array<{ name?: string; person?: { email?: string | null } | null }>;
   date?: { start?: string | null; end?: string | null } | null;
   formula?: {
@@ -127,6 +127,12 @@ function readTextFromAnyProperty(property: NotionPropertyValue | undefined): str
   return '';
 }
 
+function readSelectLikeColorProperty(property: NotionPropertyValue | undefined) {
+  if (property?.status?.color?.trim()) return property.status.color.trim().toLowerCase();
+  if (property?.select?.color?.trim()) return property.select.color.trim().toLowerCase();
+  return null;
+}
+
 function toIsoDate(value: string) {
   if (!value) return null;
   const date = new Date(value);
@@ -191,7 +197,9 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
     const rep = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Rep', 'PICC Rep', 'Sales Rep']));
     const accountManager = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Account Manager', 'Manager']));
     const piccCreditStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['PICC Credit Status', 'Credit Status', 'Nabis Credit Rating', 'PICC Credit Status (Formula)', 'PICC Credit Status (1)']));
-    const accountStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Account Status']));
+    const accountStatusProperty = propertyValueByCandidates(properties, ['Account Status']);
+    const accountStatus = readTextFromAnyProperty(accountStatusProperty);
+    const accountStatusColorName = readSelectLikeColorProperty(accountStatusProperty);
     const lastOrderAmount = readNumberProperty(propertyValueByCandidates(properties, ['Last Order Amount', 'Latest Order Amount', 'Order Amount']));
     const lastContacted = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Last Contacted', 'Last Contact Date']));
     const lastDeliveryDate = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Last Delivery Date', 'Most Recent Delivery Date', 'Last Order Delivery Date']));
@@ -204,8 +212,12 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
     const pennyBundlePromoStatus = readTextFromAnyProperty(
       propertyValueByCandidates(properties, ['Penny Bundle Promo Status', 'Penny Bundle Status', 'Penny Bundle', 'Penny Bundle Promo']),
     );
-    const pppStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['PPP Status']));
-    const headsetConnectionStatus = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Headset Connection Status', 'Headset Status', 'Headset Connection']));
+    const pppStatusProperty = propertyValueByCandidates(properties, ['PPP Status']);
+    const pppStatus = readTextFromAnyProperty(pppStatusProperty);
+    const pppStatusColorName = readSelectLikeColorProperty(pppStatusProperty);
+    const headsetConnectionProperty = propertyValueByCandidates(properties, ['Headset Connection Status', 'Headset Status', 'Headset Connection']);
+    const headsetConnectionStatus = readTextFromAnyProperty(headsetConnectionProperty);
+    const headsetConnectionStatusColorName = readSelectLikeColorProperty(headsetConnectionProperty);
     const productTracking = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Product Tracking']));
     const displayTracking = readTextFromAnyProperty(propertyValueByCandidates(properties, ['Display Tracking']));
 
@@ -223,6 +235,7 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
       accountManager: accountManager || null,
       piccCreditStatus: piccCreditStatus || null,
       accountStatus: accountStatus || store.status || null,
+      accountStatusColorName: accountStatusColorName || store.statusColorName || null,
       lastOrderAmount,
       lastContacted: toIsoDate(lastContacted) ?? null,
       lastDeliveryDate: toIsoDate(lastDeliveryDate) ?? null,
@@ -232,7 +245,9 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
       customerSince: customerSince ? (toIsoDate(customerSince) ?? customerSince) : null,
       pennyBundlePromoStatus: pennyBundlePromoStatus || null,
       pppStatus: pppStatus || null,
+      pppStatusColorName: pppStatusColorName || store.pppStatusColorName || null,
       headsetConnectionStatus: headsetConnectionStatus || null,
+      headsetConnectionStatusColorName: headsetConnectionStatusColorName || store.headsetConnectionStatusColorName || null,
       productTracking: productTracking || null,
       displayTracking: displayTracking || null,
     };
@@ -386,6 +401,12 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
     const snapshotStore = await deps.resolveStoreByIdentifier(snapshot.stores, foundStore.id).catch(() => null);
     const store: TerritoryStorePin = {
       ...foundStore,
+      pppStatus: snapshotStore?.pppStatus ?? foundStore.pppStatus ?? null,
+      pppStatusColorName: snapshotStore?.pppStatusColorName ?? foundStore.pppStatusColorName ?? null,
+      headsetConnectionStatus: snapshotStore?.headsetConnectionStatus ?? foundStore.headsetConnectionStatus ?? null,
+      headsetConnectionStatusColorName:
+        snapshotStore?.headsetConnectionStatusColorName ?? foundStore.headsetConnectionStatusColorName ?? null,
+      isPreferredPartner: snapshotStore?.isPreferredPartner ?? foundStore.isPreferredPartner ?? false,
       followUpNeeded: snapshotStore?.followUpNeeded ?? foundStore.followUpNeeded ?? null,
       followUpReason: snapshotStore?.followUpReason ?? foundStore.followUpReason ?? null,
     };
@@ -412,6 +433,7 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
         accountManager: null,
         piccCreditStatus: null,
         accountStatus: store.status ?? null,
+        accountStatusColorName: store.statusColorName ?? null,
         lastOrderAmount: null,
         lastContacted: null,
         lastDeliveryDate: null,
@@ -421,7 +443,9 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
         customerSince: null,
         pennyBundlePromoStatus: null,
         pppStatus: null,
+        pppStatusColorName: store.pppStatusColorName ?? null,
         headsetConnectionStatus: null,
+        headsetConnectionStatusColorName: store.headsetConnectionStatusColorName ?? null,
         productTracking: null,
         displayTracking: null,
       })),

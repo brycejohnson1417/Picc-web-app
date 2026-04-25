@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
 import { loadTerritoryStores, processPendingTerritoryStoreSyncQueue } from '@/lib/server/notion-territory';
+import type { PreferredPartnerFilter } from '@/lib/territory/preferred-partner';
 import type { TerritoryStoresResponse } from '@/lib/territory/types';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,9 @@ function readMultiParam(searchParams: URLSearchParams, key: string) {
 function buildTerritoryCacheKey(input: {
   statuses: string[];
   reps: string[];
+  pppStatuses: string[];
+  headsetConnectionStatuses: string[];
+  preferredPartnerFilter: PreferredPartnerFilter;
   referralSources: string[];
   includeNoReferralSource: boolean;
   vendorDayStatuses: string[];
@@ -61,6 +65,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const statuses = readMultiParam(searchParams, 'status');
   const reps = readMultiParam(searchParams, 'rep');
+  const pppStatuses = readMultiParam(searchParams, 'pppStatus');
+  const headsetConnectionStatuses = readMultiParam(searchParams, 'headsetConnectionStatus');
+  const preferredPartnerFilterParam = (searchParams.get('preferredPartner') ?? 'all').trim().toLowerCase();
+  const preferredPartnerFilter: PreferredPartnerFilter =
+    preferredPartnerFilterParam === 'preferred' || preferredPartnerFilterParam === 'not_preferred'
+      ? preferredPartnerFilterParam
+      : 'all';
   const referralSources = readMultiParam(searchParams, 'referralSource');
   const includeNoReferralSource = searchParams.get('noReferralSource') === '1';
   const vendorDayStatuses = readMultiParam(searchParams, 'vendorDayStatus');
@@ -88,6 +99,9 @@ export async function GET(request: Request) {
   const cacheKey = buildTerritoryCacheKey({
     statuses,
     reps,
+    pppStatuses,
+    headsetConnectionStatuses,
+    preferredPartnerFilter,
     referralSources,
     includeNoReferralSource,
     vendorDayStatuses,
@@ -120,6 +134,9 @@ export async function GET(request: Request) {
     const payload = await loadTerritoryStores({
       statuses,
       reps,
+      pppStatuses,
+      headsetConnectionStatuses,
+      preferredPartnerFilter,
       referralSources,
       includeNoReferralSource,
       vendorDayStatuses,

@@ -10,6 +10,8 @@ import { AlphabetRail } from '@/components/mobile/alphabet-rail';
 import { MobileHeader } from '@/components/mobile/mobile-header';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
+import { NotionOptionChip } from '@/components/shared/notion-option-chip';
+import type { PreferredPartnerFilter } from '@/lib/territory/preferred-partner';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import type { TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 
@@ -25,6 +27,11 @@ export function AccountsMobile() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [scope, setScope] = useState<'all' | 'recent' | 'follow-ups'>('all');
+  const [repFilter, setRepFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [pppStatusFilter, setPppStatusFilter] = useState('all');
+  const [headsetConnectionFilter, setHeadsetConnectionFilter] = useState('all');
+  const [preferredPartnerFilter, setPreferredPartnerFilter] = useState<PreferredPartnerFilter>('all');
   const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const unresolvedRouteStoreIdRef = useRef<string | null>(null);
@@ -58,22 +65,33 @@ export function AccountsMobile() {
   });
 
   const allStores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
+  const filterOptions = storesQuery.data?.filters;
   const stores = useMemo(() => {
     const source = allStores;
-    if (scope === 'all') return source;
-    if (scope === 'recent') {
-      return source.filter((store) => {
+    const scoped = scope === 'all'
+      ? source
+      : scope === 'recent'
+        ? source.filter((store) => {
         const editedAt = Date.parse(store.lastEditedTime);
         return Number.isFinite(editedAt) && Date.now() - editedAt < 1000 * 60 * 60 * 24 * 7;
-      });
-    }
-    return source.filter((store) => {
-      const dueDate = store.followUpDate ? Date.parse(store.followUpDate) : Number.NaN;
-      const dueNow = Number.isFinite(dueDate) ? dueDate <= Date.now() : true;
-      const followUpFlag = typeof store.followUpNeeded === 'boolean' ? store.followUpNeeded : /lead|proposal|in progress/i.test(store.status);
-      return Boolean(followUpFlag && dueNow);
+          })
+        : source.filter((store) => {
+            const dueDate = store.followUpDate ? Date.parse(store.followUpDate) : Number.NaN;
+            const dueNow = Number.isFinite(dueDate) ? dueDate <= Date.now() : true;
+            const followUpFlag = typeof store.followUpNeeded === 'boolean' ? store.followUpNeeded : /lead|proposal|in progress/i.test(store.status);
+            return Boolean(followUpFlag && dueNow);
+          });
+
+    return scoped.filter((store) => {
+      if (repFilter !== 'all' && !store.repNames.includes(repFilter)) return false;
+      if (statusFilter !== 'all' && store.status !== statusFilter) return false;
+      if (pppStatusFilter !== 'all' && (store.pppStatus ?? '') !== pppStatusFilter) return false;
+      if (headsetConnectionFilter !== 'all' && (store.headsetConnectionStatus ?? '') !== headsetConnectionFilter) return false;
+      if (preferredPartnerFilter === 'preferred' && !store.isPreferredPartner) return false;
+      if (preferredPartnerFilter === 'not_preferred' && store.isPreferredPartner) return false;
+      return true;
     });
-  }, [allStores, scope]);
+  }, [allStores, headsetConnectionFilter, pppStatusFilter, preferredPartnerFilter, repFilter, scope, statusFilter]);
 
   const allStoreById = useMemo(() => new Map(allStores.map((store) => [store.id, store])), [allStores]);
 
@@ -104,6 +122,12 @@ export function AccountsMobile() {
     }
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [stores]);
+  const hasActiveFilters =
+    repFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    pppStatusFilter !== 'all' ||
+    headsetConnectionFilter !== 'all' ||
+    preferredPartnerFilter !== 'all';
 
   if (storesQuery.isLoading && !storesQuery.data) {
     return (
@@ -165,6 +189,43 @@ export function AccountsMobile() {
           <div className="mt-3">
             <MobileSearch value={search} onChange={setSearch} placeholder="Search Accounts" />
           </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+            <FilterSelect label="Sales Rep" value={repFilter} onChange={setRepFilter} options={filterOptions?.reps.map((entry) => entry.value) ?? []} />
+            <FilterSelect label="Account Status" value={statusFilter} onChange={setStatusFilter} options={filterOptions?.statuses.map((entry) => entry.value) ?? []} />
+            <FilterSelect label="PPP Status" value={pppStatusFilter} onChange={setPppStatusFilter} options={filterOptions?.pppStatuses.map((entry) => entry.value) ?? []} />
+            <FilterSelect
+              label="Headset Connection"
+              value={headsetConnectionFilter}
+              onChange={setHeadsetConnectionFilter}
+              options={filterOptions?.headsetConnectionStatuses.map((entry) => entry.value) ?? []}
+            />
+            <FilterSelect
+              label="Preferred Partner"
+              value={preferredPartnerFilter}
+              onChange={(value) => setPreferredPartnerFilter(value as PreferredPartnerFilter)}
+              options={[
+                { value: 'preferred', label: 'Preferred Partner' },
+                { value: 'not_preferred', label: 'Not a Preferred Partner' },
+              ]}
+            />
+          </div>
+          {hasActiveFilters ? (
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                className="text-[12px] font-semibold text-[#c93412]"
+                onClick={() => {
+                  setRepFilter('all');
+                  setStatusFilter('all');
+                  setPppStatusFilter('all');
+                  setHeadsetConnectionFilter('all');
+                  setPreferredPartnerFilter('all');
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : null}
           <div className="mt-3 border-t border-[#e2e8f0]" />
 
           {storesQuery.isError ? (
@@ -202,12 +263,16 @@ export function AccountsMobile() {
                         <span className="rounded-full bg-[#eef3fb] px-3 py-1 text-[12px] font-semibold text-[#304153]">
                           Rep: {store.repNames.length > 0 ? store.repNames.join(', ') : 'Unassigned'}
                         </span>
-                        <span
-                          className="rounded-full px-3 py-1 text-[12px] font-semibold text-white"
-                          style={{ backgroundColor: store.statusColor || '#5f6b7a' }}
-                        >
-                          {store.status || 'Status unknown'}
-                        </span>
+                        <NotionOptionChip
+                          label={store.status || 'Status unknown'}
+                          colorName={store.statusColorName}
+                          fallbackHex={store.statusColor || '#5f6b7a'}
+                        />
+                        {store.isPreferredPartner ? (
+                          <span className="rounded-full border border-black bg-black px-3 py-1 text-[12px] font-semibold text-white">
+                            Preferred Partner
+                          </span>
+                        ) : null}
                       </div>
                     </button>
                   ))}
@@ -232,5 +297,39 @@ export function AccountsMobile() {
         routeSelected={detailStoreId ? routePlan.selectedStopIds.includes(detailStoreId) : false}
       />
     </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<string | { value: string; label: string }>;
+}) {
+  const normalizedOptions = options.map((option) =>
+    typeof option === 'string' ? { value: option, label: option } : option,
+  );
+
+  return (
+    <label className="grid gap-1">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6a7583]">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 rounded-xl border border-[#d6dbe4] bg-[#fbfcfe] px-3 text-[14px] text-[#18212d]"
+      >
+        <option value="all">All</option>
+        {normalizedOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

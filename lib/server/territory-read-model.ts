@@ -3,6 +3,11 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { AUTH_BYPASS_MODE, DEMO_ORG_ID } from '@/lib/config/runtime';
+import {
+  normalizeTerritoryOption,
+  preferredPartnerLabel,
+  type PreferredPartnerFilter,
+} from '@/lib/territory/preferred-partner';
 import { normalizeStatus, type TerritoryFilterCount, type TerritoryStorePin } from '@/lib/territory/types';
 
 const CONFIGURED_ORG_ID = process.env.TERRITORY_ORG_ID?.trim() ?? '';
@@ -139,6 +144,9 @@ function hydrateSearch(store: TerritoryStorePin) {
     store.city ?? '',
     store.state ?? '',
     store.status,
+    store.pppStatus ?? '',
+    store.headsetConnectionStatus ?? '',
+    store.isPreferredPartner ? 'preferred partner' : '',
     store.repNames.join(' '),
     store.email ?? '',
     store.phoneNumber ?? '',
@@ -334,6 +342,9 @@ export function filterTerritoryPins(
   input: {
     statuses?: string[];
     reps?: string[];
+    pppStatuses?: string[];
+    headsetConnectionStatuses?: string[];
+    preferredPartnerFilter?: PreferredPartnerFilter;
     referralSources?: string[];
     includeNoReferralSource?: boolean;
     query?: string;
@@ -343,6 +354,11 @@ export function filterTerritoryPins(
   const pinsInTerritory = pins.filter(isInHomeTerritory);
   const statusFilter = new Set((input.statuses ?? []).map((value) => normalizeStatus(value)));
   const repFilter = new Set((input.reps ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean));
+  const pppStatusFilter = new Set((input.pppStatuses ?? []).map((value) => normalizeTerritoryOption(value)).filter(Boolean));
+  const headsetConnectionFilter = new Set(
+    (input.headsetConnectionStatuses ?? []).map((value) => normalizeTerritoryOption(value)).filter(Boolean),
+  );
+  const preferredPartnerFilter = input.preferredPartnerFilter ?? 'all';
   const referralSourceFilter = new Set((input.referralSources ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean));
   const includeNoReferralSource = Boolean(input.includeNoReferralSource);
   const locationAvailability = input.locationAvailability ?? 'all';
@@ -353,6 +369,9 @@ export function filterTerritoryPins(
     input: {
       ignoreStatus?: boolean;
       ignoreRep?: boolean;
+      ignorePppStatus?: boolean;
+      ignoreHeadsetConnection?: boolean;
+      ignorePreferredPartner?: boolean;
       ignoreReferralSource?: boolean;
       ignoreQuery?: boolean;
       ignoreLocationAvailability?: boolean;
@@ -364,6 +383,30 @@ export function filterTerritoryPins(
 
     if (!input.ignoreRep && !matchRepFilter(pin, repFilter)) {
       return false;
+    }
+
+    if (!input.ignorePppStatus && pppStatusFilter.size > 0) {
+      const value = normalizeTerritoryOption(pin.pppStatus);
+      if (!value || !pppStatusFilter.has(value)) {
+        return false;
+      }
+    }
+
+    if (!input.ignoreHeadsetConnection && headsetConnectionFilter.size > 0) {
+      const value = normalizeTerritoryOption(pin.headsetConnectionStatus);
+      if (!value || !headsetConnectionFilter.has(value)) {
+        return false;
+      }
+    }
+
+    if (!input.ignorePreferredPartner && preferredPartnerFilter !== 'all') {
+      const isPreferredPartner = Boolean(pin.isPreferredPartner);
+      if (preferredPartnerFilter === 'preferred' && !isPreferredPartner) {
+        return false;
+      }
+      if (preferredPartnerFilter === 'not_preferred' && isPreferredPartner) {
+        return false;
+      }
     }
 
     if (!input.ignoreReferralSource && (referralSourceFilter.size > 0 || includeNoReferralSource)) {
@@ -416,6 +459,39 @@ export function filterTerritoryPins(
     }
   }
 
+  const pppStatusCounts = new Map<string, number>();
+  for (const pin of pinsInTerritory) {
+    if (!matchesFilters(pin, { ignorePppStatus: true })) {
+      continue;
+    }
+    if (pin.pppStatus?.trim()) {
+      pppStatusCounts.set(pin.pppStatus, (pppStatusCounts.get(pin.pppStatus) ?? 0) + 1);
+    }
+  }
+
+  const headsetConnectionCounts = new Map<string, number>();
+  for (const pin of pinsInTerritory) {
+    if (!matchesFilters(pin, { ignoreHeadsetConnection: true })) {
+      continue;
+    }
+    if (pin.headsetConnectionStatus?.trim()) {
+      headsetConnectionCounts.set(pin.headsetConnectionStatus, (headsetConnectionCounts.get(pin.headsetConnectionStatus) ?? 0) + 1);
+    }
+  }
+
+  let preferredPartnerCount = 0;
+  let notPreferredPartnerCount = 0;
+  for (const pin of pinsInTerritory) {
+    if (!matchesFilters(pin, { ignorePreferredPartner: true })) {
+      continue;
+    }
+    if (pin.isPreferredPartner) {
+      preferredPartnerCount += 1;
+    } else {
+      notPreferredPartnerCount += 1;
+    }
+  }
+
   const referralSourceCounts = new Map<string, number>();
   for (const pin of pinsInTerritory) {
     if (!matchesFilters(pin, { ignoreReferralSource: true })) {
@@ -457,6 +533,14 @@ export function filterTerritoryPins(
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
+  const pppStatuses: TerritoryFilterCount[] = [...pppStatusCounts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
+  const headsetConnectionStatuses: TerritoryFilterCount[] = [...headsetConnectionCounts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
   const referralSources: TerritoryFilterCount[] = [...referralSourceCounts.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => a.value.localeCompare(b.value));
@@ -470,6 +554,12 @@ export function filterTerritoryPins(
     filters: {
       statuses,
       reps,
+      pppStatuses,
+      headsetConnectionStatuses,
+      preferredPartners: [
+        { value: preferredPartnerLabel(true), count: preferredPartnerCount },
+        { value: preferredPartnerLabel(false), count: notPreferredPartnerCount },
+      ],
       referralSources,
       locationAvailability: [
         { value: 'Available location', count: availableCount },

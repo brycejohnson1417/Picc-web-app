@@ -6,6 +6,9 @@ export interface TerritorySavedFiltersPayload {
   search: string;
   selectedStatuses: string[];
   selectedReps: string[];
+  selectedPppStatuses: string[];
+  selectedHeadsetConnectionStatuses: string[];
+  preferredPartnerFilter: 'all' | 'preferred' | 'not_preferred';
   selectedReferralSources: string[];
   includeNoReferralSource: boolean;
   selectedVendorDayStatuses: string[];
@@ -42,6 +45,9 @@ export function clearSavedTerritoryFilters() {
 export function countActiveTerritoryFilters(input: {
   selectedStatuses: string[];
   selectedReps: string[];
+  selectedPppStatuses: string[];
+  selectedHeadsetConnectionStatuses: string[];
+  preferredPartnerFilter: 'all' | 'preferred' | 'not_preferred';
   selectedReferralSources: string[];
   includeNoReferralSource: boolean;
   selectedVendorDayStatuses: string[];
@@ -54,6 +60,9 @@ export function countActiveTerritoryFilters(input: {
   return (
     input.selectedStatuses.length +
     input.selectedReps.length +
+    input.selectedPppStatuses.length +
+    input.selectedHeadsetConnectionStatuses.length +
+    (input.preferredPartnerFilter === 'all' ? 0 : 1) +
     input.selectedReferralSources.length +
     (input.includeNoReferralSource ? 1 : 0) +
     input.selectedVendorDayStatuses.length +
