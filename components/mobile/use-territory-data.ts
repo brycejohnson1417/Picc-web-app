@@ -7,9 +7,14 @@ import type { TerritoryBoundaryListResponse, TerritoryMarkerListResponse, Territ
 const STORES_STALE_MS = 1000 * 60 * 5;
 const OVERLAY_STALE_MS = 1000 * 60 * 15;
 const QUERY_GC_MS = 1000 * 60 * 30;
-const TERRITORY_CACHE_PREFIX = 'picc:territory-cache:';
+const TERRITORY_CACHE_PREFIX = 'picc:territory-cache:v2:';
 
-function readCachedJson<T>(cacheKey: string): T | undefined {
+type CachedEnvelope<T> = {
+  cachedAt: number;
+  payload: T;
+};
+
+function readCachedJson<T>(cacheKey: string, maxAgeMs: number): T | undefined {
   if (typeof window === 'undefined') {
     return undefined;
   }
@@ -17,7 +22,24 @@ function readCachedJson<T>(cacheKey: string): T | undefined {
   try {
     const raw = window.sessionStorage.getItem(`${TERRITORY_CACHE_PREFIX}${cacheKey}`);
     if (!raw) return undefined;
-    return JSON.parse(raw) as T;
+    const parsed = JSON.parse(raw) as T | CachedEnvelope<T>;
+
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'cachedAt' in parsed &&
+      typeof parsed.cachedAt === 'number' &&
+      'payload' in parsed
+    ) {
+      if (Date.now() - parsed.cachedAt > maxAgeMs) {
+        window.sessionStorage.removeItem(`${TERRITORY_CACHE_PREFIX}${cacheKey}`);
+        return undefined;
+      }
+      return parsed.payload;
+    }
+
+    window.sessionStorage.removeItem(`${TERRITORY_CACHE_PREFIX}${cacheKey}`);
+    return undefined;
   } catch {
     return undefined;
   }
@@ -29,7 +51,11 @@ function writeCachedJson<T>(cacheKey: string, payload: T) {
   }
 
   try {
-    window.sessionStorage.setItem(`${TERRITORY_CACHE_PREFIX}${cacheKey}`, JSON.stringify(payload));
+    const envelope: CachedEnvelope<T> = {
+      cachedAt: Date.now(),
+      payload,
+    };
+    window.sessionStorage.setItem(`${TERRITORY_CACHE_PREFIX}${cacheKey}`, JSON.stringify(envelope));
   } catch {
     // Ignore quota/storage failures.
   }
@@ -91,9 +117,9 @@ export function useTerritoryData(input: TerritoryStoreQueryInput) {
   const requestStoresUrl = shouldForceRefresh
     ? `/api/territory/stores?${buildStoresSearchParams(input, { forceRefresh: true }).toString()}`
     : storesUrl;
-  const cachedStores = readCachedJson<TerritoryStoresResponse>(storesUrl);
-  const cachedBoundaries = readCachedJson<TerritoryBoundaryListResponse>('/api/territory/boundaries');
-  const cachedMarkers = readCachedJson<TerritoryMarkerListResponse>('/api/territory/markers');
+  const cachedStores = readCachedJson<TerritoryStoresResponse>(storesUrl, STORES_STALE_MS);
+  const cachedBoundaries = readCachedJson<TerritoryBoundaryListResponse>('/api/territory/boundaries', OVERLAY_STALE_MS);
+  const cachedMarkers = readCachedJson<TerritoryMarkerListResponse>('/api/territory/markers', OVERLAY_STALE_MS);
 
   const storesQuery = useQuery({
     queryKey: [
