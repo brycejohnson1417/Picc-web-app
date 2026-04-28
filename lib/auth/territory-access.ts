@@ -6,7 +6,7 @@ import { getUserRole } from '@/lib/rbac/guards';
 import { evaluateUserAccess, getSharedWorkspaceId, getWorkspaceAllowlist } from '@/lib/auth/access-policy';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
 import { firstAllowlistEntryAsCsv, isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
-import { AUTH_BYPASS_MODE } from '@/lib/config/runtime';
+import { AUTH_BYPASS_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 import type { AppRole } from '@/lib/types/rbac';
 
 interface AccessResult {
@@ -53,7 +53,14 @@ export async function checkTerritoryAccess(opts?: {
         .map((value) => value.trim())
         .find(Boolean) ?? 'demo@piccplatform.com';
 
-    return { ok: true, status: 200, email: fallbackEmail.toLowerCase(), role: 'ADMIN' };
+    return {
+      ok: true,
+      status: 200,
+      email: fallbackEmail.toLowerCase(),
+      userId: DEMO_USER_ID,
+      orgId: DEMO_ORG_ID,
+      role: 'ADMIN',
+    };
   }
 
   const { userId, orgId } = await auth();

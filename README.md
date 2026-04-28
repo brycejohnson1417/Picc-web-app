@@ -117,6 +117,7 @@ prisma/
 Prerequisite:
 - Node.js LTS (`20.x` or `22.x`). Node `25.x` is not supported for this project and can cause Next build/lint hangs.
 - If you use `nvm`, run `nvm use` from the repo root (uses `.nvmrc`).
+- Docker-compatible runtime. On macOS, OrbStack is the recommended lightweight option.
 
 1. Install deps
 ```bash
@@ -125,33 +126,34 @@ npm ci
 
 2. Create env file
 ```bash
-cp .env.example .env.local
+cp .env.local.example .env.local
 ```
 
-3. Configure `.env.local`
-- Set `DATABASE_URL`
-- Set Clerk keys (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`)
-- Keep/adjust `NABIS_MASTER_SHEET_PATH`
-
-4. Generate Prisma client
+3. Start and seed the local database
 ```bash
-npx prisma generate
+npm run db:local:setup
 ```
 
-5. Run migrations
+4. Start app
 ```bash
-npx prisma migrate dev
+npm run dev:local
 ```
 
-6. Seed realistic demo data
+5. Open the app
+- `http://127.0.0.1:3010/contacts`
+- `http://127.0.0.1:3010/accounts`
+
+Local setup uses `DEMO_MODE=true` and `picc_crm_local`, so Clerk keys are not required just to load the app. Leave integration keys blank unless you are actively testing that integration.
+
+Useful local DB commands:
 ```bash
-npm run prisma:seed
+npm run db:local:up
+npm run db:local:setup
+npm run db:local:reset
+npm run db:local:studio
 ```
 
-7. Start app
-```bash
-npm run dev
-```
+`db:local:setup` intentionally uses `prisma db push` instead of `prisma migrate dev`. The historical production migration chain is not replayable from an empty database because an older foundation migration is a placeholder, so `db push` is the safe local bootstrap path until migrations are repaired in a dedicated migration PR.
 
 ## Clerk Setup
 1. Create Clerk app and enable Organizations.
