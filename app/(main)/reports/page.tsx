@@ -3,6 +3,7 @@ import { WorkspaceHero, WorkspacePage } from '@/components/layout/workspace-page
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { getPayrollOverview } from '@/lib/server/payroll';
 import { getVendorDayReportSummary } from '@/lib/server/roi';
+import { Banknote, LineChart, Tag, UsersRound } from 'lucide-react';
 
 function currency(value: number) {
   return value.toLocaleString(undefined, {
@@ -43,7 +44,15 @@ export default async function ReportsPage() {
             <CardTitle>BA Utilization</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {report.byWorker.length === 0 ? <p className="text-sm text-[#66707d]">No worker ROI or payroll records yet.</p> : null}
+            {report.byWorker.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#e0e3ea] bg-[#fbfcfe] p-8 text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 mb-3">
+                  <UsersRound className="h-5 w-5 text-slate-500" />
+                </div>
+                <p className="text-sm font-medium text-[#17181c]">No utilization data</p>
+                <p className="text-sm text-[#66707d] mt-1">No worker ROI or payroll records have been captured for the current reporting period.</p>
+              </div>
+            ) : null}
             {report.byWorker.map((worker) => (
               <div key={worker.label} className="rounded-2xl border border-[#e0e3ea] bg-[#fbfcfe] px-4 py-3">
                 <div className="flex items-center justify-between gap-4">
@@ -81,7 +90,13 @@ export default async function ReportsPage() {
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-[#66707d]">No payroll batch yet.</p>
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#e0e3ea] bg-[#fbfcfe] p-8 text-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 mb-3">
+                    <Banknote className="h-5 w-5 text-slate-500" />
+                  </div>
+                  <p className="text-sm font-medium text-[#17181c]">No active payroll batch</p>
+                  <p className="text-sm text-[#66707d] mt-1">There are currently no active or pending payroll batches.</p>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -91,7 +106,15 @@ export default async function ReportsPage() {
               <CardTitle>Brand Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {report.byBrand.length === 0 ? <p className="text-sm text-[#66707d]">No brand-tagged ROI records yet.</p> : null}
+              {report.byBrand.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#e0e3ea] bg-[#fbfcfe] p-8 text-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 mb-3">
+                    <Tag className="h-5 w-5 text-slate-500" />
+                  </div>
+                  <p className="text-sm font-medium text-[#17181c]">No brand data</p>
+                  <p className="text-sm text-[#66707d] mt-1">No brand-tagged ROI records have been generated for this period.</p>
+                </div>
+              ) : null}
               {report.byBrand.map((brand) => (
                 <div key={brand.label} className="flex items-center justify-between rounded-2xl border border-[#e0e3ea] bg-[#fbfcfe] px-4 py-3">
                   <div>
@@ -111,7 +134,15 @@ export default async function ReportsPage() {
           <CardTitle>Recent Vendor Day ROI Snapshots</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {report.snapshots.length === 0 ? <p className="text-sm text-[#66707d]">No completed vendor-day ROI snapshots yet.</p> : null}
+          {report.snapshots.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#e0e3ea] bg-[#fbfcfe] p-8 text-center sm:p-12">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-4">
+                <LineChart className="h-6 w-6 text-slate-500" />
+              </div>
+              <p className="text-base font-medium text-[#17181c]">No snapshots available</p>
+              <p className="text-sm text-[#66707d] mt-1 max-w-sm">No completed vendor-day ROI snapshots have been recorded yet. Check back after vendor days have been processed.</p>
+            </div>
+          ) : null}
           {report.snapshots.slice(0, 20).map((snapshot) => (
             <div key={snapshot.id} className="rounded-2xl border border-[#e0e3ea] bg-[#fbfcfe] px-4 py-3">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
