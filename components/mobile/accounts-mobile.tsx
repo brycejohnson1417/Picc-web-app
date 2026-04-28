@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Filter, Loader2, MapPin, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -35,6 +35,7 @@ export function AccountsMobile() {
   const [headsetConnectionFilter, setHeadsetConnectionFilter] = useState('all');
   const [preferredPartnerFilter, setPreferredPartnerFilter] = useState<PreferredPartnerFilter>('all');
   const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const unresolvedRouteStoreIdRef = useRef<string | null>(null);
   const routePlan = useRoutePlan();
@@ -134,6 +135,19 @@ export function AccountsMobile() {
     pppStatusFilter !== 'all' ||
     headsetConnectionFilter !== 'all' ||
     preferredPartnerFilter !== 'all';
+  const activeFilterCount = [repFilter, statusFilter, pppStatusFilter, headsetConnectionFilter, preferredPartnerFilter].filter((value) => value !== 'all').length;
+  const searching = search.trim() !== debouncedSearch;
+  const resultLabel = storesQuery.isFetching && !storesQuery.data
+    ? 'Loading accounts...'
+    : `${stores.length.toLocaleString()} ${stores.length === 1 ? 'account' : 'accounts'}`;
+
+  function clearFilters() {
+    setRepFilter('all');
+    setStatusFilter('all');
+    setPppStatusFilter('all');
+    setHeadsetConnectionFilter('all');
+    setPreferredPartnerFilter('all');
+  }
 
   if (storesQuery.isLoading && !storesQuery.data) {
     return (
@@ -189,51 +203,49 @@ export function AccountsMobile() {
       </MobileHeader>
 
       <div className="mx-auto max-w-[var(--app-shell-max)] px-4 pb-28 pt-4 md:px-5 lg:px-6">
-        <div className="rounded-[24px] border border-[#d6dbe4] bg-white p-4 shadow-[0_16px_40px_rgba(24,33,45,0.08)]">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6a7583]">Accounts</p>
-          <h2 className="mt-1 text-xl font-semibold text-[#18212d]">Find and open store context fast.</h2>
-          <div className="mt-3">
+        <div className="sticky top-0 z-20 -mx-4 border-b border-[#dce2eb] bg-[#f7f9fc]/95 px-4 pb-3 pt-2 backdrop-blur md:-mx-5 md:px-5 lg:-mx-6 lg:px-6">
+          <div className="grid grid-cols-[minmax(0,1fr)_48px] gap-2">
             <MobileSearch value={search} onChange={setSearch} placeholder="Search Accounts" />
+            <button
+              type="button"
+              className="relative grid h-12 w-12 place-items-center rounded-xl border border-[#d6dce7] bg-white text-[#243041] shadow-sm active:scale-[0.98]"
+              onClick={() => setShowFilters(true)}
+              aria-label="Open account filters"
+            >
+              <SlidersHorizontal className="h-5 w-5" />
+              {activeFilterCount > 0 ? (
+                <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#c93412] px-1 text-[11px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              ) : null}
+            </button>
           </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-            <FilterSelect label="Sales Rep" value={repFilter} onChange={setRepFilter} options={filterOptions?.reps.map((entry) => entry.value) ?? []} />
-            <FilterSelect label="Account Status" value={statusFilter} onChange={setStatusFilter} options={filterOptions?.statuses.map((entry) => entry.value) ?? []} />
-            <FilterSelect label="PPP Status" value={pppStatusFilter} onChange={setPppStatusFilter} options={filterOptions?.pppStatuses.map((entry) => entry.value) ?? []} />
-            <FilterSelect
-              label="Headset Connection"
-              value={headsetConnectionFilter}
-              onChange={setHeadsetConnectionFilter}
-              options={filterOptions?.headsetConnectionStatuses.map((entry) => entry.value) ?? []}
-            />
-            <FilterSelect
-              label="Preferred Partner"
-              value={preferredPartnerFilter}
-              onChange={(value) => setPreferredPartnerFilter(value as PreferredPartnerFilter)}
-              options={[
-                { value: 'preferred', label: 'Preferred Partner' },
-                { value: 'not_preferred', label: 'Not a Preferred Partner' },
-              ]}
-            />
-          </div>
-          {hasActiveFilters ? (
-            <div className="mt-2 flex justify-end">
-              <button
-                type="button"
-                className="text-[12px] font-semibold text-[#c93412]"
-                onClick={() => {
-                  setRepFilter('all');
-                  setStatusFilter('all');
-                  setPppStatusFilter('all');
-                  setHeadsetConnectionFilter('all');
-                  setPreferredPartnerFilter('all');
-                }}
-              >
-                Clear filters
-              </button>
-            </div>
-          ) : null}
-          <div className="mt-3 border-t border-[#e2e8f0]" />
 
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <p className="min-w-0 text-[14px] font-semibold text-[#303947]">
+              {searching || storesQuery.isFetching ? 'Refreshing...' : resultLabel}
+              {debouncedSearch ? <span className="font-medium text-[#737d8c]"> for &quot;{debouncedSearch}&quot;</span> : null}
+            </p>
+            {hasActiveFilters ? (
+              <button type="button" className="shrink-0 text-[13px] font-semibold text-[#c93412]" onClick={clearFilters}>
+                Clear
+              </button>
+            ) : null}
+          </div>
+
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            <ScopeChip label={scope === 'all' ? 'All accounts' : scope === 'recent' ? 'Recent' : 'Follow-ups'} active />
+            {repFilter !== 'all' ? <ScopeChip label={repFilter} onClear={() => setRepFilter('all')} /> : null}
+            {statusFilter !== 'all' ? <ScopeChip label={statusFilter} onClear={() => setStatusFilter('all')} /> : null}
+            {pppStatusFilter !== 'all' ? <ScopeChip label={`PPP: ${pppStatusFilter}`} onClear={() => setPppStatusFilter('all')} /> : null}
+            {headsetConnectionFilter !== 'all' ? <ScopeChip label={`Headset: ${headsetConnectionFilter}`} onClear={() => setHeadsetConnectionFilter('all')} /> : null}
+            {preferredPartnerFilter !== 'all' ? (
+              <ScopeChip label={preferredPartnerFilter === 'preferred' ? 'Preferred Partner' : 'Not Preferred'} onClear={() => setPreferredPartnerFilter('all')} />
+            ) : null}
+          </div>
+        </div>
+
+        <div className="pt-3">
           {storesQuery.isError ? (
             <div className="mt-3 rounded-lg border border-[#e6b3a7] bg-[#fdebe7] px-3 py-2 text-[13px] text-[#8f2410]">
               Live sync warning: {storesQuery.error instanceof Error ? storesQuery.error.message : 'Failed to refresh accounts'}
@@ -270,12 +282,32 @@ export function AccountsMobile() {
           ) : null}
 
           {grouped.length === 0 ? (
-            <div className="px-1 py-5 text-[17px] text-[#6a6d75]">
-              {debouncedSearch ? 'No accounts match your search.' : 'No accounts available yet.'}
+            <div className="mt-3 rounded-xl border border-[#d8dde7] bg-white p-5 text-center">
+              <p className="text-[19px] font-semibold text-[#252933]">
+                {debouncedSearch || hasActiveFilters ? 'No accounts match this view.' : 'No accounts available yet.'}
+              </p>
+              <p className="mt-2 text-[14px] leading-5 text-[#68707d]">
+                {debouncedSearch || hasActiveFilters
+                  ? 'Clear the search or filters to get back to the full account list.'
+                  : 'Account data will appear here after the territory cache syncs.'}
+              </p>
+              {debouncedSearch || hasActiveFilters ? (
+                <button
+                  type="button"
+                  className="mt-4 rounded-lg bg-[#276fd3] px-4 py-2 text-[14px] font-semibold text-white"
+                  onClick={() => {
+                    setSearch('');
+                    setDebouncedSearch('');
+                    clearFilters();
+                  }}
+                >
+                  Clear view
+                </button>
+              ) : null}
             </div>
           ) : null}
 
-          <div className="mt-4 space-y-5">
+          <div className="space-y-4">
             {grouped.map(([letter, list]) => (
               <section
                 key={letter}
@@ -283,19 +315,22 @@ export function AccountsMobile() {
                   sectionRefs.current[letter] = element;
                 }}
               >
-                <div className="px-1 py-1 text-[24px] font-semibold text-[#6a7583]">{letter}</div>
+                <div className="sticky top-[134px] z-10 border-b border-[#dce2eb] bg-[#eef2f7]/95 px-1 py-1 text-[18px] font-semibold text-[#6a7583] backdrop-blur">{letter}</div>
                 <div className="mt-2 space-y-2">
                   {list.map((store) => (
                     <button
                       key={store.id}
                       type="button"
                       onClick={() => setDetailStoreId(store.id)}
-                      className="w-full rounded-[18px] border border-[#e0e4eb] bg-[#fbfcfe] px-4 py-3 text-left transition hover:border-[#9db8f7] hover:bg-[#f5f9ff]"
+                      className="w-full rounded-xl border border-[#e0e4eb] bg-white px-4 py-3 text-left shadow-[0_8px_24px_rgba(24,33,45,0.05)] transition hover:border-[#9db8f7] hover:bg-[#f5f9ff] active:scale-[0.995]"
                     >
                       <p className="truncate text-[20px] font-semibold text-[#15171c]">{store.name}</p>
-                      <p className="mt-1 truncate text-[15px] text-[#6b7280]">{store.locationAddress ?? store.locationLabel ?? 'No address'}</p>
+                      <p className="mt-1 flex min-w-0 items-center gap-1 truncate text-[14px] text-[#6b7280]">
+                        <MapPin className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{store.locationAddress ?? store.locationLabel ?? 'No address'}</span>
+                      </p>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="rounded-full bg-[#eef3fb] px-3 py-1 text-[12px] font-semibold text-[#304153]">
+                        <span className="rounded-full bg-[#eef3fb] px-2.5 py-1 text-[12px] font-semibold text-[#304153]">
                           Rep: {store.repNames.length > 0 ? store.repNames.join(', ') : 'Unassigned'}
                         </span>
                         <NotionOptionChip
@@ -305,7 +340,7 @@ export function AccountsMobile() {
                         />
                         {store.isPreferredPartner ? (
                           <span className="rounded-full border border-black bg-black px-3 py-1 text-[12px] font-semibold text-white">
-                            Preferred Partner
+                            Preferred
                           </span>
                         ) : null}
                       </div>
@@ -318,7 +353,27 @@ export function AccountsMobile() {
         </div>
       </div>
 
-      <AlphabetRail onSelect={(letter) => sectionRefs.current[letter]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+      {grouped.length > 0 ? <AlphabetRail onSelect={(letter) => sectionRefs.current[letter]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /> : null}
+
+      {showFilters ? (
+        <AccountFiltersSheet
+          filterOptions={filterOptions}
+          repFilter={repFilter}
+          statusFilter={statusFilter}
+          pppStatusFilter={pppStatusFilter}
+          headsetConnectionFilter={headsetConnectionFilter}
+          preferredPartnerFilter={preferredPartnerFilter}
+          activeFilterCount={activeFilterCount}
+          resultCount={stores.length}
+          onRepFilterChange={setRepFilter}
+          onStatusFilterChange={setStatusFilter}
+          onPppStatusFilterChange={setPppStatusFilter}
+          onHeadsetConnectionFilterChange={setHeadsetConnectionFilter}
+          onPreferredPartnerFilterChange={(value) => setPreferredPartnerFilter(value as PreferredPartnerFilter)}
+          onClear={clearFilters}
+          onClose={() => setShowFilters(false)}
+        />
+      ) : null}
 
       <AccountDetailSheet
         store={detailStoreId ? allStoreById.get(detailStoreId) ?? null : null}
@@ -331,6 +386,114 @@ export function AccountsMobile() {
         onAddToRoute={(id) => routePlan.toggleStop(id)}
         routeSelected={detailStoreId ? routePlan.selectedStopIds.includes(detailStoreId) : false}
       />
+    </div>
+  );
+}
+
+function ScopeChip({ label, active = false, onClear }: { label: string; active?: boolean; onClear?: () => void }) {
+  return (
+    <span
+      className={[
+        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold',
+        active ? 'border-[#cdd7e6] bg-white text-[#303947]' : 'border-[#d8dde7] bg-[#eef3fb] text-[#445064]',
+      ].join(' ')}
+    >
+      {label}
+      {onClear ? (
+        <button type="button" className="-mr-1 grid h-5 w-5 place-items-center rounded-full text-[#748093] hover:bg-white" onClick={onClear} aria-label={`Clear ${label} filter`}>
+          <X className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+function AccountFiltersSheet({
+  filterOptions,
+  repFilter,
+  statusFilter,
+  pppStatusFilter,
+  headsetConnectionFilter,
+  preferredPartnerFilter,
+  activeFilterCount,
+  resultCount,
+  onRepFilterChange,
+  onStatusFilterChange,
+  onPppStatusFilterChange,
+  onHeadsetConnectionFilterChange,
+  onPreferredPartnerFilterChange,
+  onClear,
+  onClose,
+}: {
+  filterOptions: TerritoryStoresResponse['filters'] | undefined;
+  repFilter: string;
+  statusFilter: string;
+  pppStatusFilter: string;
+  headsetConnectionFilter: string;
+  preferredPartnerFilter: PreferredPartnerFilter;
+  activeFilterCount: number;
+  resultCount: number;
+  onRepFilterChange: (value: string) => void;
+  onStatusFilterChange: (value: string) => void;
+  onPppStatusFilterChange: (value: string) => void;
+  onHeadsetConnectionFilterChange: (value: string) => void;
+  onPreferredPartnerFilterChange: (value: string) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[5200] bg-black/35 backdrop-blur-[2px]">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close account filters" onClick={onClose} />
+      <div className="absolute inset-x-0 bottom-0 mx-auto max-h-[86dvh] max-w-[var(--app-shell-max)] overflow-hidden rounded-t-2xl border border-[#d9dee8] bg-white shadow-[0_-18px_50px_rgba(15,23,42,0.22)]">
+        <div className="flex items-center justify-between border-b border-[#e0e5ed] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#eef3fb] text-[#276fd3]">
+              <Filter className="h-4.5 w-4.5" />
+            </span>
+            <div>
+              <h2 className="text-[18px] font-semibold text-[#1f2937]">Account filters</h2>
+              <p className="text-[13px] text-[#6b7280]">
+                {activeFilterCount > 0 ? `${activeFilterCount} active` : 'No filters active'} · {resultCount.toLocaleString()} results
+              </p>
+            </div>
+          </div>
+          <button type="button" className="grid h-10 w-10 place-items-center rounded-xl text-[#5f6673] hover:bg-[#f2f5f9]" onClick={onClose} aria-label="Close filters">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="max-h-[calc(86dvh-132px)] overflow-auto px-4 py-4">
+          <div className="grid gap-3">
+            <FilterSelect label="Sales Rep" value={repFilter} onChange={onRepFilterChange} options={filterOptions?.reps.map((entry) => entry.value) ?? []} />
+            <FilterSelect label="Account Status" value={statusFilter} onChange={onStatusFilterChange} options={filterOptions?.statuses.map((entry) => entry.value) ?? []} />
+            <FilterSelect label="PPP Status" value={pppStatusFilter} onChange={onPppStatusFilterChange} options={filterOptions?.pppStatuses.map((entry) => entry.value) ?? []} />
+            <FilterSelect
+              label="Headset Connection"
+              value={headsetConnectionFilter}
+              onChange={onHeadsetConnectionFilterChange}
+              options={filterOptions?.headsetConnectionStatuses.map((entry) => entry.value) ?? []}
+            />
+            <FilterSelect
+              label="Preferred Partner"
+              value={preferredPartnerFilter}
+              onChange={onPreferredPartnerFilterChange}
+              options={[
+                { value: 'preferred', label: 'Preferred Partner' },
+                { value: 'not_preferred', label: 'Not a Preferred Partner' },
+              ]}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-[1fr_1.4fr] gap-2 border-t border-[#e0e5ed] bg-[#f8fafc] px-4 py-3">
+          <button type="button" className="h-11 rounded-xl border border-[#d6dce7] bg-white text-[14px] font-semibold text-[#394255]" onClick={onClear}>
+            Clear all
+          </button>
+          <button type="button" className="h-11 rounded-xl bg-[#276fd3] text-[14px] font-semibold text-white" onClick={onClose}>
+            Show {resultCount.toLocaleString()} {resultCount === 1 ? 'account' : 'accounts'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
