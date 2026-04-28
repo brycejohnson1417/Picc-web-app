@@ -9,6 +9,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "next dev",
+    "dev:local": "next dev --hostname 127.0.0.1 --port 3010",
     "build": "next build",
     "test": "vitest run",
     "analyze": "ANALYZE=true next build",
@@ -22,6 +23,14 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
+    "db:local:up": "docker compose -p picc-web-app up -d postgres",
+    "db:local:wait": "docker exec picc-postgres sh -lc 'until pg_isready -U postgres -d picc_crm; do sleep 1; done'",
+    "db:local:init": "docker exec picc-postgres sh -lc \"psql -U postgres -d postgres -tc \\\"SELECT 1 FROM pg_database WHERE datname = 'picc_crm_local'\\\" | grep -q 1 || createdb -U postgres picc_crm_local\" && docker exec picc-postgres psql -U postgres -d picc_crm_local -c \"CREATE EXTENSION IF NOT EXISTS postgis;\"",
+    "db:local:push": "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/picc_crm_local?schema=public prisma db push",
+    "db:local:seed": "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/picc_crm_local?schema=public tsx prisma/seed.ts",
+    "db:local:setup": "npm run db:local:up && npm run db:local:wait && npm run db:local:init && npm run db:local:push && npm run db:local:seed",
+    "db:local:reset": "docker exec picc-postgres dropdb -U postgres --if-exists picc_crm_local && npm run db:local:init && npm run db:local:push && npm run db:local:seed",
+    "db:local:studio": "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/picc_crm_local?schema=public prisma studio",
     "native:typecheck": "npm --prefix apps/native run typecheck",
     "sync:directus": "tsx services/directus-sync/src/index.ts",
     "sync:odoo": "tsx services/odoo-sync/src/index.ts"
