@@ -44,7 +44,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx prisma migrate deploy
+      # The checked-in migration history starts after the original production
+      # baseline, so clean replay is not representative yet. Validate that the
+      # current Prisma schema can build a fresh PostGIS database instead.
+      - run: npx prisma validate
+      - run: echo 'CREATE EXTENSION IF NOT EXISTS postgis;' | npx prisma db execute --schema prisma/schema.prisma --stdin
+      - run: npx prisma db push --skip-generate
       - run: npx prisma generate
 
   native-smoke:
