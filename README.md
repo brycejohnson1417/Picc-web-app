@@ -116,6 +116,7 @@ prisma/
 ## Local Setup
 Prerequisite:
 - Node.js LTS (`20.x` or `22.x`). Node `25.x` is not supported for this project and can cause Next build/lint hangs.
+- Docker and Docker Compose (for local Postgres DB)
 - If you use `nvm`, run `nvm use` from the repo root (uses `.nvmrc`).
 
 1. Install deps
@@ -123,32 +124,41 @@ Prerequisite:
 npm ci
 ```
 
-2. Create env file
+2. Create env files
+For Prisma commands to work correctly locally, environment variables (like `DATABASE_URL`) must be placed in a `.env` file rather than just `.env.local`.
 ```bash
+cp .env.example .env
 cp .env.example .env.local
 ```
 
-3. Configure `.env.local`
-- Set `DATABASE_URL`
+3. Configure `.env` and `.env.local`
+- Keep `DATABASE_URL` as the default local Docker string: `postgresql://postgres:postgres@localhost:5432/picc_crm?schema=public`
 - Set Clerk keys (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`)
 - Keep/adjust `NABIS_MASTER_SHEET_PATH`
 
-4. Generate Prisma client
+4. Start local Postgres database using Docker
+```bash
+npm run db:up
+```
+
+5. Generate Prisma client
 ```bash
 npx prisma generate
 ```
 
-5. Run migrations
+6. Run migrations
 ```bash
 npx prisma migrate dev
 ```
 
-6. Seed realistic demo data
+7. Seed realistic demo data
 ```bash
 npm run prisma:seed
 ```
 
-7. Start app
+*(Note: Steps 4, 6, and 7 can also be run together using `npm run db:setup`)*
+
+8. Start app
 ```bash
 npm run dev
 ```

@@ -24,7 +24,11 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "native:typecheck": "npm --prefix apps/native run typecheck",
     "sync:directus": "tsx services/directus-sync/src/index.ts",
-    "sync:odoo": "tsx services/odoo-sync/src/index.ts"
+    "sync:odoo": "tsx services/odoo-sync/src/index.ts",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:setup": "npm run db:up && npx prisma migrate dev && npm run prisma:seed",
+    "db:reset": "docker compose down -v && npm run db:setup"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.0.0",
