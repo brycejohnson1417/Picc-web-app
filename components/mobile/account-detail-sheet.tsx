@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { Copy, Mail, MapPinned, MessageSquare, Navigation, PencilLine, Phone, PhoneCall, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock3, Copy, Mail, MapPinned, MessageSquare, Navigation, PencilLine, Phone, PhoneCall, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAppAccess } from '@/components/auth/app-access-provider';
@@ -12,6 +12,7 @@ import { PreferredPartnerSavingsPanel } from '@/components/crm/preferred-partner
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { NotionOptionChip } from '@/components/shared/notion-option-chip';
 import { Button, Textarea } from '@/components/ui';
+import type { RuntimeFreshness } from '@/lib/runtime/account-contact-contract';
 import type { TerritoryStoreContact, TerritoryStoreDetailResponse, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
@@ -150,9 +151,10 @@ interface AccountDetailSheetProps {
   onAddToRoute: (storeId: string) => void;
   routeSelected: boolean;
   onCenterStore?: (store: TerritoryStorePin) => void;
+  accountFreshness?: RuntimeFreshness | null;
 }
 
-export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterStore }: AccountDetailSheetProps) {
+export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterStore, accountFreshness }: AccountDetailSheetProps) {
   const appAccess = useAppAccess();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<DetailTab>('detail');
@@ -594,7 +596,12 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
               ) : null}
             </div>
             <p className="mt-2 text-[15px] text-[#7c8089]">{addressValue}</p>
-            {loadingDetail ? <p className="mt-2 text-[13px] text-[#6e7078]">Syncing account details...</p> : null}
+            <AccountDetailConfidence
+              store={activeStore}
+              detail={detail}
+              loadingDetail={loadingDetail}
+              accountFreshness={accountFreshness}
+            />
           </div>
 
           {tab === 'detail' ? (
@@ -992,6 +999,90 @@ function DetailRow({ label, value, strong = false }: { label: string; value: str
     <div className="border-b border-[#c6c7cb] px-5 py-4">
       <p className="text-[13px] uppercase tracking-wide text-[#8c9098]">{label}</p>
       <p className={cn('mt-1 text-[16px] text-[#1d1f23]', strong ? 'font-semibold' : '')}>{value || ' '}</p>
+    </div>
+  );
+}
+
+function sourceLabel(source: RuntimeFreshness['source'] | undefined) {
+  if (source === 'postgres-read-model') return 'Postgres read model';
+  if (source === 'notion-territory') return 'Notion territory cache';
+  if (source === 'notion-contacts') return 'Notion contacts cache';
+  if (source === 'ghl') return 'GoHighLevel';
+  return 'Account detail API';
+}
+
+function confidenceTone(state: RuntimeFreshness['state'] | undefined, loadingDetail: boolean, hasDetail: boolean) {
+  if (loadingDetail) {
+    return {
+      Icon: Clock3,
+      label: hasDetail ? 'Updating detail' : 'Loading detail',
+      className: 'border-[#d8c999] bg-[#fff8e6] text-[#5e4514]',
+    };
+  }
+
+  if (state === 'error') {
+    return {
+      Icon: AlertCircle,
+      label: 'Sync issue',
+      className: 'border-[#e4b1a7] bg-[#fff0ed] text-[#8f2410]',
+    };
+  }
+
+  if (state === 'stale' || state === 'syncing' || state === 'unknown') {
+    return {
+      Icon: Clock3,
+      label: state === 'syncing' ? 'Syncing' : state === 'stale' ? 'Stale' : 'Unverified',
+      className: 'border-[#d2d7e0] bg-[#f7f9fc] text-[#3a4352]',
+    };
+  }
+
+  return {
+    Icon: CheckCircle2,
+    label: 'Detail ready',
+    className: 'border-[#b8dec9] bg-[#effaf3] text-[#1f5538]',
+  };
+}
+
+function AccountDetailConfidence({
+  store,
+  detail,
+  loadingDetail,
+  accountFreshness,
+}: {
+  store: TerritoryStorePin;
+  detail: TerritoryStoreDetailResponse | null;
+  loadingDetail: boolean;
+  accountFreshness?: RuntimeFreshness | null;
+}) {
+  const tone = confidenceTone(accountFreshness?.state, loadingDetail, Boolean(detail));
+  const contactCount = detail?.contacts.length;
+  const contactLabel = contactCount === undefined
+    ? 'Contacts loading'
+    : contactCount === 0
+      ? 'No linked contacts'
+      : `${contactCount} linked ${contactCount === 1 ? 'contact' : 'contacts'}`;
+  const source = sourceLabel(accountFreshness?.source);
+  const syncedAt = accountFreshness?.syncedAt ? formatDateTimeLabel(accountFreshness.syncedAt, 'No sync recorded') : 'No sync recorded';
+  const editedAt = formatDateTimeLabel(store.lastEditedTime, 'No edit time');
+  const Icon = tone.Icon;
+
+  return (
+    <div className={cn('mt-4 rounded-2xl border px-3 py-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]', tone.className)}>
+      <div className="flex items-start gap-2">
+        <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-semibold">{tone.label}</span>
+            <span className="rounded-full border border-current/15 bg-white/55 px-2 py-0.5 text-[11px] font-semibold">
+              {contactLabel}
+            </span>
+          </div>
+          <p className="mt-1 text-[12px] leading-5 opacity-85">
+            Source: {source}. Last sync: {syncedAt}. Last edit: {editedAt}.
+          </p>
+          {accountFreshness?.error ? <p className="mt-1 text-[12px] font-medium opacity-90">{accountFreshness.error}</p> : null}
+        </div>
+      </div>
     </div>
   );
 }

@@ -377,6 +377,7 @@ export function AccountsMobile() {
 
       <AccountDetailSheet
         store={detailStoreId ? allStoreById.get(detailStoreId) ?? null : null}
+        accountFreshness={accountFreshness}
         onClose={() => {
           setDetailStoreId(null);
           if (searchParams.get('storeId')) {
