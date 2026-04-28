@@ -11,6 +11,8 @@ import { MobileHeader } from '@/components/mobile/mobile-header';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { NotionOptionChip } from '@/components/shared/notion-option-chip';
+import { DataFreshnessBanner } from '@/components/shared/data-freshness';
+import { buildTerritoryFreshness } from '@/lib/runtime/account-contact-contract';
 import type { PreferredPartnerFilter } from '@/lib/territory/preferred-partner';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 import type { TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
@@ -65,6 +67,10 @@ export function AccountsMobile() {
   });
 
   const allStores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
+  const accountFreshness = useMemo(
+    () => (storesQuery.data ? buildTerritoryFreshness(storesQuery.data.meta) : null),
+    [storesQuery.data],
+  );
   const filterOptions = storesQuery.data?.filters;
   const stores = useMemo(() => {
     const source = allStores;
@@ -232,6 +238,35 @@ export function AccountsMobile() {
             <div className="mt-3 rounded-lg border border-[#e6b3a7] bg-[#fdebe7] px-3 py-2 text-[13px] text-[#8f2410]">
               Live sync warning: {storesQuery.error instanceof Error ? storesQuery.error.message : 'Failed to refresh accounts'}
             </div>
+          ) : null}
+
+          {accountFreshness ? (
+            <DataFreshnessBanner
+              freshness={{
+                ...accountFreshness,
+                syncing: accountFreshness.syncing || storesQuery.isFetching,
+                state: storesQuery.isFetching && accountFreshness.state === 'fresh' ? 'syncing' : accountFreshness.state,
+                detail:
+                  storesQuery.isFetching && accountFreshness.state === 'fresh'
+                    ? 'Refreshing account data in the background.'
+                    : accountFreshness.detail,
+              }}
+              compact
+              className="mt-3"
+              action={
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-current/20 bg-white/70 px-3 text-[12px] font-semibold"
+                  onClick={() => {
+                    void storesQuery.refetch();
+                  }}
+                  disabled={storesQuery.isFetching}
+                >
+                  <RefreshCw className={storesQuery.isFetching ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
+                  Refresh
+                </button>
+              }
+            />
           ) : null}
 
           {grouped.length === 0 ? (

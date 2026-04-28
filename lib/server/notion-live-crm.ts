@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { AccountTableRow } from '@/components/crm/accounts-table';
 import type { ContactTableRow } from '@/components/crm/contacts-table';
+import type { ContactsFreshnessMeta, RuntimeContactSummary } from '@/lib/runtime/account-contact-contract';
 import {
   getSyncTtlMinutes,
   isSnapshotStale,
@@ -15,6 +16,7 @@ const NOTION_VERSION = '2022-06-28';
 const CONTACTS_SNAPSHOT_KEY = 'crm-contacts-v1';
 const DEFAULT_CONTACTS_SYNC_TTL_MINUTES = 20;
 let contactsSyncInFlight: Promise<void> | null = null;
+let contactsLastSyncError: string | null = null;
 
 interface NotionPage {
   id: string;
@@ -31,6 +33,16 @@ type NotionQueryResponse = {
 interface CachedContactRow extends ContactTableRow {
   accountPageIds: string[];
   lastEditedTime: string;
+}
+
+interface CachedContactsResult {
+  rows: CachedContactRow[];
+  syncedAt: string | null;
+  lastEditedMax: string | null;
+  recordsRead: number;
+  stale: boolean;
+  syncing: boolean;
+  syncError: string | null;
 }
 
 export interface LiveAccountContact {
@@ -306,8 +318,11 @@ function startContactsBackgroundSync() {
   }
 
   contactsSyncInFlight = syncContactsSnapshotFromNotion()
-    .then(() => undefined)
-    .catch(() => {
+    .then(() => {
+      contactsLastSyncError = null;
+    })
+    .catch((error) => {
+      contactsLastSyncError = error instanceof Error ? error.message : 'Contacts sync failed';
       // Background refresh failures should not block reads from existing cache.
       return undefined;
     })
@@ -338,26 +353,43 @@ async function getCachedContacts(input?: { refresh?: boolean }) {
     if (input?.refresh || !snapshot || snapshot.payload.length === 0) {
       try {
         const synced = await syncContactsSnapshotFromNotion();
+        contactsLastSyncError = null;
         return {
           rows: synced.rows,
           syncedAt: new Date().toISOString(),
-        };
+          lastEditedMax: synced.lastEditedMax,
+          recordsRead: synced.recordsRead,
+          stale: false,
+          syncing: false,
+          syncError: null,
+        } satisfies CachedContactsResult;
       } catch (error) {
         if (!snapshot) {
           throw error;
         }
 
+        contactsLastSyncError = error instanceof Error ? error.message : 'Contacts sync failed';
         return {
           rows: snapshot.payload,
           syncedAt: snapshot.syncedAt,
-        };
+          lastEditedMax: snapshot.lastEditedMax,
+          recordsRead: snapshot.recordsRead,
+          stale: true,
+          syncing: false,
+          syncError: contactsLastSyncError,
+        } satisfies CachedContactsResult;
       }
     } else {
       startContactsBackgroundSync();
       return {
         rows: snapshot.payload,
         syncedAt: snapshot.syncedAt,
-      };
+        lastEditedMax: snapshot.lastEditedMax,
+        recordsRead: snapshot.recordsRead,
+        stale: true,
+        syncing: true,
+        syncError: contactsLastSyncError,
+      } satisfies CachedContactsResult;
     }
   }
 
@@ -368,6 +400,45 @@ async function getCachedContacts(input?: { refresh?: boolean }) {
   return {
     rows: snapshot.payload,
     syncedAt: snapshot.syncedAt,
+    lastEditedMax: snapshot.lastEditedMax,
+    recordsRead: snapshot.recordsRead,
+    stale: false,
+    syncing: Boolean(contactsSyncInFlight),
+    syncError: contactsLastSyncError,
+  } satisfies CachedContactsResult;
+}
+
+function toContactTableRow(row: CachedContactRow): ContactTableRow {
+  return {
+    id: row.id,
+    name: row.name,
+    roleTitle: row.roleTitle,
+    accountName: row.accountName,
+    email: row.email,
+    phone: row.phone,
+    status: row.status,
+    linkedWork: row.linkedWork,
+  };
+}
+
+function toRuntimeContact(row: CachedContactRow): RuntimeContactSummary {
+  return {
+    ...toContactTableRow(row),
+    notionPageId: row.id,
+    accountPageIds: row.accountPageIds,
+    lastEditedAt: row.lastEditedTime,
+    source: 'notion-contacts-cache',
+  };
+}
+
+function toContactsFreshnessMeta(contacts: CachedContactsResult): ContactsFreshnessMeta {
+  return {
+    syncedAt: contacts.syncedAt,
+    lastEditedMax: contacts.lastEditedMax,
+    recordsRead: contacts.recordsRead,
+    stale: contacts.stale,
+    syncing: contacts.syncing,
+    syncError: contacts.syncError,
   };
 }
 
@@ -405,17 +476,18 @@ export async function loadLiveNotionAccounts(): Promise<AccountTableRow[]> {
 
 export async function loadLiveNotionContacts(): Promise<ContactTableRow[]> {
   const contacts = await getCachedContacts();
+  return contacts.rows.map(toContactTableRow);
+}
 
-  return contacts.rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    roleTitle: row.roleTitle,
-    accountName: row.accountName,
-    email: row.email,
-    phone: row.phone,
-    status: row.status,
-    linkedWork: row.linkedWork,
-  }));
+export async function loadLiveNotionContactsWithMeta(): Promise<{
+  rows: RuntimeContactSummary[];
+  meta: ContactsFreshnessMeta;
+}> {
+  const contacts = await getCachedContacts();
+  return {
+    rows: contacts.rows.map(toRuntimeContact),
+    meta: toContactsFreshnessMeta(contacts),
+  };
 }
 
 export async function loadLiveNotionContactsForAccount(accountPageId: string): Promise<LiveAccountContact[]> {
