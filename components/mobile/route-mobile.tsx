@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronRight, ListChecks, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, CalendarDays, Check, ChevronRight, ListChecks, Loader2, MapPin, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -218,14 +218,26 @@ export function RouteMobile() {
       </MobileHeader>
 
       {tab === 'current' ? (
-        <div className="pb-[172px]">
+        <div className={cn(selectedStops.length > 0 ? 'pb-[172px]' : 'pb-6')}>
           {selectedStops.length === 0 ? (
-            <div className="px-10 py-12 text-center">
-              <h2 className="text-[56px] font-semibold text-[#5f5d5e]">Let&apos;s hit the road!</h2>
-              <p className="mt-4 text-[22px] leading-8 text-[#606066]">Build your route from existing accounts, then optimize for driving or transit.</p>
-              <button onClick={() => setShowAddModal(true)} className="mt-8 w-full rounded-[38px] bg-[#4f8edf] px-6 py-4 text-[23px] font-semibold text-white">
-                Choose Accounts
-              </button>
+            <div className="px-5 py-5">
+              <div className="rounded-xl border border-[#cfd3dc] bg-white p-5 shadow-[0_16px_36px_rgba(24,33,45,0.08)]">
+                <p className="text-[13px] font-semibold text-[#6b7280]">Current route</p>
+                <h2 className="mt-1 text-[28px] font-semibold leading-tight text-[#23262d]">Start with the accounts you need to visit.</h2>
+                <p className="mt-2 text-[15px] leading-6 text-[#60646f]">Pick accounts, reorder stops, then optimize for drive, bike, or transit.</p>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <RouteMetric label="Stops" value="0" />
+                  <RouteMetric label="ETA" value="0m" />
+                  <RouteMetric label="Miles" value="0.0" />
+                </div>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#276fd3] px-4 text-[17px] font-semibold text-white transition active:scale-[0.99]"
+                >
+                  <ListChecks className="h-5 w-5" />
+                  Choose accounts
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -326,7 +338,7 @@ export function RouteMobile() {
         />
       )}
 
-      {tab === 'current' ? (
+      {tab === 'current' && selectedStops.length > 0 ? (
         <div className="fixed bottom-[92px] left-0 right-0 z-[2600]">
           <div className="mx-auto grid max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#c4c5cc] bg-[#f3f3f6] py-2 text-[#5a95e7]">
             <button onClick={launchGo} className="mx-2 rounded-3xl bg-[#3ac128] px-2 py-2 text-[20px] font-bold text-white">
@@ -377,13 +389,27 @@ export function RouteMobile() {
       {showAddModal ? (
         <AddLocationModal
           stores={stores}
+          loading={storesQuery.isLoading || storesQuery.isFetching}
+          error={storesQuery.error instanceof Error ? storesQuery.error.message : storesQuery.isError ? 'Failed to load accounts' : null}
           search={search}
           onSearchChange={setSearch}
           onClose={() => setShowAddModal(false)}
           selectedStopIds={routePlan.selectedStopIds}
           onToggleStop={routePlan.toggleStop}
+          onRetry={() => {
+            void storesQuery.refetch();
+          }}
         />
       ) : null}
+    </div>
+  );
+}
+
+function RouteMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-[#e1e5ec] bg-[#f7f9fc] px-2 py-3">
+      <p className="text-[18px] font-semibold text-[#22252c]">{value}</p>
+      <p className="text-[12px] font-medium text-[#737985]">{label}</p>
     </div>
   );
 }
@@ -459,20 +485,27 @@ function SavedRoutesList({ editing, onLoadRoute }: { editing: boolean; onLoadRou
 
 function AddLocationModal({
   stores,
+  loading,
+  error,
   search,
   onSearchChange,
   onClose,
   selectedStopIds,
   onToggleStop,
+  onRetry,
 }: {
   stores: TerritoryStorePin[];
+  loading: boolean;
+  error: string | null;
   search: string;
   onSearchChange: (value: string) => void;
   onClose: () => void;
   selectedStopIds: string[];
   onToggleStop: (id: string) => void;
+  onRetry: () => void;
 }) {
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const trimmedSearch = search.trim();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -494,24 +527,63 @@ function AddLocationModal({
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [filtered]);
 
+  const selectedCount = selectedStopIds.length;
+  const resultLabel = loading && stores.length === 0
+    ? 'Loading accounts...'
+    : `${filtered.length.toLocaleString()} ${filtered.length === 1 ? 'account' : 'accounts'}`;
+
   return (
-    <div className="fixed inset-0 z-[5200] bg-black/35">
-      <div className="mx-auto h-full max-w-[var(--app-shell-max)] bg-[#e6e6e9]">
-        <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white">
+    <div className="fixed inset-0 z-[5200] bg-black/35 backdrop-blur-[2px]">
+      <div className="mx-auto flex h-full max-w-[var(--app-shell-max)] flex-col bg-[#eef1f5]">
+        <div className="bg-[#c93412] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] text-white shadow-[0_10px_28px_rgba(100,25,9,0.22)]">
           <div className="relative flex items-center justify-between py-2">
             <button onClick={onClose} className="min-w-14 text-left" aria-label="Close">
               <X className="h-8 w-8" />
             </button>
             <h1 className="absolute left-1/2 -translate-x-1/2 text-[24px] font-semibold">Choose Accounts</h1>
-            <span className="min-w-14 text-right text-[16px] font-semibold text-white/70">Route</span>
+            <span className="min-w-14 text-right text-[16px] font-semibold text-white/80">{selectedCount}</span>
           </div>
         </div>
 
-        <div className="px-4 py-3">
+        <div className="border-b border-[#d5dae3] bg-white px-4 py-3">
           <MobileSearch value={search} onChange={onSearchChange} placeholder="Search Accounts" />
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <p className="min-w-0 text-[14px] font-medium text-[#596170]">
+              {resultLabel}
+              {trimmedSearch ? <span className="text-[#8a91a0]"> for &quot;{trimmedSearch}&quot;</span> : null}
+            </p>
+            <p className="shrink-0 rounded-full bg-[#eef7ee] px-3 py-1 text-[13px] font-semibold text-[#237a2a]">{selectedCount} selected</p>
+          </div>
         </div>
 
-        <div className="relative h-[calc(100vh-320px)] overflow-auto border-t border-[#c8c9ce] pb-8">
+        <div className="relative min-h-0 flex-1 overflow-auto pb-8">
+          {loading && stores.length === 0 ? <AccountPickerSkeleton /> : null}
+
+          {error && stores.length === 0 ? (
+            <div className="m-4 rounded-xl border border-[#efc5b8] bg-[#fff3ef] p-4 text-[#8f2410]">
+              <div className="flex items-center gap-2 text-[16px] font-semibold">
+                <AlertTriangle className="h-5 w-5" />
+                Accounts failed to load
+              </div>
+              <p className="mt-2 text-[14px] leading-5">{error}</p>
+              <button type="button" onClick={onRetry} className="mt-3 rounded-lg border border-[#d58d7e] bg-white px-3 py-2 text-[14px] font-semibold">
+                Retry
+              </button>
+            </div>
+          ) : null}
+
+          {!loading && !error && filtered.length === 0 ? (
+            <div className="m-4 rounded-xl border border-[#d8dde7] bg-white p-5 text-center">
+              <p className="text-[19px] font-semibold text-[#252933]">No accounts match this search.</p>
+              <p className="mt-2 text-[14px] leading-5 text-[#68707d]">Try a store name, city, status, or clear the search to browse all accounts.</p>
+              {trimmedSearch ? (
+                <button type="button" onClick={() => onSearchChange('')} className="mt-4 rounded-lg bg-[#276fd3] px-4 py-2 text-[14px] font-semibold text-white">
+                  Clear search
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
           {groups.map(([letter, list]) => (
             <section
               key={letter}
@@ -519,23 +591,76 @@ function AddLocationModal({
                 sectionRefs.current[letter] = element;
               }}
             >
-              <div className="border-b border-[#c6c7cb] px-4 py-2 text-[38px] text-[#8a8d95]">{letter}</div>
-              {list.map((store) => {
-                const selected = selectedStopIds.includes(store.id);
-                return (
-                  <button key={store.id} onClick={() => onToggleStop(store.id)} className="flex w-full items-center gap-3 border-b border-[#d0d1d4] px-4 py-3 text-left">
-                    <span className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 text-lg', selected ? 'border-[#49b84c] text-[#49b84c]' : 'border-[#b7b9bf] text-transparent')}>
-                      ✓
-                    </span>
-                    <span className="truncate text-[22px] text-[#15171c]">{store.name}</span>
-                  </button>
-                );
-              })}
+              <div className="sticky top-0 z-10 border-b border-[#d5dae3] bg-[#eef1f5]/95 px-4 py-2 text-[22px] font-semibold text-[#6d7480] backdrop-blur">{letter}</div>
+              <div className="divide-y divide-[#e0e4eb] bg-white">
+                {list.map((store) => {
+                  const selected = selectedStopIds.includes(store.id);
+                  const meta = [store.city, store.state].filter(Boolean).join(', ');
+                  return (
+                    <button
+                      key={store.id}
+                      onClick={() => onToggleStop(store.id)}
+                      className={cn(
+                        'grid w-full grid-cols-[40px_minmax(0,1fr)] items-start gap-3 px-4 py-3 text-left transition active:bg-[#eef4ff]',
+                        selected ? 'bg-[#f0faf0]' : 'bg-white',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 text-[15px] font-bold transition',
+                          selected ? 'border-[#34a13d] bg-[#34a13d] text-white' : 'border-[#b7bdc7] text-transparent',
+                        )}
+                      >
+                        <Check className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[19px] font-semibold text-[#181b22]">{store.name}</span>
+                        <span className="mt-1 flex min-w-0 items-center gap-1 text-[13px] text-[#69717e]">
+                          <MapPin className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{store.locationAddress || meta || store.status}</span>
+                        </span>
+                        <span className="mt-2 flex flex-wrap gap-1.5">
+                          <span className="rounded-full border border-[#d6dce6] bg-[#f8fafc] px-2 py-0.5 text-[12px] font-medium text-[#596170]">{store.status}</span>
+                          {store.repNames.slice(0, 2).map((rep) => (
+                            <span key={rep} className="rounded-full bg-[#edf4ff] px-2 py-0.5 text-[12px] font-medium text-[#2f65a7]">
+                              {rep}
+                            </span>
+                          ))}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </section>
           ))}
 
-          <AlphabetRail onSelect={(letter) => sectionRefs.current[letter]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+          {groups.length > 0 ? <AlphabetRail onSelect={(letter) => sectionRefs.current[letter]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /> : null}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountPickerSkeleton() {
+  return (
+    <div className="divide-y divide-[#e0e4eb] bg-white">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <div key={index} className="grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 py-3">
+          <div className="mt-1 h-8 w-8 animate-pulse rounded-full bg-[#dbe1ea]" />
+          <div className="min-w-0 space-y-2">
+            <div className="h-5 w-3/4 animate-pulse rounded bg-[#dbe1ea]" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-[#e6ebf1]" />
+            <div className="flex gap-2">
+              <div className="h-5 w-16 animate-pulse rounded-full bg-[#e6ebf1]" />
+              <div className="h-5 w-24 animate-pulse rounded-full bg-[#e6ebf1]" />
+            </div>
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center justify-center gap-2 px-4 py-4 text-[14px] font-medium text-[#68707d]">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading route accounts
       </div>
     </div>
   );
