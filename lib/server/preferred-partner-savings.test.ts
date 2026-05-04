@@ -176,6 +176,36 @@ describe('Preferred Partner savings math', () => {
     expect(orders.map((order) => order.preferredTotal)).toEqual([40, 140]);
   });
 
+  it('reflects different historical Nabis promo prices per invoice date', () => {
+    const orders = calculatePreferredPartnerOrdersFromRows([
+      {
+        order: '2025-promo',
+        createdTimestamp: '2025-08-15T12:00:00.000Z',
+        orderTotal: 45,
+        orderTaxAmount: 0,
+        skuName: 'Ichi-Roll Single 1g',
+        units: 10,
+        pricePerUnit: 4.5,
+        lineItemSubtotal: 45,
+      },
+      {
+        order: '2026-promo',
+        createdTimestamp: '2026-04-15T12:00:00.000Z',
+        orderTotal: 50,
+        orderTaxAmount: 0,
+        skuName: 'Ichi-Roll Single 1g',
+        units: 10,
+        pricePerUnit: 5,
+        lineItemSubtotal: 50,
+      },
+    ]);
+
+    expect(orders.map((order) => order.orderNumber)).toEqual(['2025-promo', '2026-promo']);
+    expect(orders.map((order) => order.currentPromoTotal)).toEqual([45, 50]);
+    expect(orders.map((order) => order.savings)).toEqual([5, 10]);
+    expect(orders.map((order) => order.preferredTotal)).toEqual([40, 40]);
+  });
+
   it('falls back to tax-inclusive line totals when order total is unavailable', () => {
     const [order] = calculatePreferredPartnerOrdersFromRows([
       {

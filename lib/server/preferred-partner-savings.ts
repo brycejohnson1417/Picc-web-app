@@ -15,6 +15,7 @@ const PAGE_SIZE = 500;
 const MAX_ORDER_PAGES = 220;
 const ORDER_PAGE_REQUEST_DELAY_MS = 250;
 const ORDER_DETAIL_REQUEST_DELAY_MS = 350;
+const HISTORICAL_PPP_START_YEAR = 2025;
 const CANCELED_STATUSES = new Set(['CANCELED', 'CANCELLED', 'VOID', 'VOIDED', 'REJECTED', 'REFUNDED']);
 const INTERNAL_TRANSFER_ACTIONS = new Set(['PICKUP_FROM_NABIS', 'DROPOFF_TO_NABIS', 'INTERNAL_TRANSFER', 'TRANSFER']);
 
@@ -87,7 +88,10 @@ type CalculatedOrder = {
 
 export type PreferredPartnerSavingsResponse = {
   ok: true;
-  year: number;
+  year: number | null;
+  years: number[];
+  periodLabel: string;
+  calculationMode: 'year' | 'historical';
   accountId: string | null;
   storeName: string;
   primaryContactName: string | null;
@@ -204,6 +208,26 @@ function dateKey(date: Date | null) {
 
 function currentYear() {
   return new Date().getFullYear();
+}
+
+function resolveSavingsYears(input: { year?: number | null; historical?: boolean | null }) {
+  const latestYear = currentYear();
+  if (input.historical) {
+    return Array.from({ length: Math.max(1, latestYear - HISTORICAL_PPP_START_YEAR + 1) }, (_, index) => HISTORICAL_PPP_START_YEAR + index);
+  }
+
+  const year = input.year && input.year >= 2020 && input.year <= latestYear + 1 ? input.year : latestYear;
+  return [year];
+}
+
+function periodLabel(years: number[]) {
+  if (years.length === 0) {
+    return String(currentYear());
+  }
+  if (years.length === 1) {
+    return String(years[0]);
+  }
+  return `${years[0]}-${years[years.length - 1]}`;
 }
 
 function yearBounds(year: number) {
@@ -584,18 +608,27 @@ function escapeHtml(value: string) {
 
 function buildEmailScript(input: {
   primaryContactName: string | null;
-  year: number;
+  periodLabel: string;
+  calculationMode: 'year' | 'historical';
   totalSavings: number;
   orders: CalculatedOrder[];
 }) {
   const greetingName = input.primaryContactName?.trim() || 'there';
+  const reportIntro =
+    input.calculationMode === 'historical'
+      ? `I ran a historical report on your ${input.periodLabel} orders, and you've missed out on roughly ${currency(input.totalSavings)} in savings by not being on our PICC Preferred Partners Program (PPP).`
+      : `I ran a quick report on your ${input.periodLabel} orders, and you've missed out on roughly ${currency(input.totalSavings)} in savings so far this year by not being on our PICC Preferred Partners Program (PPP).`;
+  const pricingNote =
+    input.calculationMode === 'historical'
+      ? 'Historical Nabis promo prices are reflected from the actual invoice line totals available for each order date'
+      : 'Nabis promo pricing is reflected from the actual invoice line totals available for each order';
   const breakdown =
     input.orders.length === 0
-      ? 'No eligible invoiced orders came back for this year.'
+      ? 'No eligible invoiced orders came back for this period.'
       : input.orders
           .map(
             (order) =>
-              `Order #${order.orderNumber} | Order Total = ${currency(order.paidTotal)}
+              `Order #${order.orderNumber}${order.orderDate ? ` | ${order.orderDate}` : ''} | Order Total = ${currency(order.paidTotal)}
 Estimated Total with PPP Pricing: ${currency(order.preferredTotal)}
 Missed Savings (Discount Eligible with PPP Pricing) = ${currency(order.savings)}
 PPP Discount Amount (Based on Standard Wholesale Pricing) = ${currency(order.standardWholesaleDiscount)}`,
@@ -604,12 +637,12 @@ PPP Discount Amount (Based on Standard Wholesale Pricing) = ${currency(order.sta
 
   return `Hi ${greetingName},
 
-I ran a quick report on your ${input.year} orders, and you've missed out on roughly ${currency(input.totalSavings)} in savings so far this year by not being on our PICC Preferred Partners Program (PPP).
+${reportIntro}
 
 Here's the breakdown:
 
-Your ${input.year} missed PICC Preferred Partner savings (examples):
-Note: These figures are estimates based on recent order data from your Orders via Nabis Marketplace, and may be subject to slight inaccuracies or edge cases. Happy to provide a detailed breakdown on request.
+Your ${input.periodLabel} missed PICC Preferred Partner savings (examples):
+Note: These figures are estimates based on order data from your Orders via Nabis Marketplace. ${pricingNote}, and may be subject to slight inaccuracies or edge cases. Happy to provide a detailed breakdown on request.
 
 ${breakdown}
 
@@ -632,22 +665,32 @@ Best,
 
 function buildEmailScriptHtml(input: {
   primaryContactName: string | null;
-  year: number;
+  periodLabel: string;
+  calculationMode: 'year' | 'historical';
   totalSavings: number;
   orders: CalculatedOrder[];
 }) {
   const greetingName = escapeHtml(input.primaryContactName?.trim() || 'there');
-  const year = escapeHtml(String(input.year));
+  const label = escapeHtml(input.periodLabel);
   const totalSavings = escapeHtml(currency(input.totalSavings));
   const greenStyle = 'background:#00ff00;color:#000;font-weight:700;padding:1px 3px;';
+  const reportIntro =
+    input.calculationMode === 'historical'
+      ? `I ran a historical report on your ${label} orders, and <strong><u>you've missed out on roughly ${totalSavings} in savings</u></strong> by not being on our PICC Preferred Partners Program (PPP).`
+      : `I ran a quick report on your ${label} orders, and <strong><u>you've missed out on roughly ${totalSavings} in savings so far this year</u></strong> by not being on our PICC Preferred Partners Program (PPP).`;
+  const pricingNote =
+    input.calculationMode === 'historical'
+      ? 'Historical Nabis promo prices are reflected from the actual invoice line totals available for each order date'
+      : 'Nabis promo pricing is reflected from the actual invoice line totals available for each order';
   const orderBlocks =
     input.orders.length === 0
-      ? '<p style="margin:22px 0 0 0;">No eligible invoiced orders came back for this year.</p>'
+      ? '<p style="margin:22px 0 0 0;">No eligible invoiced orders came back for this period.</p>'
       : input.orders
           .map((order) => {
             const orderNumber = escapeHtml(order.orderNumber);
+            const dateLabel = order.orderDate ? ` | ${escapeHtml(order.orderDate)}` : '';
             return `<div style="margin:22px 0 0 0;">
-  <div><strong>Order #${orderNumber} | <span style="text-decoration:underline;">Order Total</span> =</strong> ${escapeHtml(currency(order.paidTotal))}</div>
+  <div><strong>Order #${orderNumber}${dateLabel} | <span style="text-decoration:underline;">Order Total</span> =</strong> ${escapeHtml(currency(order.paidTotal))}</div>
   <div><strong>Estimated Total with PPP Pricing:</strong> ${escapeHtml(currency(order.preferredTotal))}</div>
   <div><span style="${greenStyle}">Missed Savings <em>(Discount Eligible with PPP Pricing)</em> = ${escapeHtml(currency(order.savings))}</span></div>
   <div><span style="${greenStyle}">PPP Discount Amount <em>(Based on Standard Wholesale Pricing)</em> = ${escapeHtml(currency(order.standardWholesaleDiscount))}</span></div>
@@ -658,12 +701,12 @@ function buildEmailScriptHtml(input: {
   return `<div style="font-family:Arial,Helvetica,sans-serif;color:#202124;font-size:14px;line-height:1.45;">
   <p style="margin:0 0 18px 0;">Hi ${greetingName},</p>
 
-  <p style="margin:0 0 18px 0;">I ran a quick report on your ${year} orders, and <strong><u>you've missed out on roughly ${totalSavings} in savings so far this year</u></strong> by not being on our PICC Preferred Partners Program (PPP).</p>
+  <p style="margin:0 0 18px 0;">${reportIntro}</p>
 
   <p style="margin:0 0 18px 0;font-size:20px;font-weight:600;">Here's the breakdown:</p>
 
-  <p style="margin:0 0 4px 0;"><strong><u>Your ${year} missed PICC Preferred Partner savings (examples):</u></strong></p>
-  <p style="margin:0 0 18px 0;font-size:11px;font-style:italic;"><strong>Note:</strong> These figures are estimates based on recent order data from your Orders via Nabis Marketplace, and may be subject to slight inaccuracies or edge cases. Happy to provide a detailed breakdown on request.</p>
+  <p style="margin:0 0 4px 0;"><strong><u>Your ${label} missed PICC Preferred Partner savings (examples):</u></strong></p>
+  <p style="margin:0 0 18px 0;font-size:11px;font-style:italic;"><strong>Note:</strong> These figures are estimates based on order data from your Orders via Nabis Marketplace. ${escapeHtml(pricingNote)}, and may be subject to slight inaccuracies or edge cases. Happy to provide a detailed breakdown on request.</p>
 
   ${orderBlocks}
 
@@ -703,8 +746,11 @@ export async function getPreferredPartnerSavings(input: {
   orgId: string;
   accountIdOrPageId: string;
   year?: number | null;
+  historical?: boolean | null;
 }): Promise<PreferredPartnerSavingsResponse> {
-  const year = input.year && input.year >= 2020 && input.year <= currentYear() + 1 ? input.year : currentYear();
+  const years = resolveSavingsYears(input);
+  const label = periodLabel(years);
+  const calculationMode = input.historical ? 'historical' : 'year';
   const resolved = await resolveAccountIdentity(input.accountIdOrPageId, input.orgId);
   if (!resolved?.notionPageId) {
     const error = new Error('Account not found.');
@@ -752,33 +798,37 @@ export async function getPreferredPartnerSavings(input: {
   let warning: string | null = null;
   let orders: CalculatedOrder[] = [];
 
-  try {
-    const cachedOrderHeaders = await loadCachedOrderHeadersForAccount(context, year);
-    const rows =
-      cachedOrderHeaders.length > 0
-        ? await loadNabisRowsFromCachedOrderHeaders(cachedOrderHeaders)
-        : await loadNabisRowsForAccount(context, year);
-    orders = calculatePreferredPartnerOrdersFromRows(rows);
-    if (rows.length > 0 && orders.length === 0) {
-      warning = 'Nabis returned orders, but no eligible line items could be priced.';
+  for (const year of years) {
+    try {
+      const cachedOrderHeaders = await loadCachedOrderHeadersForAccount(context, year);
+      const rows =
+        cachedOrderHeaders.length > 0
+          ? await loadNabisRowsFromCachedOrderHeaders(cachedOrderHeaders)
+          : await loadNabisRowsForAccount(context, year);
+      const yearOrders = calculatePreferredPartnerOrdersFromRows(rows);
+      orders.push(...yearOrders);
+      if (rows.length > 0 && yearOrders.length === 0) {
+        warning = [warning, `${year}: Nabis returned orders, but no eligible line items could be priced.`].filter(Boolean).join(' ');
+      }
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : '';
+      const statusMatch = rawMessage.match(/with\s+(\d{3})/i);
+      const reason =
+        statusMatch?.[1] === '429'
+          ? 'Nabis rate limited the request'
+          : statusMatch?.[1]
+            ? `Nabis returned ${statusMatch[1]}`
+            : rawMessage.includes('NABIS_API_KEY')
+              ? 'Nabis API credentials are not configured'
+              : 'Nabis invoice detail is unavailable';
+      const calculationError = new Error(
+        `${reason}. No PPP email was generated because live Nabis invoice totals are required for credit memo, tax accuracy, and historical promo pricing.`,
+      );
+      (calculationError as Error & { statusCode?: number }).statusCode = 424;
+      throw calculationError;
     }
-  } catch (error) {
-    const rawMessage = error instanceof Error ? error.message : '';
-    const statusMatch = rawMessage.match(/with\s+(\d{3})/i);
-    const reason =
-      statusMatch?.[1] === '429'
-        ? 'Nabis rate limited the request'
-        : statusMatch?.[1]
-          ? `Nabis returned ${statusMatch[1]}`
-          : rawMessage.includes('NABIS_API_KEY')
-            ? 'Nabis API credentials are not configured'
-            : 'Nabis invoice detail is unavailable';
-    const calculationError = new Error(
-      `${reason}. No PPP email was generated because live Nabis invoice totals are required for credit memo and tax accuracy.`,
-    );
-    (calculationError as Error & { statusCode?: number }).statusCode = 424;
-    throw calculationError;
   }
+  orders = orders.sort((left, right) => String(left.orderDate ?? '').localeCompare(String(right.orderDate ?? '')));
 
   const summary = summarize(orders);
   const primaryContactName = detail.crm.primaryContactName || detail.crm.primaryContactBuyer || detail.contacts[0]?.name || null;
@@ -786,20 +836,25 @@ export async function getPreferredPartnerSavings(input: {
   const subject = `PICC Preferred Partner savings for ${detail.store.name}`;
   const script = buildEmailScript({
     primaryContactName,
-    year,
+    periodLabel: label,
+    calculationMode,
     totalSavings: summary.totalSavings,
     orders,
   });
   const scriptHtml = buildEmailScriptHtml({
     primaryContactName,
-    year,
+    periodLabel: label,
+    calculationMode,
     totalSavings: summary.totalSavings,
     orders,
   });
 
   return {
     ok: true,
-    year,
+    year: calculationMode === 'year' ? years[0] : null,
+    years,
+    periodLabel: label,
+    calculationMode,
     accountId: context.accountId,
     storeName: detail.store.name,
     primaryContactName,

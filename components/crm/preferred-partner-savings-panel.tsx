@@ -1,6 +1,6 @@
 'use client';
 
-import { Calculator, ChevronDown, ChevronUp, Clipboard, FileDown, Mail } from 'lucide-react';
+import { Calculator, ChevronDown, ChevronUp, Clipboard, FileDown, History, Mail } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '@/components/ui';
 
@@ -33,7 +33,10 @@ type SavingsOrder = {
 
 type SavingsResponse = {
   ok: true;
-  year: number;
+  year: number | null;
+  years: number[];
+  periodLabel: string;
+  calculationMode: 'year' | 'historical';
   storeName: string;
   primaryContactName: string | null;
   recipientEmail: string | null;
@@ -94,7 +97,7 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
   const [result, setResult] = useState<SavingsResponse | null>(null);
   const [draft, setDraft] = useState('');
   const richPreviewRef = useRef<HTMLDivElement | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingScope, setLoadingScope] = useState<'year' | 'historical' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<'plain' | 'rich' | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -106,13 +109,14 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
     return `mailto:${result.recipientEmail}?subject=${encodeURIComponent(result.subject)}&body=${encodeURIComponent(draft)}`;
   }, [draft, result]);
 
-  async function calculateSavings() {
-    setLoading(true);
+  async function calculateSavings(scope: 'year' | 'historical') {
+    setLoadingScope(scope);
     setError(null);
     setCopied(null);
 
     try {
-      const response = await fetch(`/api/accounts/${encodeURIComponent(accountId)}/preferred-partner-savings?year=${year}`, {
+      const searchParams = scope === 'historical' ? 'scope=historical' : `year=${year}`;
+      const response = await fetch(`/api/accounts/${encodeURIComponent(accountId)}/preferred-partner-savings?${searchParams}`, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -130,7 +134,7 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
       setError(requestError instanceof Error ? requestError.message : 'Preferred Partner savings calculation failed.');
       setCollapsed(false);
     } finally {
-      setLoading(false);
+      setLoadingScope(null);
     }
   }
 
@@ -177,10 +181,10 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
         'Size',
         'Quantity',
         'Standard Wholesale',
-        'Current Promo Price',
+        'Nabis Promo Price',
         'PPP Price',
         'Standard Wholesale Total',
-        'Current Promo Total',
+        'Nabis Promo Total',
         'PPP Pricing Total',
       ],
     ];
@@ -204,7 +208,7 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
       doc.text(`${result.storeName} | Order #${order.orderNumber} | Actual Invoice Total: ${formatCurrency(order.paidTotal)}`, margin, 38);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
-      doc.text('Current Promo values are tax-inclusive Nabis Marketplace item totals.', margin, 48);
+      doc.text('Nabis Promo values are tax-inclusive Nabis Marketplace item totals from each invoice date.', margin, 48);
 
       const body = order.breakdownRows.map((row) => {
         const hasQuantity = row.quantity > 0;
@@ -304,7 +308,7 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
       doc.setTextColor(65, 65, 65);
 
       const bottomRows = [
-        ['Amount Discounted From Current Promo Pricing (PPP Discount)', formatCurrency(order.savings)],
+        ['Amount Discounted From Nabis Promo Pricing (PPP Discount)', formatCurrency(order.savings)],
         ['Amount Discounted From Standard Wholesale Pricing', formatCurrency(order.standardWholesaleDiscount)],
       ];
 
@@ -322,14 +326,17 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
       doc.setFontSize(7);
       doc.setTextColor(110, 110, 110);
       doc.text(
-        'Note: Estimates are based on live Nabis order detail and the PICC PPP price guide. Current Promo values are tax-inclusive item totals.',
+        'Note: Estimates are based on live Nabis order detail and the PICC PPP price guide. Nabis Promo values are tax-inclusive item totals from each invoice date.',
         margin,
         doc.internal.pageSize.getHeight() - 14,
       );
     });
 
-    doc.save(`${sanitizeFileName(result.storeName)}-${result.year}-ppp-discount-breakdown.pdf`);
+    doc.save(`${sanitizeFileName(result.storeName)}-${result.periodLabel}-ppp-discount-breakdown.pdf`);
   }
+
+  const loading = loadingScope !== null;
+  const periodLabel = result?.periodLabel ?? String(year);
 
   return (
     <Card>
@@ -338,7 +345,7 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
           <CardTitle>Preferred Partner Discount</CardTitle>
           {result ? (
             <p className="mt-2 text-sm text-slate-500">
-              {result.year} savings from Nabis API · {formatCurrency(result.summary.totalSavings)} missed savings
+              {result.periodLabel} savings from Nabis API · {formatCurrency(result.summary.totalSavings)} missed savings
             </p>
           ) : null}
         </div>
@@ -349,9 +356,13 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
               {collapsed ? 'Show Details' : 'Collapse'}
             </Button>
           ) : null}
-          <Button type="button" onClick={calculateSavings} disabled={loading}>
+          <Button type="button" variant="secondary" onClick={() => calculateSavings('historical')} disabled={loading}>
+            <History className="h-4 w-4" />
+            {loadingScope === 'historical' ? 'Calculating...' : 'Calculate Historical PPP Savings'}
+          </Button>
+          <Button type="button" onClick={() => calculateSavings('year')} disabled={loading}>
             <Calculator className="h-4 w-4" />
-            {loading ? 'Calculating...' : `Calculate ${year} PPP Savings`}
+            {loadingScope === 'year' ? 'Calculating...' : `Calculate ${year} PPP Savings`}
           </Button>
         </div>
       </CardHeader>
@@ -362,7 +373,7 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
           <>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <SummaryMetric label="Orders" value={String(result.summary.orderCount)} />
-              <SummaryMetric label="Current Promo Total" value={formatCurrency(result.summary.totalCurrentPromo)} />
+              <SummaryMetric label="Nabis Promo Total" value={formatCurrency(result.summary.totalCurrentPromo)} />
               <SummaryMetric label="PPP Price" value={formatCurrency(result.summary.totalPreferred)} />
               <SummaryMetric label="Missed Savings" value={formatCurrency(result.summary.totalSavings)} />
             </div>
@@ -380,7 +391,7 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
                       <th className="px-3 py-2">Order</th>
                       <th className="px-3 py-2">Date</th>
                       <th className="px-3 py-2 text-right">Invoice Total</th>
-                      <th className="px-3 py-2 text-right">Current Promo Total</th>
+                      <th className="px-3 py-2 text-right">Nabis Promo Total</th>
                       <th className="px-3 py-2 text-right">PPP Price</th>
                       <th className="px-3 py-2 text-right">Promo Discount</th>
                       <th className="px-3 py-2 text-right">Standard Discount</th>
@@ -403,7 +414,7 @@ export function PreferredPartnerSavingsPanel({ accountId, year }: Props) {
               </div>
             ) : (
               <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                No eligible invoiced orders came back for {result.year}.
+                No eligible invoiced orders came back for {periodLabel}.
               </p>
             )}
 

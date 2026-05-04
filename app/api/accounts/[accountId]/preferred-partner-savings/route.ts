@@ -22,10 +22,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ acco
     const { accountId } = await params;
     const { searchParams } = new URL(request.url);
     const yearParam = Number.parseInt(searchParams.get('year') || '', 10);
+    const historical = searchParams.get('scope') === 'historical';
     const payload = await getPreferredPartnerSavings({
       orgId: ctx.orgId,
       accountIdOrPageId: accountId,
-      year: Number.isFinite(yearParam) ? yearParam : null,
+      year: historical ? null : Number.isFinite(yearParam) ? yearParam : null,
+      historical,
     });
 
     return NextResponse.json(payload, { headers: responseHeaders() });
