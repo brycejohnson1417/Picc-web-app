@@ -44,5 +44,45 @@ This repository is the canonical source of truth for the live PICC app.
 
 - Run `npm run typecheck`
 - Run `npm run lint`
+- Run `npm test`
 - Run `npm run build`
 - Prefer additive fixes against current behavior rather than architecture rewrites
+
+## Anti-Slop Delivery Contract
+
+Every meaningful code change must be traceable, reviewable, and revertable.
+
+Before implementation:
+
+1. Link the GitHub issue. If none exists, create one before editing code.
+2. Work on a feature branch, not `main`.
+3. Write down scope and out-of-scope items.
+4. Identify the validation plan before editing.
+5. For behavior changes, add or update the failing test first unless the PR explains why TDD is not practical.
+6. Create or update `SESSION.md` with the current session scope, out-of-scope items, and constraints before substantial agent work.
+
+During implementation:
+
+- Keep one concern per PR.
+- Keep production triage surgical.
+- Keep UI features fully usable from the browser.
+- Do not silently mix refactors with bug fixes.
+- Put business logic in server/domain modules and keep UI components thin.
+- Keep Notion, Nabis, GHL, Neon, Supabase, Vercel, and other external systems behind explicit boundaries.
+
+Before PR:
+
+- Self-review the diff.
+- Keep the PR at 10 changed files or fewer whenever possible. If it must exceed 10 files, explain why in the PR body.
+- Run the repo validation commands.
+- Include screenshots or browser proof for UI changes.
+- Include read-only production proof for production data claims.
+- List remaining risk honestly.
+
+Production data rule:
+
+- Local `.env.local` is not production proof.
+- Production facts require a safe read-only production verification path.
+- Pull production env only into a temporary ignored file, report counts/timestamps/status only, and delete it immediately.
+- Do not print secrets or connection strings.
+- Do not perform production writes, schema changes, or destructive operations without explicit user approval.

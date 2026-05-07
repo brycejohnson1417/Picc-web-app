@@ -1,0 +1,72 @@
+name: Task
+description: Track bounded maintenance, docs, CI, sync, or operational work.
+title: "chore(scope): "
+labels: ["type:task", "status:needs-triage"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why does this task need to happen now?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What exact files, modules, systems, or docs are in scope?
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-Goals
+      description: What should not be bundled into this task?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - priority:critical
+        - priority:high
+        - priority:medium
+        - priority:low
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:frontend
+        - area:backend
+        - area:data
+        - area:ci
+        - area:infra
+    validations:
+      required: true
+  - type: checkboxes
+    id: review-flags
+    attributes:
+      label: Review Flags
+      options:
+        - label: Add `needs-prod-proof` if the task makes claims about production data, sync state, customer-visible totals, or live integration behavior.
+        - label: Add `agent-generated` to PRs opened by Codex, Claude, Cursor, or another agent.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: Commands, review steps, screenshots, read-only production proof, or documented exception.
+    validations:
+      required: true
