@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { randomUUID } from 'node:crypto';
 import { IntegrationProvider, IntegrationSyncStatus, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { ensureAccountIdentityMappings, resolveCanonicalAccountByIdentifiers } from '@/lib/server/account-identity';
@@ -15,6 +16,9 @@ const MAX_ORDER_PAGES = 220;
 const RECENT_ORDER_SYNC_DAYS = 120;
 const RECONCILIATION_ORDER_SYNC_DAYS = 400;
 const ORDER_UPSERT_BATCH_SIZE = 50;
+const NABIS_SYNC_LEASE_MODULE = 'nabis_global_sync_lease';
+const NABIS_SYNC_LEASE_REFRESH_MS = 30_000;
+const NABIS_SYNC_LEASE_STALE_MS = NABIS_SYNC_LEASE_REFRESH_MS * 2;
 
 type SyncActor = {
   clerkUserId?: string | null;
@@ -133,6 +137,47 @@ type ParsedOrderLine = {
   itemClass: string | null;
 };
 
+type NabisSyncLeaseMetadata = {
+  holderId: string;
+  module: string;
+  acquiredAt: string;
+  refreshedAt: string;
+  expiresAt: string;
+  requestedBy: string | null;
+};
+
+type NabisLeaseDecision = {
+  canAcquire: boolean;
+  reason: 'available' | 'same-holder' | 'stale' | 'held';
+  activeHolderId: string | null;
+  activeModule: string | null;
+  activeRefreshedAt: string | null;
+  activeExpiresAt: string | null;
+};
+
+export class NabisSyncLeaseError extends Error {
+  readonly statusCode = 409;
+
+  constructor(public readonly decision: NabisLeaseDecision) {
+    super(
+      `Nabis sync already running${decision.activeModule ? ` for ${decision.activeModule}` : ''}; try again after ${
+        decision.activeExpiresAt ?? 'the active sync finishes'
+      }`,
+    );
+    this.name = 'NabisSyncLeaseError';
+  }
+}
+
+class NabisRateLimitError extends Error {
+  constructor(
+    public readonly path: string,
+    public readonly retryAfterMs: number,
+  ) {
+    super(`Nabis rate limit exhausted for ${path}; retry after ${Math.ceil(retryAfterMs / 1000)} seconds`);
+    this.name = 'NabisRateLimitError';
+  }
+}
+
 function requiredApiKey() {
   const apiKey = process.env.NABIS_API_KEY?.trim();
   if (!apiKey) {
@@ -155,6 +200,73 @@ function chunkArray<T>(items: T[], chunkSize: number) {
     chunks.push(items.slice(index, index + chunkSize));
   }
   return chunks;
+}
+
+function toJsonObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function isoFromUnknown(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function dateFromUnknown(value: unknown) {
+  const iso = isoFromUnknown(value);
+  if (!iso) return null;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function buildLeaseMetadata(input: {
+  holderId: string;
+  module: string;
+  now: Date;
+  requestedBy?: string | null;
+  staleAfterMs?: number;
+}): NabisSyncLeaseMetadata {
+  const staleAfterMs = input.staleAfterMs ?? NABIS_SYNC_LEASE_STALE_MS;
+  const refreshedAt = input.now.toISOString();
+  const expiresAt = new Date(input.now.getTime() + staleAfterMs).toISOString();
+  return {
+    holderId: input.holderId,
+    module: input.module,
+    acquiredAt: refreshedAt,
+    refreshedAt,
+    expiresAt,
+    requestedBy: input.requestedBy ?? null,
+  };
+}
+
+export function evaluateNabisSyncLease(input: {
+  existingStatus?: IntegrationSyncStatus | null;
+  existingMetadata?: unknown;
+  existingUpdatedAt?: Date | null;
+  holderId: string;
+  now: Date;
+  staleAfterMs?: number;
+}): NabisLeaseDecision {
+  const metadata = toJsonObject(input.existingMetadata);
+  const activeHolderId = isoFromUnknown(metadata?.holderId);
+  const activeModule = isoFromUnknown(metadata?.module);
+  const activeRefreshedAt = isoFromUnknown(metadata?.refreshedAt) ?? input.existingUpdatedAt?.toISOString() ?? null;
+  const activeExpiresAt = isoFromUnknown(metadata?.expiresAt);
+  const refreshedAt = dateFromUnknown(metadata?.refreshedAt) ?? input.existingUpdatedAt ?? null;
+  const staleAfterMs = input.staleAfterMs ?? NABIS_SYNC_LEASE_STALE_MS;
+  const isStale = !refreshedAt || input.now.getTime() - refreshedAt.getTime() > staleAfterMs;
+
+  if (input.existingStatus !== IntegrationSyncStatus.RUNNING) {
+    return { canAcquire: true, reason: 'available', activeHolderId, activeModule, activeRefreshedAt, activeExpiresAt };
+  }
+
+  if (activeHolderId === input.holderId) {
+    return { canAcquire: true, reason: 'same-holder', activeHolderId, activeModule, activeRefreshedAt, activeExpiresAt };
+  }
+
+  if (isStale) {
+    return { canAcquire: true, reason: 'stale', activeHolderId, activeModule, activeRefreshedAt, activeExpiresAt };
+  }
+
+  return { canAcquire: false, reason: 'held', activeHolderId, activeModule, activeRefreshedAt, activeExpiresAt };
 }
 
 function compactString(value: unknown) {
@@ -207,11 +319,18 @@ function parseDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function getRetryDelayMs(response: Response, attempt: number) {
+export function getRetryDelayMs(response: Pick<Response, 'headers'>, attempt: number) {
   const retryAfterHeader = response.headers.get('retry-after');
   const retryAfterSeconds = Number.parseInt(retryAfterHeader || '', 10);
   if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
     return retryAfterSeconds * 1000;
+  }
+  const retryAfterDate = retryAfterHeader ? new Date(retryAfterHeader) : null;
+  if (retryAfterDate && !Number.isNaN(retryAfterDate.getTime())) {
+    const dateDelayMs = retryAfterDate.getTime() - Date.now();
+    if (dateDelayMs > 0) {
+      return dateDelayMs;
+    }
   }
   return Math.min(1000 * 2 ** attempt, 10000);
 }
@@ -381,9 +500,13 @@ async function fetchNabisPage<T>(path: string, page: number) {
 
       clearTimeout(timeout);
 
-      if (response.status === 429 && attempt < 5) {
-        await wait(getRetryDelayMs(response, attempt));
-        continue;
+      if (response.status === 429) {
+        const retryDelayMs = getRetryDelayMs(response, attempt);
+        if (attempt < 5) {
+          await wait(retryDelayMs);
+          continue;
+        }
+        throw new NabisRateLimitError(path, retryDelayMs);
       }
 
       if (!response.ok) {
@@ -404,6 +527,148 @@ async function fetchNabisPage<T>(path: string, page: number) {
   }
 
   throw new Error(`Nabis request exhausted retries for ${path}`);
+}
+
+async function getNabisLeaseDecision(input: { integrationId: string; holderId: string; now: Date }) {
+  const checkpoint = await prisma.syncCheckpoint.findUnique({
+    where: {
+      integrationId_module: {
+        integrationId: input.integrationId,
+        module: NABIS_SYNC_LEASE_MODULE,
+      },
+    },
+    select: {
+      status: true,
+      metadata: true,
+      updatedAt: true,
+    },
+  });
+
+  return evaluateNabisSyncLease({
+    existingStatus: checkpoint?.status,
+    existingMetadata: checkpoint?.metadata,
+    existingUpdatedAt: checkpoint?.updatedAt,
+    holderId: input.holderId,
+    now: input.now,
+  });
+}
+
+async function acquireNabisSyncLease(input: { orgId: string; integrationId: string; module: string; actor?: SyncActor }) {
+  const holderId = randomUUID();
+  const now = new Date();
+  const staleCutoff = new Date(now.getTime() - NABIS_SYNC_LEASE_STALE_MS);
+  const metadata = buildLeaseMetadata({
+    holderId,
+    module: input.module,
+    now,
+    requestedBy: input.actor?.email ?? null,
+  });
+  const metadataJson = JSON.stringify(metadata);
+  const leaseId = `nabis-lease-${input.orgId}`;
+
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    INSERT INTO "SyncCheckpoint" ("id", "orgId", "integrationId", "module", "status", "metadata", "updatedAt")
+    VALUES (
+      ${leaseId},
+      ${input.orgId},
+      ${input.integrationId},
+      ${NABIS_SYNC_LEASE_MODULE},
+      ${IntegrationSyncStatus.RUNNING}::"IntegrationSyncStatus",
+      ${metadataJson}::jsonb,
+      ${now}
+    )
+    ON CONFLICT ("integrationId", "module")
+    DO UPDATE SET
+      "status" = EXCLUDED."status",
+      "metadata" = EXCLUDED."metadata",
+      "updatedAt" = EXCLUDED."updatedAt"
+    WHERE
+      "SyncCheckpoint"."status" <> ${IntegrationSyncStatus.RUNNING}::"IntegrationSyncStatus"
+      OR "SyncCheckpoint"."updatedAt" < ${staleCutoff}
+      OR "SyncCheckpoint"."metadata"->>'holderId' = ${holderId}
+    RETURNING "id"
+  `;
+
+  if (rows.length > 0) {
+    return { holderId, metadata };
+  }
+
+  const decision = await getNabisLeaseDecision({ integrationId: input.integrationId, holderId, now: new Date() });
+  throw new NabisSyncLeaseError(decision);
+}
+
+async function refreshNabisSyncLease(input: { integrationId: string; holderId: string }) {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + NABIS_SYNC_LEASE_STALE_MS).toISOString();
+  await prisma.$executeRaw`
+    UPDATE "SyncCheckpoint"
+    SET
+      "metadata" = jsonb_set(
+        jsonb_set(
+          COALESCE("metadata", '{}'::jsonb),
+          '{refreshedAt}',
+          to_jsonb(${now.toISOString()}::text),
+          true
+        ),
+        '{expiresAt}',
+        to_jsonb(${expiresAt}::text),
+        true
+      ),
+      "updatedAt" = ${now}
+    WHERE
+      "integrationId" = ${input.integrationId}
+      AND "module" = ${NABIS_SYNC_LEASE_MODULE}
+      AND "status" = ${IntegrationSyncStatus.RUNNING}::"IntegrationSyncStatus"
+      AND "metadata"->>'holderId' = ${input.holderId}
+  `;
+}
+
+async function releaseNabisSyncLease(input: { integrationId: string; holderId: string; status: IntegrationSyncStatus }) {
+  const now = new Date();
+  await prisma.$executeRaw`
+    UPDATE "SyncCheckpoint"
+    SET
+      "status" = ${input.status}::"IntegrationSyncStatus",
+      "metadata" = jsonb_set(
+        COALESCE("metadata", '{}'::jsonb),
+        '{releasedAt}',
+        to_jsonb(${now.toISOString()}::text),
+        true
+      ),
+      "updatedAt" = ${now}
+    WHERE
+      "integrationId" = ${input.integrationId}
+      AND "module" = ${NABIS_SYNC_LEASE_MODULE}
+      AND "metadata"->>'holderId' = ${input.holderId}
+  `;
+}
+
+async function withNabisSyncLease<T>(
+  input: { orgId: string; integrationId: string; module: string; actor?: SyncActor },
+  fn: () => Promise<T>,
+) {
+  const lease = await acquireNabisSyncLease(input);
+  let releaseStatus: IntegrationSyncStatus = IntegrationSyncStatus.SUCCESS;
+  const heartbeat = setInterval(() => {
+    refreshNabisSyncLease({
+      integrationId: input.integrationId,
+      holderId: lease.holderId,
+    }).catch(() => undefined);
+  }, NABIS_SYNC_LEASE_REFRESH_MS);
+
+  try {
+    return await fn();
+  } catch (error) {
+    releaseStatus = IntegrationSyncStatus.ERROR;
+    throw error;
+  } finally {
+    clearInterval(heartbeat);
+    await releaseNabisSyncLease({
+      integrationId: input.integrationId,
+      holderId: lease.holderId,
+      status: releaseStatus,
+    });
+  }
 }
 
 async function loadRetailersFromNabis() {
@@ -573,12 +838,33 @@ async function withSyncRun<T>(
     return outcome.result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const errorMetadata =
+      error instanceof NabisRateLimitError
+        ? {
+            error: message,
+            rateLimited: true,
+            retryAfterMs: error.retryAfterMs,
+            path: error.path,
+          }
+        : error instanceof NabisSyncLeaseError
+          ? {
+              error: message,
+              leaseRefused: true,
+              activeHolderId: error.decision.activeHolderId,
+              activeModule: error.decision.activeModule,
+              activeRefreshedAt: error.decision.activeRefreshedAt,
+              activeExpiresAt: error.decision.activeExpiresAt,
+            }
+          : {
+              error: message,
+            };
     await prisma.syncRun.update({
       where: { id: run.id },
       data: {
         status: IntegrationSyncStatus.ERROR,
         finishedAt: new Date(),
         error: message,
+        metadata: errorMetadata as Prisma.InputJsonValue,
       },
     });
     await prisma.integrationConnection.update({
@@ -592,9 +878,7 @@ async function withSyncRun<T>(
       integrationId: input.integrationId,
       module: input.module,
       status: IntegrationSyncStatus.ERROR,
-      metadata: {
-        error: message,
-      },
+      metadata: errorMetadata,
     });
     await appendAuditEvent({
       orgId: input.orgId,
@@ -953,13 +1237,20 @@ export async function syncNabisRetailers(orgId: string, actor?: SyncActor) {
 export async function syncNabisRetailersWithOptions(orgId: string, actor?: SyncActor, options?: { syncCrm?: boolean }) {
   await ensureActivePolicySnapshot(orgId, actor);
   const integration = await ensureNabisIntegration(orgId);
+
+  return withNabisSyncLease({ orgId, integrationId: integration.id, module: 'retailers', actor }, () =>
+    syncNabisRetailersCore(orgId, integration.id, actor, options),
+  );
+}
+
+async function syncNabisRetailersCore(orgId: string, integrationId: string, actor?: SyncActor, options?: { syncCrm?: boolean }) {
   const existingOrderIds = await prisma.nabisOrder.findMany({
     where: { orgId },
     select: { licensedLocationId: true },
   });
   const orderBackedStores = new Set(existingOrderIds.map((row) => row.licensedLocationId).filter((value): value is string => Boolean(value)));
 
-  return withSyncRun({ orgId, integrationId: integration.id, module: 'retailers', actor }, async () => {
+  return withSyncRun({ orgId, integrationId, module: 'retailers', actor }, async () => {
     const retailers = await loadRetailersFromNabis();
     await prisma.nabisRetailer.deleteMany({
       where: {
@@ -1047,7 +1338,13 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
   await ensureActivePolicySnapshot(orgId, actor);
   const integration = await ensureNabisIntegration(orgId);
 
-  return withSyncRun({ orgId, integrationId: integration.id, module: options?.reconciliation ? 'orders_reconcile' : 'orders', actor }, async () => {
+  return withNabisSyncLease({ orgId, integrationId: integration.id, module: options?.reconciliation ? 'orders_reconcile' : 'orders', actor }, () =>
+    syncNabisOrdersCore(orgId, integration.id, actor, options),
+  );
+}
+
+async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?: SyncActor, options?: { reconciliation?: boolean }) {
+  return withSyncRun({ orgId, integrationId, module: options?.reconciliation ? 'orders_reconcile' : 'orders', actor }, async () => {
     const orders = await loadOrdersFromNabis({ reconciliation: options?.reconciliation });
     await prisma.nabisOrder.deleteMany({
       where: {
@@ -1253,13 +1550,21 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
 }
 
 export async function syncNabisRetailersAndOrders(orgId: string, actor?: SyncActor, options?: { reconciliation?: boolean; syncCrm?: boolean }) {
-  const retailerResult = await syncNabisRetailersWithOptions(orgId, actor, { syncCrm: options?.syncCrm === true });
-  const orderResult = await syncNabisOrders(orgId, actor, options);
+  await ensureActivePolicySnapshot(orgId, actor);
+  const integration = await ensureNabisIntegration(orgId);
 
-  return {
-    retailers: retailerResult,
-    orders: orderResult,
-  };
+  return withNabisSyncLease(
+    { orgId, integrationId: integration.id, module: options?.reconciliation ? 'retailers_and_orders_reconcile' : 'retailers_and_orders', actor },
+    async () => {
+      const retailerResult = await syncNabisRetailersCore(orgId, integration.id, actor, { syncCrm: options?.syncCrm === true });
+      const orderResult = await syncNabisOrdersCore(orgId, integration.id, actor, options);
+
+      return {
+        retailers: retailerResult,
+        orders: orderResult,
+      };
+    },
+  );
 }
 
 export async function getNabisSyncFreshness(orgId: string) {

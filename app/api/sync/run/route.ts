@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
 import { prisma } from '@/lib/db/prisma';
-import { syncNabisRetailersAndOrders } from '@/lib/server/nabis-sync';
+import { NabisSyncLeaseError, syncNabisRetailersAndOrders } from '@/lib/server/nabis-sync';
 
 export async function POST(req: Request) {
   const ctx = await guard(['ADMIN', 'OPS_TEAM', 'FINANCE']);
@@ -18,7 +18,28 @@ export async function POST(req: Request) {
         email: ctx.email,
       },
       { reconciliation: body.reconciliation === true },
-    );
+    ).catch((error: unknown) => {
+      if (error instanceof NabisSyncLeaseError) {
+        return {
+          leaseRefused: true as const,
+          message: error.message,
+          active: error.decision,
+        };
+      }
+      throw error;
+    });
+
+    if ('leaseRefused' in result) {
+      return NextResponse.json(
+        {
+          started: 0,
+          module: 'nabis',
+          error: result.message,
+          active: result.active,
+        },
+        { status: 409 },
+      );
+    }
 
     return NextResponse.json({
       started: 2,
