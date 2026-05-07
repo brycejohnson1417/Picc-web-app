@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { matchPreferredPartnerPrice, PREFERRED_PARTNER_PRICING } from '@/lib/preferred-partner/pricing';
-import { calculatePreferredPartnerOrdersFromRows } from '@/lib/server/preferred-partner-savings';
+import { cachedNabisOrdersToPreferredPartnerRows, calculatePreferredPartnerOrdersFromRows } from '@/lib/server/preferred-partner-savings';
 
 function buildSkuName(price: (typeof PREFERRED_PARTNER_PRICING)[number]) {
   return `${price.brand} ${price.size} ${price.weight}`;
@@ -52,6 +52,39 @@ const randomInvoiceCases = Array.from({ length: 10 }, (_, index) => {
 });
 
 describe('Preferred Partner savings math', () => {
+  it('calculates PPP savings from cached Nabis order lines without live order detail rows', () => {
+    const rows = cachedNabisOrdersToPreferredPartnerRows([
+      {
+        externalOrderId: 'cached-order-1',
+        orderNumber: '9000',
+        orderCreatedDate: new Date('2026-04-15T12:00:00.000Z'),
+        deliveryDate: null,
+        orderTotal: 56.5,
+        status: 'DELIVERED',
+        lines: [
+          {
+            productName: 'Ichi-Roll Single 1g',
+            quantity: 10,
+            unitPrice: 5,
+            isSample: false,
+            itemStrain: null,
+            itemCategory: null,
+            itemClass: null,
+          },
+        ],
+      },
+    ]);
+
+    const [order] = calculatePreferredPartnerOrdersFromRows(rows);
+
+    expect(order.orderNumber).toBe('9000');
+    expect(order.orderDate).toBe('2026-04-15');
+    expect(order.paidTotal).toBe(56.5);
+    expect(order.currentPromoTotal).toBe(50);
+    expect(order.savings).toBe(10);
+    expect(order.preferredTotal).toBe(40);
+  });
+
   it('prioritizes pack-size labels over 1G weight text in Nabis SKU names', () => {
     expect(
       matchPreferredPartnerPrice({
