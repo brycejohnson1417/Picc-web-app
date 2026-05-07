@@ -4,7 +4,7 @@ This repository is the canonical source of truth for the live PICC app.
 
 ## Canonical Context
 
-- GitHub repo: `https://github.com/bryce-picc/Picc-web-app.git`
+- GitHub repo: `https://github.com/brycejohnson1417/Picc-web-app.git`
 - Canonical branch: `main`
 - Production app: `https://piccnewyork.org`
 - Main production route to verify: `https://piccnewyork.org/territory`
