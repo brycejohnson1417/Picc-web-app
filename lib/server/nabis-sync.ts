@@ -61,6 +61,26 @@ type NabisOrderApiRow = {
   retailerId?: string | null;
   siteLicenseNumber?: string | null;
   deliveryDate?: string | null;
+  skuName?: string | null;
+  skuDisplayName?: string | null;
+  productName?: string | null;
+  lineItemProductName?: string | null;
+  skuCode?: string | null;
+  unitDescription?: string | null;
+  units?: string | number | null;
+  quantity?: string | number | null;
+  lineItemQuantity?: string | number | null;
+  skuPricePerUnit?: string | number | null;
+  lineItemPricePerUnitAfterDiscount?: string | number | null;
+  pricePerUnit?: string | number | null;
+  unitPrice?: string | number | null;
+  lineItemPricePerUnit?: string | number | null;
+  sample?: boolean | string | number | null;
+  isSample?: boolean | string | number | null;
+  lineItemIsSample?: boolean | string | number | null;
+  itemStrain?: string | null;
+  itemCategory?: string | null;
+  itemClass?: string | null;
 };
 
 type NabisPagedResponse<T> = {
@@ -99,6 +119,18 @@ type ParsedOrder = {
   orderTotal: number;
   paymentStatus: string | null;
   licenseNumber: string | null;
+  line: ParsedOrderLine | null;
+};
+
+type ParsedOrderLine = {
+  externalOrderId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  isSample: boolean;
+  itemStrain: string | null;
+  itemCategory: string | null;
+  itemClass: string | null;
 };
 
 function requiredApiKey() {
@@ -154,6 +186,19 @@ function parseNumber(value: unknown) {
     return Number.isFinite(numeric) ? numeric : null;
   }
   return null;
+}
+
+function parseBoolean(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return ['true', 'yes', '1'].includes(value.trim().toLowerCase());
+  }
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+  return false;
 }
 
 function parseDate(value: string | null | undefined) {
@@ -270,6 +315,31 @@ function parseOrderRow(row: NabisOrderApiRow): ParsedOrder | null {
     orderTotal: getNetSales(row),
     paymentStatus: compactString(row.status),
     licenseNumber: compactString(row.siteLicenseNumber),
+    line: parseNabisOrderLineForCache(row),
+  };
+}
+
+export function parseNabisOrderLineForCache(row: NabisOrderApiRow): ParsedOrderLine | null {
+  const externalOrderId = compactString(row.id ?? row.order);
+  const productName = compactString(row.skuName ?? row.skuDisplayName ?? row.productName ?? row.lineItemProductName ?? row.skuCode ?? row.unitDescription);
+  const quantity = parseNumber(row.units ?? row.quantity ?? row.lineItemQuantity);
+  const subtotal = parseCurrency(row.lineItemSubtotalAfterDiscount ?? row.lineItemSubtotal);
+  const fallbackUnitPrice = parseNumber(row.skuPricePerUnit ?? row.lineItemPricePerUnitAfterDiscount ?? row.pricePerUnit ?? row.unitPrice ?? row.lineItemPricePerUnit);
+  const unitPrice = quantity && quantity > 0 && subtotal > 0 ? subtotal / quantity : fallbackUnitPrice;
+
+  if (!externalOrderId || !productName || !quantity || quantity <= 0 || unitPrice == null || unitPrice < 0) {
+    return null;
+  }
+
+  return {
+    externalOrderId,
+    productName,
+    quantity,
+    unitPrice,
+    isSample: parseBoolean(row.sample ?? row.isSample ?? row.lineItemIsSample),
+    itemStrain: compactString(row.itemStrain),
+    itemCategory: compactString(row.itemCategory),
+    itemClass: compactString(row.itemClass),
   };
 }
 
@@ -1008,7 +1078,9 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
     const accountByLicenseNumber = new Map(accounts.map((account) => [normalizeIdentity(account.licenseNumber) ?? '', account]));
 
     let upserted = 0;
+    let upsertedLines = 0;
     const touchedLicensedLocationIds = new Set<string>();
+    const lineRows = orders.map((order) => order.line).filter((line): line is ParsedOrderLine => Boolean(line));
     const orderRows: Array<{
       externalOrderId: string;
       data: {
@@ -1068,7 +1140,8 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
       }
     }
 
-    for (const batch of chunkArray(orderRows, ORDER_UPSERT_BATCH_SIZE)) {
+    const uniqueOrderRows = [...new Map(orderRows.map((row) => [row.externalOrderId, row])).values()];
+    for (const batch of chunkArray(uniqueOrderRows, ORDER_UPSERT_BATCH_SIZE)) {
       await Promise.all(
         batch.map((row) =>
           prisma.nabisOrder.upsert({
@@ -1087,6 +1160,61 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
         ),
       );
       upserted += batch.length;
+    }
+
+    const lineExternalOrderIds = [...new Set(lineRows.map((line) => line.externalOrderId))];
+    if (lineExternalOrderIds.length > 0) {
+      const persistedOrders = await prisma.nabisOrder.findMany({
+        where: {
+          orgId,
+          externalOrderId: {
+            in: lineExternalOrderIds,
+          },
+        },
+        select: {
+          id: true,
+          externalOrderId: true,
+        },
+      });
+      const orderIdByExternalId = new Map(persistedOrders.map((order) => [order.externalOrderId, order.id]));
+
+      await prisma.nabisOrderLine.deleteMany({
+        where: {
+          orgId,
+          externalOrderId: {
+            in: lineExternalOrderIds,
+          },
+        },
+      });
+
+      const linesToCreate = lineRows
+        .map((line) => {
+          const nabisOrderId = orderIdByExternalId.get(line.externalOrderId);
+          if (!nabisOrderId) {
+            return null;
+          }
+
+          return {
+            orgId,
+            nabisOrderId,
+            externalOrderId: line.externalOrderId,
+            productName: line.productName,
+            quantity: new Prisma.Decimal(line.quantity),
+            unitPrice: new Prisma.Decimal(line.unitPrice),
+            isSample: line.isSample,
+            itemStrain: line.itemStrain,
+            itemCategory: line.itemCategory,
+            itemClass: line.itemClass,
+          };
+        })
+        .filter((line): line is NonNullable<typeof line> => Boolean(line));
+
+      for (const batch of chunkArray(linesToCreate, ORDER_UPSERT_BATCH_SIZE)) {
+        await prisma.nabisOrderLine.createMany({
+          data: batch,
+        });
+        upsertedLines += batch.length;
+      }
     }
 
     const metricRows = await rebuildDailyMetrics(orgId, [...touchedLicensedLocationIds]);
@@ -1108,12 +1236,15 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
       result: {
         orders: orders.length,
         upserted,
+        lineItems: upsertedLines,
         metricRows,
       },
       recordsIn: orders.length,
       recordsUpserted: upserted,
       metadata: {
         orders: orders.length,
+        uniqueOrders: upserted,
+        lineItems: upsertedLines,
         metricRows,
         reconciliation: Boolean(options?.reconciliation),
       },

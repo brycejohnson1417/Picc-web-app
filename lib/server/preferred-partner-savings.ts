@@ -31,6 +31,24 @@ type CachedOrderHeader = {
   orderNumber: string | null;
 };
 
+type CachedOrderLine = {
+  productName: string;
+  quantity: unknown;
+  unitPrice: unknown;
+  isSample: boolean;
+  itemStrain: string | null;
+  itemCategory: string | null;
+  itemClass: string | null;
+};
+
+type CachedOrderWithLines = CachedOrderHeader & {
+  orderCreatedDate: Date | null;
+  deliveryDate: Date | null;
+  orderTotal: unknown;
+  status: string | null;
+  lines: CachedOrderLine[];
+};
+
 type AccountMatchContext = {
   accountId: string | null;
   notionPageId: string;
@@ -161,6 +179,21 @@ function readNumber(row: NabisRawOrderRow, candidates: string[]) {
   }
   if (typeof value === 'string') {
     const parsed = Number.parseFloat(value.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function numberFromUnknown(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value && typeof value === 'object' && typeof value.toString === 'function') {
+    const parsed = Number.parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
@@ -372,7 +405,7 @@ function localOrderFilters(context: AccountMatchContext) {
   ].filter((filter): filter is NonNullable<typeof filter> => Boolean(filter));
 }
 
-async function loadCachedOrderHeadersForAccount(context: AccountMatchContext, year: number) {
+async function loadCachedOrdersForAccount(context: AccountMatchContext, year: number) {
   const { start, end } = yearBounds(year);
   const filters = localOrderFilters(context);
   if (filters.length === 0) {
@@ -394,7 +427,20 @@ async function loadCachedOrderHeadersForAccount(context: AccountMatchContext, ye
       orderNumber: true,
       orderCreatedDate: true,
       deliveryDate: true,
+      orderTotal: true,
+      status: true,
       createdAt: true,
+      lines: {
+        select: {
+          productName: true,
+          quantity: true,
+          unitPrice: true,
+          isSample: true,
+          itemStrain: true,
+          itemCategory: true,
+          itemClass: true,
+        },
+      },
     },
     orderBy: [{ orderCreatedDate: 'asc' }, { deliveryDate: 'asc' }, { createdAt: 'asc' }],
   });
@@ -408,6 +454,50 @@ async function loadCachedOrderHeadersForAccount(context: AccountMatchContext, ye
     seen.add(key);
     return true;
   });
+}
+
+export function cachedNabisOrdersToPreferredPartnerRows(orders: CachedOrderWithLines[]) {
+  const rows: NabisRawOrderRow[] = [];
+
+  for (const order of orders) {
+    const orderNumber = order.orderNumber?.trim() || order.externalOrderId;
+    const orderDate = order.orderCreatedDate ?? order.deliveryDate;
+    const orderTotal = numberFromUnknown(order.orderTotal);
+
+    for (const line of order.lines) {
+      const quantity = numberFromUnknown(line.quantity);
+      const unitPrice = numberFromUnknown(line.unitPrice);
+      if (!line.productName.trim() || quantity == null || quantity <= 0 || unitPrice == null || unitPrice < 0) {
+        continue;
+      }
+
+      const lineSubtotal = roundMoney(quantity * unitPrice);
+      rows.push({
+        id: order.externalOrderId,
+        order: orderNumber,
+        orderNumber,
+        createdTimestamp: orderDate?.toISOString() ?? null,
+        deliveryDate: order.deliveryDate?.toISOString() ?? null,
+        orderTotal,
+        status: order.status,
+        skuName: line.productName,
+        productName: line.productName,
+        units: quantity,
+        quantity,
+        pricePerUnit: unitPrice,
+        unitPrice,
+        lineItemSubtotal: lineSubtotal,
+        lineItemSubtotalAfterDiscount: lineSubtotal,
+        sample: line.isSample,
+        isSample: line.isSample,
+        itemStrain: line.itemStrain,
+        itemCategory: line.itemCategory,
+        itemClass: line.itemClass,
+      });
+    }
+  }
+
+  return rows;
 }
 
 async function loadNabisRowsFromCachedOrderHeaders(headers: CachedOrderHeader[]) {
@@ -800,11 +890,14 @@ export async function getPreferredPartnerSavings(input: {
 
   for (const year of years) {
     try {
-      const cachedOrderHeaders = await loadCachedOrderHeadersForAccount(context, year);
+      const cachedOrders = await loadCachedOrdersForAccount(context, year);
+      const cachedRows = cachedNabisOrdersToPreferredPartnerRows(cachedOrders);
       const rows =
-        cachedOrderHeaders.length > 0
-          ? await loadNabisRowsFromCachedOrderHeaders(cachedOrderHeaders)
-          : await loadNabisRowsForAccount(context, year);
+        cachedRows.length > 0
+          ? cachedRows
+          : cachedOrders.length > 0
+            ? await loadNabisRowsFromCachedOrderHeaders(cachedOrders)
+            : await loadNabisRowsForAccount(context, year);
       const yearOrders = calculatePreferredPartnerOrdersFromRows(rows);
       orders.push(...yearOrders);
       if (rows.length > 0 && yearOrders.length === 0) {
