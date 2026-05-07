@@ -23,6 +23,7 @@ Explain the user or operational problem this PR solves. Include the root cause f
 - Parallel label: `parallel:ok` / `parallel:blocked` / `parallel:exclusive`
 - Lane: fast lane / approval lane
 - Approval-lane reason, if any:
+- Large diff / boundary note, if any:
 
 ## Labels And Review Flags
 

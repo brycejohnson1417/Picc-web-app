@@ -52,6 +52,8 @@ This repository is the canonical source of truth for the live PICC app.
 
 Every meaningful code change must be traceable, reviewable, and revertable.
 
+The canonical cross-repo protocol lives at `https://github.com/brycejohnson1417/.github/blob/main/AGENTS.md` and is mirrored locally at `/Users/brycejohnson/Code/AGENTS.md`. This section mirrors the parts that are specific to this repo. If the canonical protocol and this file disagree, use the safer repo-specific production rule but do not invent new approval gates here without updating the canonical protocol.
+
 Before implementation:
 
 1. Link the GitHub issue. If none exists, create one before editing code.
@@ -89,9 +91,9 @@ Before PR:
 Fast lane / approval lane:
 
 - Fast-lane PRs may be merged by an agent when scoped, labeled, green, and protected by branch rules. Examples: frontend polish, copy/UI improvements, scoped bug fixes, tests, docs, templates, and non-destructive backend fixes.
-- Approval-lane PRs must pause for explicit user approval before merge. Examples: production data writes/backfills, schema migrations, auth/RLS/access-control changes, secrets/env vars, payment logic, destructive deletes, and broad refactors.
+- Approval-lane PRs must pause for explicit user approval before merge only when the action is hard to undo or can mutate sensitive production state. Examples: production data writes/backfills, schema migrations, auth/RLS/access-control changes, secrets/env vars, payment logic, destructive deletes, and broad rewrites that replace major architecture rather than surgically fixing it.
 - Approval mechanism: post a PR comment exactly in this form: `@bryce approval requested: <one-sentence reason>`. Do not merge until the user replies `approved` on that PR/comment.
-- Broad refactor threshold: approval lane is required when a PR touches more than 3 distinct modules in `lib/server/**` or `lib/shared/**`, or exceeds 200 net changed lines.
+- Large diff rule: line count and changed-file count are self-review signals, not automatic approval gates. If a PR is large, touches many files, or crosses important boundaries, explain why the scope is still coherent and what extra validation was run.
 
 Production data rule:
 

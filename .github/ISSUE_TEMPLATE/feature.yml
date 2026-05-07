@@ -53,7 +53,7 @@ body:
     id: coordination
     attributes:
       label: Dependencies / Parallel Safety
-      description: List blocked-by issues, issues this blocks, expected `parallel:*` label, and whether this is fast lane or approval lane.
+      description: List blocked-by issues, issues this blocks, expected `parallel:*` label, and whether this is fast lane or approval lane. Approval lane is for hard-to-undo production risk, not line count.
       placeholder: |
         Blocked by:
         Blocks:
