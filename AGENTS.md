@@ -52,7 +52,7 @@ This repository is the canonical source of truth for the live PICC app.
 
 Every meaningful code change must be traceable, reviewable, and revertable.
 
-The canonical cross-repo protocol lives at `/Users/brycejohnson/Code/AGENTS.md`. This section mirrors the parts that are specific to this repo. If the workspace protocol and this file disagree, use the safer repo-specific production rule but do not invent new approval gates here without updating the workspace-level contract.
+The canonical cross-repo protocol lives at `https://github.com/brycejohnson1417/.github/blob/main/AGENTS.md` and is mirrored locally at `/Users/brycejohnson/Code/AGENTS.md`. This section mirrors the parts that are specific to this repo. If the canonical protocol and this file disagree, use the safer repo-specific production rule but do not invent new approval gates here without updating the canonical protocol.
 
 Before implementation:
 
