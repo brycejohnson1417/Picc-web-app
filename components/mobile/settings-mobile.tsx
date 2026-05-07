@@ -9,6 +9,7 @@ import { useAppAccess } from '@/components/auth/app-access-provider';
 import { RoleSwitcher } from '@/components/layout/role-switcher';
 import { WorkspacePanel, WorkspacePanelHeader } from '@/components/layout/workspace-page';
 import { AdminOpsPanel } from '@/components/settings/admin-ops-panel';
+import { NabisSyncAdminPanel } from '@/components/settings/nabis-sync-admin-panel';
 import { WorkerSupplyPanel } from '@/components/settings/worker-supply-panel';
 import { GoogleUsageBudgetCard } from '@/components/territory/google-usage-budget-card';
 import { Button, Input, Textarea } from '@/components/ui';
@@ -187,6 +188,11 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
         },
         ...(canViewAdminControls
           ? [
+              {
+                id: 'nabis-sync',
+                label: 'Nabis Sync',
+                description: 'Freshness, cached coverage, manual refreshes, and backfill readiness.',
+              },
               {
                 id: 'admin-controls',
                 label: 'Admin Controls',
@@ -1015,6 +1021,12 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
       <section id="supply-system" className="scroll-mt-28">
         <WorkerSupplyPanel embedded />
       </section>
+
+      {canViewAdminControls ? (
+        <section id="nabis-sync" className="scroll-mt-28">
+          <NabisSyncAdminPanel />
+        </section>
+      ) : null}
 
       {canViewAdminControls ? (
         <section id="admin-controls" className="scroll-mt-28">

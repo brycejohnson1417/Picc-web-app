@@ -1,17 +1,12 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
-import { prisma } from '@/lib/db/prisma';
+import { getNabisAdminSyncStatus } from '@/lib/server/nabis-sync-status';
 
 export async function GET() {
-  const ctx = await guard();
+  const ctx = await guard(['ADMIN', 'OPS_TEAM', 'FINANCE']);
   if ('error' in ctx) return ctx.error;
 
-  const runs = await prisma.syncRun.findMany({
-    where: { orgId: ctx.orgId },
-    include: { integration: true },
-    orderBy: { startedAt: 'desc' },
-    take: 40,
-  });
+  const status = await getNabisAdminSyncStatus(ctx.orgId);
 
-  return NextResponse.json(runs);
+  return NextResponse.json(status);
 }
