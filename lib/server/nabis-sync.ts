@@ -156,6 +156,8 @@ type NabisLeaseDecision = {
 };
 
 export class NabisSyncLeaseError extends Error {
+  readonly statusCode = 409;
+
   constructor(public readonly decision: NabisLeaseDecision) {
     super(
       `Nabis sync already running${decision.activeModule ? ` for ${decision.activeModule}` : ''}; try again after ${
@@ -322,6 +324,13 @@ export function getRetryDelayMs(response: Pick<Response, 'headers'>, attempt: nu
   const retryAfterSeconds = Number.parseInt(retryAfterHeader || '', 10);
   if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
     return retryAfterSeconds * 1000;
+  }
+  const retryAfterDate = retryAfterHeader ? new Date(retryAfterHeader) : null;
+  if (retryAfterDate && !Number.isNaN(retryAfterDate.getTime())) {
+    const dateDelayMs = retryAfterDate.getTime() - Date.now();
+    if (dateDelayMs > 0) {
+      return dateDelayMs;
+    }
   }
   return Math.min(1000 * 2 ** attempt, 10000);
 }

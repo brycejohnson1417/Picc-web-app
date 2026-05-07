@@ -83,11 +83,17 @@ describe('Nabis rate-limit backoff', () => {
     const retryAfterResponse = {
       headers: new Headers({ 'retry-after': '7' }),
     };
+    const retryAfterDate = new Date(Date.now() + 12_000);
+    const retryAfterDateResponse = {
+      headers: new Headers({ 'retry-after': retryAfterDate.toUTCString() }),
+    };
     const fallbackResponse = {
       headers: new Headers(),
     };
 
     expect(getRetryDelayMs(retryAfterResponse, 0)).toBe(7000);
+    expect(getRetryDelayMs(retryAfterDateResponse, 0)).toBeGreaterThan(0);
+    expect(getRetryDelayMs(retryAfterDateResponse, 0)).toBeLessThanOrEqual(12_000);
     expect(getRetryDelayMs(fallbackResponse, 3)).toBe(8000);
   });
 });
