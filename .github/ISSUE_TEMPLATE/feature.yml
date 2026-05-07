@@ -40,6 +40,27 @@ body:
         - [ ] ...
     validations:
       required: true
+  - type: textarea
+    id: owned-paths
+    attributes:
+      label: Owned Path Globs
+      description: Files or directories this issue expects to own. Use globs such as `app/(main)/dashboard/**` or `lib/dashboard/**`.
+      placeholder: |
+        -
+    validations:
+      required: true
+  - type: textarea
+    id: coordination
+    attributes:
+      label: Dependencies / Parallel Safety
+      description: List blocked-by issues, issues this blocks, expected `parallel:*` label, and whether this is fast lane or approval lane.
+      placeholder: |
+        Blocked by:
+        Blocks:
+        Parallel label:
+        Lane:
+    validations:
+      required: true
   - type: dropdown
     id: priority
     attributes:

@@ -60,6 +60,8 @@ Before implementation:
 4. Identify the validation plan before editing.
 5. For behavior changes, add or update the failing test first unless the PR explains why TDD is not practical.
 6. Create or update `SESSION.md` with the current session scope, out-of-scope items, and constraints before substantial agent work.
+7. Claim the issue before non-test edits by setting `status:in-progress`, creating a feature branch, opening a draft PR immediately, and listing owned path globs in the issue or PR.
+8. Check currently open PRs for overlapping owned path globs and document which PRs were checked. If globs overlap, the later PR blocks or rebases; the first PR to land wins.
 
 During implementation:
 
@@ -69,6 +71,11 @@ During implementation:
 - Do not silently mix refactors with bug fixes.
 - Put business logic in server/domain modules and keep UI components thin.
 - Keep Notion, Nabis, GHL, Neon, Supabase, Vercel, and other external systems behind explicit boundaries.
+- Use `parallel:ok` only when owned path globs do not overlap active PRs.
+- Use `parallel:blocked` when another issue must land first.
+- Use `parallel:exclusive` for protocol, CI, branch protection, schema, sync architecture, production data, or other shared-resource work.
+- Use `meta:protocol-change` for changes to AGENTS, issue templates, PR templates, CI, branch protection docs, or repo workflow rules.
+- Stale draft or in-progress claims are releasable if there are no commits or comments for 24 hours.
 
 Before PR:
 
@@ -79,6 +86,13 @@ Before PR:
 - Include read-only production proof for production data claims.
 - List remaining risk honestly.
 
+Fast lane / approval lane:
+
+- Fast-lane PRs may be merged by an agent when scoped, labeled, green, and protected by branch rules. Examples: frontend polish, copy/UI improvements, scoped bug fixes, tests, docs, templates, and non-destructive backend fixes.
+- Approval-lane PRs must pause for explicit user approval before merge. Examples: production data writes/backfills, schema migrations, auth/RLS/access-control changes, secrets/env vars, payment logic, destructive deletes, and broad refactors.
+- Approval mechanism: post a PR comment exactly in this form: `@bryce approval requested: <one-sentence reason>`. Do not merge until the user replies `approved` on that PR/comment.
+- Broad refactor threshold: approval lane is required when a PR touches more than 3 distinct modules in `lib/server/**` or `lib/shared/**`, or exceeds 200 net changed lines.
+
 Production data rule:
 
 - Local `.env.local` is not production proof.
@@ -86,3 +100,9 @@ Production data rule:
 - Pull production env only into a temporary ignored file, report counts/timestamps/status only, and delete it immediately.
 - Do not print secrets or connection strings.
 - Do not perform production writes, schema changes, or destructive operations without explicit user approval.
+- For production backfills, CI must include clearly named tests for `lease-refusal`, `stale-recovery`, `429-backoff`, and `batch-cutoff` before any production run is considered safe.
+
+Production verification and rollback:
+
+- After merge, verify production behavior and comment on the PR with deployed URL, tested behavior, screenshots/browser proof when UI changed, and remaining risk.
+- If production verification fails, rollback first using the previous Vercel deployment, open a follow-up issue with failure details, comment on the original PR with the follow-up link, and debug from the clean baseline.
