@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
 import { prisma } from '@/lib/db/prisma';
-import { NabisSyncLeaseError, syncNabisOrders, syncNabisRetailersAndOrders, syncNabisRetailersWithOptions } from '@/lib/server/nabis-sync';
+import { NabisSyncLeaseError, syncNabisRetailersAndOrders, syncNabisRetailersWithOptions } from '@/lib/server/nabis-sync';
 
 export async function POST(req: Request) {
   const ctx = await guard(['ADMIN', 'OPS_TEAM', 'FINANCE']);
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   if (['all', 'nabis', 'nabis-orders', 'nabis-retailers'].includes(syncModule)) {
     const run = async () => {
       if (syncModule === 'nabis-orders') {
-        return syncNabisOrders(ctx.orgId, actor, { reconciliation: false });
+        return syncNabisRetailersAndOrders(ctx.orgId, actor, { reconciliation: false, syncCrm: false });
       }
       if (syncModule === 'nabis-retailers') {
         return syncNabisRetailersWithOptions(ctx.orgId, actor, { syncCrm: false });
