@@ -186,7 +186,7 @@ npm run db:local:studio
 All mutating endpoints are guarded by org scope + RBAC and write to `ActivityLog` for account-level timeline integrity.
 
 ## Deployment (Vercel)
-1. Push repo to GitHub (`bryce-picc/Picc-web-app`).
+1. Push repo to GitHub (`brycejohnson1417/Picc-web-app`).
 2. Import project in Vercel.
 3. Set all environment variables from `.env.example`.
 4. Add Postgres connection string (`DATABASE_URL`).

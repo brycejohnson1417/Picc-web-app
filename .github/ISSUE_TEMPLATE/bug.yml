@@ -1,0 +1,113 @@
+name: Bug
+description: Track a broken behavior with clear reproduction and validation.
+title: "fix(scope): "
+labels: ["bug", "type:bug", "status:needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is broken, who sees it, and why it matters?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Exact steps, URL, role, account, command, or data needed to reproduce.
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. Expected ...
+        4. Actual ...
+    validations:
+      required: true
+  - type: textarea
+    id: intended-outcome
+    attributes:
+      label: Intended Outcome
+      description: What should be true when this is fixed?
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-Goals
+      description: What should not be bundled into this fix?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Testable checklist for review.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: owned-paths
+    attributes:
+      label: Owned Path Globs
+      description: Files or directories this issue expects to own. Use globs such as `lib/server/nabis-*` or `components/dashboard/**`.
+      placeholder: |
+        -
+    validations:
+      required: true
+  - type: textarea
+    id: coordination
+    attributes:
+      label: Dependencies / Parallel Safety
+      description: List blocked-by issues, issues this blocks, expected `parallel:*` label, and whether this is fast lane or approval lane.
+      placeholder: |
+        Blocked by:
+        Blocks:
+        Parallel label:
+        Lane:
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - priority:critical
+        - priority:high
+        - priority:medium
+        - priority:low
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:frontend
+        - area:backend
+        - area:data
+        - area:ci
+        - area:infra
+    validations:
+      required: true
+  - type: checkboxes
+    id: review-flags
+    attributes:
+      label: Review Flags
+      options:
+        - label: Add `needs-prod-proof` if the fix makes claims about production data, sync state, customer-visible totals, or live integration behavior.
+        - label: Add `agent-generated` to PRs opened by Codex, Claude, Cursor, or another agent.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Test / Verification Expectations
+      description: Unit, integration, Playwright, browser, production read-only proof, or explicit TDD exception.
+    validations:
+      required: true
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Architecture / Data Impact
+      description: Boundaries touched, external systems involved, schema/data risks, rollback notes.
+    validations:
+      required: true

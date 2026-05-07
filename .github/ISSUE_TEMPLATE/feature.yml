@@ -1,0 +1,107 @@
+name: Feature
+description: Define a user-facing capability before implementation.
+title: "feat(scope): "
+labels: ["enhancement", "type:feature", "status:needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Opportunity
+      description: What user workflow or business need does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: intended-outcome
+    attributes:
+      label: Intended Outcome
+      description: What should be possible directly from the polished UI when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: user-flow
+    attributes:
+      label: User Flow
+      description: Describe the complete browser workflow, including settings, loading, error, save/cancel, and success states.
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-Goals
+      description: What tempting work is explicitly out of scope?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: owned-paths
+    attributes:
+      label: Owned Path Globs
+      description: Files or directories this issue expects to own. Use globs such as `app/(main)/dashboard/**` or `lib/dashboard/**`.
+      placeholder: |
+        -
+    validations:
+      required: true
+  - type: textarea
+    id: coordination
+    attributes:
+      label: Dependencies / Parallel Safety
+      description: List blocked-by issues, issues this blocks, expected `parallel:*` label, and whether this is fast lane or approval lane.
+      placeholder: |
+        Blocked by:
+        Blocks:
+        Parallel label:
+        Lane:
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - priority:critical
+        - priority:high
+        - priority:medium
+        - priority:low
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:frontend
+        - area:backend
+        - area:data
+        - area:ci
+        - area:infra
+    validations:
+      required: true
+  - type: checkboxes
+    id: review-flags
+    attributes:
+      label: Review Flags
+      options:
+        - label: Add `needs-prod-proof` if the feature depends on production data, sync state, customer-visible totals, or live integration behavior.
+        - label: Add `agent-generated` to PRs opened by Codex, Claude, Cursor, or another agent.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Test / Verification Expectations
+      description: Include browser/Playwright expectations for UI work and unit/integration expectations for logic.
+    validations:
+      required: true
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Architecture / Integration Impact
+      description: Data models, external systems, env vars, permissions, and rollback implications.
+    validations:
+      required: true

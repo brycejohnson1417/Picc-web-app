@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Production safety rule
+    url: https://github.com/bryce-picc/Picc-web-app/blob/main/AGENTS.md
+    about: Review repo operating rules before requesting production writes or schema changes.
