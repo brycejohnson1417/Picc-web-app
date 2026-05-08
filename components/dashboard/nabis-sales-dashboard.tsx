@@ -28,7 +28,7 @@ import { SalesTrendChart } from '@/components/dashboard/sales-trend-chart';
 
 const REP_COLORS = ['#1d4ed8', '#2563eb', '#0f766e', '#0284c7', '#7c3aed', '#db2777', '#f97316', '#eab308', '#16a34a', '#475569'];
 const DASHBOARD_SNAPSHOT_TTL_MS = 1000 * 60 * 5;
-const DASHBOARD_SNAPSHOT_KEY_PREFIX = 'picc:nabis-dashboard:v3';
+const DASHBOARD_SNAPSHOT_KEY_PREFIX = 'picc:nabis-dashboard:v4';
 
 type DashboardSnapshot = {
   fetchedAt: number;

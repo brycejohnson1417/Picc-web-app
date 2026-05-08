@@ -3,6 +3,8 @@ import type { DashboardDateRange } from '@/lib/dashboard/nabis-types';
 const CANCELED_STATUSES = new Set(['CANCELED', 'CANCELLED', 'VOID', 'VOIDED', 'REJECTED', 'REFUNDED']);
 const CUSTOMER_STATUS_KEYS = new Set(['customer', 'customer overdue']);
 const HISTORICAL_VMI_NOTE = 'VMI counts use current territory status; historical VMI status changes are not cached.';
+const REP_METRIC_LABELS = ['Ben', 'Donovan', 'Eric', 'Bryce J', 'Roxy', 'Matt M', 'Unassigned'];
+const REP_METRIC_LABEL_SET = new Set(REP_METRIC_LABELS);
 
 export type CacheCoverageStatus = 'empty' | 'covered' | 'partial-before-cache' | 'partial-after-cache' | 'partial-both';
 
@@ -148,8 +150,13 @@ export function formatNabisSalesRep(value: string | null | undefined) {
   return aliases.get(key) ?? (normalized || 'Unassigned');
 }
 
-function repLabelsForStore(store: AnalyticsTerritoryStore) {
-  const labels = [...new Set((store.repNames ?? []).map(formatNabisSalesRep).filter(Boolean))];
+function repMetricLabel(value: string | null | undefined) {
+  const label = formatNabisSalesRep(value);
+  return REP_METRIC_LABEL_SET.has(label) ? label : 'Unassigned';
+}
+
+function repMetricLabelsForStore(store: AnalyticsTerritoryStore) {
+  const labels = [...new Set((store.repNames ?? []).map(repMetricLabel).filter(Boolean))];
   return labels.length > 0 ? labels : ['Unassigned'];
 }
 
@@ -313,7 +320,7 @@ export function summarizeNabisDashboardAnalytics(input: {
     repBucket.orderCount += 1;
     repBuckets.set(repName, repBucket);
 
-    const territoryRepLabels = matchedStore ? repLabelsForStore(matchedStore) : [repName];
+    const territoryRepLabels = matchedStore ? repMetricLabelsForStore(matchedStore) : [repMetricLabel(repName)];
 
     for (const territoryRepLabel of territoryRepLabels) {
       const repMonthKey = `${territoryRepLabel}::${monthKey}`;
@@ -349,7 +356,7 @@ export function summarizeNabisDashboardAnalytics(input: {
 
   for (const store of input.territoryStores) {
     const storeKey = territoryStoreKey(store);
-    const labels = repLabelsForStore(store);
+    const labels = repMetricLabelsForStore(store);
     const customer = isCustomerStore(store);
     const preferred = Boolean(store.isPreferredPartner);
     const hasSampleDelivery = Boolean(store.lastSampleDeliveryDate);
@@ -375,15 +382,9 @@ export function summarizeNabisDashboardAnalytics(input: {
     }
   }
 
-  const repNames = new Set<string>();
-  for (const order of rangeOrders) repNames.add(formatNabisSalesRep(order.salesRep));
-  for (const store of input.territoryStores) {
-    for (const label of repLabelsForStore(store)) repNames.add(label);
-  }
-
   const repMonthlyMetrics: RepMonthlyMetric[] = [];
   for (const monthKey of months) {
-    for (const repName of [...repNames].sort((a, b) => a.localeCompare(b))) {
+    for (const repName of REP_METRIC_LABELS) {
       const repMonthKey = `${repName}::${monthKey}`;
       const sales = repMonthSales.get(repMonthKey) ?? { revenue: 0, orderCount: 0 };
       const nonVmiStoreCount = nonVmiStoresByRep.get(repName)?.size ?? 0;

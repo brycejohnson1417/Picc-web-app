@@ -38,6 +38,16 @@ const orders: AnalyticsOrder[] = [
     licensedLocationId: 'NABIS-LOCATION-1',
   },
   {
+    id: 'april-unmatched-old-sales-rep',
+    orderNumber: '1002-C',
+    createdDate: '2026-04-15',
+    status: 'DELIVERED',
+    customerName: 'Legacy Shop',
+    total: 75,
+    salesRep: 'Kali',
+    licensedLocationId: 'LEGACY-LOCATION',
+  },
+  {
     id: 'april-roxy-new-vmi',
     orderNumber: '1003',
     createdDate: '2026-04-12',
@@ -95,16 +105,27 @@ describe('Nabis dashboard cached analytics', () => {
       range: { start: '2026-03-01', end: '2026-04-30' },
     });
 
-    expect(summary.totalRevenue).toBe(525);
-    expect(summary.totalOrders).toBe(4);
+    expect(summary.totalRevenue).toBe(600);
+    expect(summary.totalOrders).toBe(5);
     expect(summary.monthlyTrend).toEqual([
       { monthKey: '2026-03', name: 'Mar 2026', revenue: 100, orderCount: 1 },
-      { monthKey: '2026-04', name: 'Apr 2026', revenue: 425, orderCount: 3 },
+      { monthKey: '2026-04', name: 'Apr 2026', revenue: 500, orderCount: 4 },
     ]);
     expect(summary.repStats).toEqual([
       { name: 'Roxy', revenue: 250, orderCount: 1 },
       { name: 'Ben', revenue: 225, orderCount: 2 },
+      { name: 'Kali', revenue: 75, orderCount: 1 },
       { name: 'Mario', revenue: 50, orderCount: 1 },
+    ]);
+
+    expect(summary.repMonthlyMetrics.filter((row) => row.monthKey === '2026-04').map((row) => row.repName)).toEqual([
+      'Ben',
+      'Donovan',
+      'Eric',
+      'Bryce J',
+      'Roxy',
+      'Matt M',
+      'Unassigned',
     ]);
 
     const benApril = summary.repMonthlyMetrics.find((row) => row.repName === 'Ben' && row.monthKey === '2026-04');
@@ -117,9 +138,12 @@ describe('Nabis dashboard cached analytics', () => {
       nonVmiReorderCount: 1,
       reorderPercent: 100,
     });
-    const marioApril = summary.repMonthlyMetrics.find((row) => row.repName === 'Mario' && row.monthKey === '2026-04');
-    expect(marioApril).toMatchObject({
-      salesInTerritory: 0,
+    expect(summary.repMonthlyMetrics.find((row) => row.repName === 'Mario')).toBeUndefined();
+    expect(summary.repMonthlyMetrics.find((row) => row.repName === 'Kali')).toBeUndefined();
+
+    const unassignedApril = summary.repMonthlyMetrics.find((row) => row.repName === 'Unassigned' && row.monthKey === '2026-04');
+    expect(unassignedApril).toMatchObject({
+      salesInTerritory: 75,
       customerStoreCount: 0,
       nonVmiStoreCount: 0,
       nonVmiReorderCount: 0,
