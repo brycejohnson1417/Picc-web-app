@@ -1509,16 +1509,15 @@ async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?:
         })
       : null;
     const previousMetadata = previousCheckpoint?.metadata;
+    const previousProgressCommitted = previousCheckpoint?.status === IntegrationSyncStatus.SUCCESS;
     const previousCutoffReached = booleanFromMetadata(previousMetadata, 'cutoffReached');
     const previousHistoricalBackfill = booleanFromMetadata(previousMetadata, 'historicalBackfill');
     const previousHasMore = booleanFromMetadata(previousMetadata, 'hasMore');
     const previousNextPage = numberFromMetadata(previousMetadata, 'nextPage');
     const previousBackfillComplete =
-      previousCheckpoint?.status === IntegrationSyncStatus.SUCCESS &&
-      previousHistoricalBackfill &&
-      (previousCutoffReached || (!previousHasMore && previousNextPage == null));
+      previousProgressCommitted && previousHistoricalBackfill && (previousCutoffReached || (!previousHasMore && previousNextPage == null));
     const resumeStartPage =
-      options?.historicalBackfill && !options.resetHistoricalBackfill && previousNextPage != null && !previousBackfillComplete
+      options?.historicalBackfill && !options.resetHistoricalBackfill && previousProgressCommitted && previousNextPage != null && !previousBackfillComplete
         ? previousNextPage
         : undefined;
 
