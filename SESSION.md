@@ -1,23 +1,30 @@
 # Current Session
 
-- Install the anti-slop operating contract for this repo.
-- Add GitHub issue templates for bugs, features, and tasks.
-- Add a pull request template that requires issue linkage, scope, validation, risk, and production proof.
-- Add the agent/prod-proof/type/priority/area label contract that future issues and PRs will use.
-- Add the fast-lane/approval-lane, parallel-label, owned-glob, stale-claim, and production rollback rules.
-- Add `npm test` to CI so tests are part of the merge gate.
+- Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/43
+- Add an intentional historical Nabis backfill path from `2025-01-01`.
+- Reuse the existing Nabis sync lease, rate-limit backoff, sync run, and checkpoint architecture.
+- Populate cached `NabisOrder` and `NabisOrderLine` rows through the same parser/upsert path as normal order sync.
+- Surface backfill readiness/progress metadata through the existing admin sync status/control UI.
 
 # Out Of Scope
 
-- Do not implement Nabis sync/dashboard issues #41-#45 in this PR.
-- Do not change application runtime behavior.
-- Do not modify production data, schemas, Vercel settings, or GitHub branch protection from this PR.
-- Do not add broad architecture rewrites, Playwright suites, or secret-scanning workflows until tracked in their own issues.
-- Do not implement Nabis lease/backfill/dashboard work in this PR.
+- Do not rebuild the historical dashboard in this PR; that remains issue #45.
+- Do not change schemas unless the existing checkpoint/run metadata model is insufficient.
+- Do not mirror Nabis retailers into Notion CRM from this backfill.
+- Do not run production writes until the PR is merged, CI is green, and the approved production backfill command/path is used.
 
 # Constraints
 
-- Keep this as a repo-governance slice tied to issue #47.
-- Keep PR size near the 10-file limit.
-- Use issue #47 for the repo-specific rollout and keep PR #46 focused on PPP cached Nabis lines.
-- Branch protection and org-default `.github` setup require separate admin verification.
+- Branch: `codex/43-historical-nabis-backfill`.
+- Owned path globs: `lib/server/nabis-sync.ts`, `lib/server/nabis-sync.test.ts`, `lib/server/nabis-sync-status.ts`, `app/api/sync/run/route.ts`, `components/settings/nabis-sync-admin-panel.tsx`, `SESSION.md`.
+- Open PR overlap check: `gh pr list` returned no open Picc-web-app PRs at claim time.
+- Required named test coverage: `lease-refusal`, `stale-recovery`, `429-backoff`, and `batch-cutoff`.
+- Production data writes/backfill execution are approval-lane; the user has pre-approved the historical data backfill only after safeguards are merged and verified.
+
+# Test Plan
+
+- RED first: add a `batch-cutoff` unit test for historical cutoff handling before implementation.
+- Run `npm test`.
+- Run `npm run typecheck`.
+- Run `npm run lint`.
+- Run `npm run build`.
