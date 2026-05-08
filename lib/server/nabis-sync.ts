@@ -1504,21 +1504,30 @@ async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?:
           },
           select: {
             metadata: true,
+            status: true,
           },
         })
       : null;
     const previousMetadata = previousCheckpoint?.metadata;
     const previousCutoffReached = booleanFromMetadata(previousMetadata, 'cutoffReached');
+    const previousHistoricalBackfill = booleanFromMetadata(previousMetadata, 'historicalBackfill');
+    const previousHasMore = booleanFromMetadata(previousMetadata, 'hasMore');
     const previousNextPage = numberFromMetadata(previousMetadata, 'nextPage');
+    const previousBackfillComplete =
+      previousCheckpoint?.status === IntegrationSyncStatus.SUCCESS &&
+      previousHistoricalBackfill &&
+      (previousCutoffReached || (!previousHasMore && previousNextPage == null));
     const resumeStartPage =
-      options?.historicalBackfill && !options.resetHistoricalBackfill && previousNextPage != null && !previousCutoffReached ? previousNextPage : undefined;
+      options?.historicalBackfill && !options.resetHistoricalBackfill && previousNextPage != null && !previousBackfillComplete
+        ? previousNextPage
+        : undefined;
 
-    if (options?.historicalBackfill && previousCutoffReached && !options.resetHistoricalBackfill) {
+    if (options?.historicalBackfill && previousBackfillComplete && !options.resetHistoricalBackfill) {
       const metadata = {
         ...(toJsonObject(previousMetadata) ?? {}),
         historicalBackfill: true,
         skipped: true,
-        skipReason: 'Historical Nabis backfill already reached the cutoff. Pass resetHistoricalBackfill to restart.',
+        skipReason: 'Historical Nabis backfill is already complete. Pass resetHistoricalBackfill to restart.',
       };
       return {
         result: {
