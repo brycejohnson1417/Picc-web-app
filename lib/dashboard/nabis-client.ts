@@ -1,5 +1,7 @@
 import type { DashboardDateRange, ProcessedNabisOrder, SerializedNabisOrder } from '@/lib/dashboard/nabis-types';
 
+export type DashboardRangePreset = 'current-month' | 'ytd' | 'trailing-12' | 'custom';
+
 export function formatCurrency(amount: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -16,10 +18,33 @@ export function formatDateInputValue(date: Date) {
 }
 
 export function getDefaultDateRange(): DashboardDateRange {
-  const now = new Date();
+  return getPresetDateRange('current-month');
+}
+
+export function getPresetDateRange(preset: Exclude<DashboardRangePreset, 'custom'>, now = new Date()): DashboardDateRange {
+  const today = formatDateInputValue(now);
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+  if (preset === 'ytd') {
+    return {
+      start: `${now.getFullYear()}-01-01`,
+      end: today,
+    };
+  }
+
+  if (preset === 'trailing-12') {
+    const start = new Date(now);
+    start.setMonth(start.getMonth() - 11);
+    start.setDate(1);
+    return {
+      start: formatDateInputValue(start),
+      end: today,
+    };
+  }
+
   return {
-    start: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
-    end: formatDateInputValue(now),
+    start: currentMonth,
+    end: today,
   };
 }
 

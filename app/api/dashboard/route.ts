@@ -6,6 +6,7 @@ import { getUserRole } from '@/lib/rbac/guards';
 export const dynamic = 'force-dynamic';
 
 const DASHBOARD_RESPONSE_CACHE_TTL_MS = 1000 * 60;
+const DEFAULT_DASHBOARD_DATA_ORG_ID = 'picc_company_workspace';
 
 type DashboardCacheEntry = {
   expiresAt: number;
@@ -25,6 +26,15 @@ function responseHeaders(forceRefresh: boolean) {
 
 function cacheKey(orgId: string, start: string, end: string) {
   return `${orgId}::${start}::${end}`;
+}
+
+function dashboardDataOrgId(fallbackOrgId: string) {
+  return (
+    process.env.PICC_SHARED_ORG_ID?.trim() ||
+    process.env.PICC_WORKSPACE_ORG_ID?.trim() ||
+    DEFAULT_DASHBOARD_DATA_ORG_ID ||
+    fallbackOrgId
+  );
 }
 
 function readDashboardCache(key: string) {
@@ -54,7 +64,8 @@ export async function GET(request: Request) {
       end: searchParams.get('end'),
     });
     const forceRefresh = searchParams.get('refresh') === '1';
-    const key = cacheKey(ctx.orgId, start, end);
+    const dataOrgId = dashboardDataOrgId(ctx.orgId);
+    const key = cacheKey(dataOrgId, start, end);
 
     if (forceRefresh) {
       const role = await getUserRole(ctx.orgId, ctx.userId);
@@ -77,7 +88,7 @@ export async function GET(request: Request) {
     }
 
     const payload = await getDashboardPayload({
-      orgId: ctx.orgId,
+      orgId: dataOrgId,
       start,
       end,
       forceRefresh,
@@ -99,7 +110,7 @@ export async function GET(request: Request) {
     const statusCode = Number((error as Error & { statusCode?: number })?.statusCode || 500);
     const publicMessage =
       statusCode >= 500
-        ? 'Unable to sync data from the Nabis API right now.'
+        ? 'Unable to load cached Nabis dashboard data right now.'
         : error instanceof Error
           ? error.message
           : 'Request failed.';
