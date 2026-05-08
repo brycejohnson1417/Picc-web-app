@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
+import { resolveNabisDashboardOrgId } from '@/lib/dashboard/nabis-org';
 import { ensureDateRange, getDashboardPayload } from '@/lib/dashboard/nabis-server';
 import { getUserRole } from '@/lib/rbac/guards';
 
 export const dynamic = 'force-dynamic';
 
 const DASHBOARD_RESPONSE_CACHE_TTL_MS = 1000 * 60;
-const DEFAULT_DASHBOARD_DATA_ORG_ID = 'picc_company_workspace';
 
 type DashboardCacheEntry = {
   expiresAt: number;
@@ -26,15 +26,6 @@ function responseHeaders(forceRefresh: boolean) {
 
 function cacheKey(orgId: string, start: string, end: string) {
   return `${orgId}::${start}::${end}`;
-}
-
-function dashboardDataOrgId(fallbackOrgId: string) {
-  return (
-    process.env.PICC_SHARED_ORG_ID?.trim() ||
-    process.env.PICC_WORKSPACE_ORG_ID?.trim() ||
-    DEFAULT_DASHBOARD_DATA_ORG_ID ||
-    fallbackOrgId
-  );
 }
 
 function readDashboardCache(key: string) {
@@ -64,7 +55,7 @@ export async function GET(request: Request) {
       end: searchParams.get('end'),
     });
     const forceRefresh = searchParams.get('refresh') === '1';
-    const dataOrgId = dashboardDataOrgId(ctx.orgId);
+    const dataOrgId = resolveNabisDashboardOrgId();
     const key = cacheKey(dataOrgId, start, end);
 
     if (forceRefresh) {
