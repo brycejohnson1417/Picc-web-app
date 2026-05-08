@@ -778,6 +778,28 @@ function orderSyncModule(options?: OrderSyncOptions) {
   return 'orders';
 }
 
+export function nabisOrderLineFingerprint(line: {
+  externalOrderId: string;
+  productName: string;
+  quantity: number | Prisma.Decimal | null;
+  unitPrice: number | Prisma.Decimal | null;
+  isSample: boolean;
+  itemStrain: string | null;
+  itemCategory: string | null;
+  itemClass: string | null;
+}) {
+  return [
+    line.externalOrderId,
+    line.productName,
+    line.quantity == null ? '' : Number(line.quantity).toFixed(4),
+    line.unitPrice == null ? '' : Number(line.unitPrice).toFixed(4),
+    line.isSample ? 'sample' : 'standard',
+    line.itemStrain ?? '',
+    line.itemCategory ?? '',
+    line.itemClass ?? '',
+  ].join('|');
+}
+
 function numberFromMetadata(metadata: unknown, key: string) {
   const value = toJsonObject(metadata)?.[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -1653,15 +1675,41 @@ async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?:
         },
       });
       const orderIdByExternalId = new Map(persistedOrders.map((order) => [order.externalOrderId, order.id]));
+      const existingHistoricalLineFingerprints = options?.historicalBackfill
+        ? new Set(
+            (
+              await prisma.nabisOrderLine.findMany({
+                where: {
+                  orgId,
+                  externalOrderId: {
+                    in: lineExternalOrderIds,
+                  },
+                },
+                select: {
+                  externalOrderId: true,
+                  productName: true,
+                  quantity: true,
+                  unitPrice: true,
+                  isSample: true,
+                  itemStrain: true,
+                  itemCategory: true,
+                  itemClass: true,
+                },
+              })
+            ).map(nabisOrderLineFingerprint),
+          )
+        : null;
 
-      await prisma.nabisOrderLine.deleteMany({
-        where: {
-          orgId,
-          externalOrderId: {
-            in: lineExternalOrderIds,
+      if (!options?.historicalBackfill) {
+        await prisma.nabisOrderLine.deleteMany({
+          where: {
+            orgId,
+            externalOrderId: {
+              in: lineExternalOrderIds,
+            },
           },
-        },
-      });
+        });
+      }
 
       const linesToCreate = lineRows
         .map((line) => {
@@ -1683,7 +1731,12 @@ async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?:
             itemClass: line.itemClass,
           };
         })
-        .filter((line): line is NonNullable<typeof line> => Boolean(line));
+        .filter((line): line is NonNullable<typeof line> => {
+          if (!line) {
+            return false;
+          }
+          return !existingHistoricalLineFingerprints?.has(nabisOrderLineFingerprint(line));
+        });
 
       for (const batch of chunkArray(linesToCreate, ORDER_UPSERT_BATCH_SIZE)) {
         await prisma.nabisOrderLine.createMany({

@@ -4,6 +4,7 @@ import {
   evaluateNabisSyncLease,
   filterOrderRowsOnOrAfterCutoff,
   getRetryDelayMs,
+  nabisOrderLineFingerprint,
   pageIsOlderThanCutoff,
   parseNabisOrderLineForCache,
 } from '@/lib/server/nabis-sync';
@@ -142,5 +143,43 @@ describe('Nabis historical backfill paging', () => {
         cutoff,
       ).map((row) => row.id),
     ).toEqual(['cutoff-row', 'newer-row']);
+  });
+});
+
+describe('Nabis historical line merge safety', () => {
+  it('builds a stable line fingerprint so resumable batches can avoid duplicate inserts without deleting sibling lines', () => {
+    const first = nabisOrderLineFingerprint({
+      externalOrderId: 'order-1',
+      productName: 'Ichi-Roll Single 1g',
+      quantity: 10,
+      unitPrice: 5,
+      isSample: false,
+      itemStrain: 'Time Warp',
+      itemCategory: 'Pre-roll',
+      itemClass: 'Cannabis',
+    });
+    const same = nabisOrderLineFingerprint({
+      externalOrderId: 'order-1',
+      productName: 'Ichi-Roll Single 1g',
+      quantity: 10.0,
+      unitPrice: 5.0,
+      isSample: false,
+      itemStrain: 'Time Warp',
+      itemCategory: 'Pre-roll',
+      itemClass: 'Cannabis',
+    });
+    const sibling = nabisOrderLineFingerprint({
+      externalOrderId: 'order-1',
+      productName: 'Zips 3.5g',
+      quantity: 4,
+      unitPrice: 20,
+      isSample: false,
+      itemStrain: 'Blue Dream',
+      itemCategory: 'Flower',
+      itemClass: 'Cannabis',
+    });
+
+    expect(first).toBe(same);
+    expect(first).not.toBe(sibling);
   });
 });
