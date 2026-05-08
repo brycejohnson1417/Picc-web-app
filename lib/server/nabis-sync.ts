@@ -15,6 +15,8 @@ const MAX_RETAILER_PAGES = 40;
 const MAX_ORDER_PAGES = 220;
 const RECENT_ORDER_SYNC_DAYS = 120;
 const RECONCILIATION_ORDER_SYNC_DAYS = 400;
+const HISTORICAL_ORDER_BACKFILL_START_DATE = '2025-01-01T00:00:00.000Z';
+const HISTORICAL_ORDER_BACKFILL_BATCH_PAGES = 20;
 const ORDER_UPSERT_BATCH_SIZE = 50;
 const NABIS_SYNC_LEASE_MODULE = 'nabis_global_sync_lease';
 const NABIS_SYNC_LEASE_REFRESH_MS = 30_000;
@@ -135,6 +137,32 @@ type ParsedOrderLine = {
   itemStrain: string | null;
   itemCategory: string | null;
   itemClass: string | null;
+};
+
+type OrderSyncOptions = {
+  reconciliation?: boolean;
+  historicalBackfill?: boolean;
+  historicalStartDate?: string;
+  resetHistoricalBackfill?: boolean;
+  startPage?: number;
+  maxPagesPerRun?: number;
+};
+
+type LoadedOrdersFromNabis = {
+  rows: ParsedOrder[];
+  metadata: {
+    cutoffDate: string;
+    historicalBackfill: boolean;
+    reconciliation: boolean;
+    pagesScanned: number;
+    recordsRead: number;
+    cutoffReached: boolean;
+    startPage: number;
+    nextPage: number | null;
+    hasMore: boolean;
+    earliestOrderCreatedAt: string | null;
+    latestOrderCreatedAt: string | null;
+  };
 };
 
 type NabisSyncLeaseMetadata = {
@@ -694,7 +722,7 @@ async function loadRetailersFromNabis() {
   return rows;
 }
 
-function pageIsOlderThanCutoff(rows: NabisOrderApiRow[], cutoff: Date) {
+export function pageIsOlderThanCutoff(rows: NabisOrderApiRow[], cutoff: Date) {
   const validDates = rows
     .map((row) => parseDate(row.createdTimestamp ?? row.createdDate ?? null))
     .filter((date): date is Date => Boolean(date))
@@ -707,33 +735,152 @@ function pageIsOlderThanCutoff(rows: NabisOrderApiRow[], cutoff: Date) {
   return validDates[validDates.length - 1].getTime() < cutoff.getTime();
 }
 
-async function loadOrdersFromNabis(options?: { reconciliation?: boolean }) {
-  const rows: ParsedOrder[] = [];
+export function filterOrderRowsOnOrAfterCutoff(rows: NabisOrderApiRow[], cutoff: Date) {
+  return rows.filter((row) => {
+    const createdAt = parseDate(row.createdTimestamp ?? row.createdDate ?? null);
+    return !createdAt || createdAt.getTime() >= cutoff.getTime();
+  });
+}
+
+function resolveOrderSyncCutoff(options?: OrderSyncOptions) {
+  if (options?.historicalBackfill) {
+    const requested = options.historicalStartDate ? new Date(options.historicalStartDate) : new Date(HISTORICAL_ORDER_BACKFILL_START_DATE);
+    if (Number.isNaN(requested.getTime())) {
+      throw new Error(`Invalid historical Nabis backfill start date: ${options.historicalStartDate}`);
+    }
+    return requested;
+  }
+
   const cutoff = new Date();
   cutoff.setUTCDate(cutoff.getUTCDate() - (options?.reconciliation ? RECONCILIATION_ORDER_SYNC_DAYS : RECENT_ORDER_SYNC_DAYS));
-  let page = 0;
+  return cutoff;
+}
 
-  while (page < MAX_ORDER_PAGES) {
-    if (page > 0) {
+function orderCreatedTimestamp(order: ParsedOrder) {
+  return order.orderCreatedDate?.toISOString() ?? null;
+}
+
+function orderDateCoverage(rows: ParsedOrder[]) {
+  const timestamps = rows
+    .map(orderCreatedTimestamp)
+    .filter((value): value is string => Boolean(value))
+    .sort();
+
+  return {
+    earliestOrderCreatedAt: timestamps[0] ?? null,
+    latestOrderCreatedAt: timestamps[timestamps.length - 1] ?? null,
+  };
+}
+
+function orderSyncModule(options?: OrderSyncOptions) {
+  if (options?.historicalBackfill) return 'orders_historical_backfill';
+  if (options?.reconciliation) return 'orders_reconcile';
+  return 'orders';
+}
+
+export function nabisOrderLineFingerprint(line: {
+  externalOrderId: string;
+  productName: string;
+  quantity: number | Prisma.Decimal | null;
+  unitPrice: number | Prisma.Decimal | null;
+  isSample: boolean;
+  itemStrain: string | null;
+  itemCategory: string | null;
+  itemClass: string | null;
+}) {
+  return [
+    line.externalOrderId,
+    line.productName,
+    line.quantity == null ? '' : Number(line.quantity).toFixed(4),
+    line.unitPrice == null ? '' : Number(line.unitPrice).toFixed(4),
+    line.isSample ? 'sample' : 'standard',
+    line.itemStrain ?? '',
+    line.itemCategory ?? '',
+    line.itemClass ?? '',
+  ].join('|');
+}
+
+function numberFromMetadata(metadata: unknown, key: string) {
+  const value = toJsonObject(metadata)?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function booleanFromMetadata(metadata: unknown, key: string) {
+  return toJsonObject(metadata)?.[key] === true;
+}
+
+async function loadOrdersFromNabis(
+  options?: OrderSyncOptions & {
+    onProgress?: (metadata: LoadedOrdersFromNabis['metadata']) => Promise<void>;
+  },
+): Promise<LoadedOrdersFromNabis> {
+  const rows: ParsedOrder[] = [];
+  const cutoff = resolveOrderSyncCutoff(options);
+  const cutoffDate = cutoff.toISOString();
+  const startPage = options?.historicalBackfill ? Math.max(0, options.startPage ?? 0) : 0;
+  const maxPagesPerRun = options?.historicalBackfill ? (options.maxPagesPerRun ?? HISTORICAL_ORDER_BACKFILL_BATCH_PAGES) : MAX_ORDER_PAGES;
+  let page = startPage;
+  let pagesScanned = 0;
+  let recordsRead = 0;
+  let cutoffReached = false;
+  let nextPage: number | null = null;
+  let hasMore = false;
+
+  while (page < MAX_ORDER_PAGES && pagesScanned < maxPagesPerRun) {
+    if (pagesScanned > 0 || page > startPage) {
       await wait(175);
     }
 
     const payload = await fetchNabisPage<NabisOrderApiRow>('/v2/ny/order', page);
     const pageRows = payload.data ?? [];
-    rows.push(...pageRows.map(parseOrderRow).filter((row): row is ParsedOrder => Boolean(row)));
+    const rowsToParse = options?.historicalBackfill ? filterOrderRowsOnOrAfterCutoff(pageRows, cutoff) : pageRows;
+    const parsedRows = rowsToParse.map(parseOrderRow).filter((row): row is ParsedOrder => Boolean(row));
+    rows.push(...parsedRows);
+    pagesScanned += 1;
+    recordsRead += pageRows.length;
 
-    if (!pageRows.length || payload.nextPage == null || payload.nextPage <= page) {
+    const payloadNextPage = payload.nextPage != null && payload.nextPage > page ? payload.nextPage : null;
+    cutoffReached = pageIsOlderThanCutoff(pageRows, cutoff);
+    const exhausted = !pageRows.length || payloadNextPage == null || cutoffReached;
+    const hitPageBudget = pagesScanned >= maxPagesPerRun;
+    nextPage = exhausted ? null : payloadNextPage;
+    hasMore = Boolean(nextPage != null && (hitPageBudget || !exhausted));
+
+    await options?.onProgress?.({
+      cutoffDate,
+      historicalBackfill: Boolean(options?.historicalBackfill),
+      reconciliation: Boolean(options?.reconciliation),
+      pagesScanned,
+      recordsRead,
+      cutoffReached,
+      startPage,
+      nextPage,
+      hasMore,
+      ...orderDateCoverage(rows),
+    });
+
+    if (exhausted || hitPageBudget || nextPage == null) {
       break;
     }
 
-    if (pageIsOlderThanCutoff(pageRows, cutoff)) {
-      break;
-    }
-
-    page = payload.nextPage;
+    page = nextPage;
   }
 
-  return rows;
+  return {
+    rows,
+    metadata: {
+      cutoffDate,
+      historicalBackfill: Boolean(options?.historicalBackfill),
+      reconciliation: Boolean(options?.reconciliation),
+      pagesScanned,
+      recordsRead,
+      cutoffReached,
+      startPage,
+      nextPage,
+      hasMore,
+      ...orderDateCoverage(rows),
+    },
+  };
 }
 
 async function ensureNabisIntegration(orgId: string) {
@@ -1334,18 +1481,80 @@ async function syncNabisRetailersCore(orgId: string, integrationId: string, acto
   });
 }
 
-export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?: { reconciliation?: boolean }) {
+export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?: OrderSyncOptions) {
   await ensureActivePolicySnapshot(orgId, actor);
   const integration = await ensureNabisIntegration(orgId);
+  const syncModuleName = orderSyncModule(options);
 
-  return withNabisSyncLease({ orgId, integrationId: integration.id, module: options?.reconciliation ? 'orders_reconcile' : 'orders', actor }, () =>
+  return withNabisSyncLease({ orgId, integrationId: integration.id, module: syncModuleName, actor }, () =>
     syncNabisOrdersCore(orgId, integration.id, actor, options),
   );
 }
 
-async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?: SyncActor, options?: { reconciliation?: boolean }) {
-  return withSyncRun({ orgId, integrationId, module: options?.reconciliation ? 'orders_reconcile' : 'orders', actor }, async () => {
-    const orders = await loadOrdersFromNabis({ reconciliation: options?.reconciliation });
+async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?: SyncActor, options?: OrderSyncOptions) {
+  const syncModuleName = orderSyncModule(options);
+  return withSyncRun({ orgId, integrationId, module: syncModuleName, actor }, async () => {
+    const previousCheckpoint = options?.historicalBackfill
+      ? await prisma.syncCheckpoint.findUnique({
+          where: {
+            integrationId_module: {
+              integrationId,
+              module: syncModuleName,
+            },
+          },
+          select: {
+            metadata: true,
+            status: true,
+          },
+        })
+      : null;
+    const previousMetadata = previousCheckpoint?.metadata;
+    const previousProgressCommitted = previousCheckpoint?.status === IntegrationSyncStatus.SUCCESS;
+    const previousCutoffReached = booleanFromMetadata(previousMetadata, 'cutoffReached');
+    const previousHistoricalBackfill = booleanFromMetadata(previousMetadata, 'historicalBackfill');
+    const previousHasMore = booleanFromMetadata(previousMetadata, 'hasMore');
+    const previousNextPage = numberFromMetadata(previousMetadata, 'nextPage');
+    const previousBackfillComplete =
+      previousProgressCommitted && previousHistoricalBackfill && (previousCutoffReached || (!previousHasMore && previousNextPage == null));
+    const resumeStartPage =
+      options?.historicalBackfill && !options.resetHistoricalBackfill && previousProgressCommitted && previousNextPage != null && !previousBackfillComplete
+        ? previousNextPage
+        : undefined;
+
+    if (options?.historicalBackfill && previousBackfillComplete && !options.resetHistoricalBackfill) {
+      const metadata = {
+        ...(toJsonObject(previousMetadata) ?? {}),
+        historicalBackfill: true,
+        skipped: true,
+        skipReason: 'Historical Nabis backfill is already complete. Pass resetHistoricalBackfill to restart.',
+      };
+      return {
+        result: {
+          orders: 0,
+          upserted: 0,
+          lineItems: 0,
+          metricRows: 0,
+        },
+        recordsIn: 0,
+        recordsUpserted: 0,
+        metadata,
+      };
+    }
+
+    const loadedOrders = await loadOrdersFromNabis({
+      ...options,
+      startPage: resumeStartPage ?? options?.startPage,
+      onProgress: async (metadata) => {
+        await markSyncCheckpoint({
+          orgId,
+          integrationId,
+          module: syncModuleName,
+          status: IntegrationSyncStatus.RUNNING,
+          metadata,
+        });
+      },
+    });
+    const orders = loadedOrders.rows;
     await prisma.nabisOrder.deleteMany({
       where: {
         orgId,
@@ -1474,15 +1683,41 @@ async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?:
         },
       });
       const orderIdByExternalId = new Map(persistedOrders.map((order) => [order.externalOrderId, order.id]));
+      const existingHistoricalLineFingerprints = options?.historicalBackfill
+        ? new Set(
+            (
+              await prisma.nabisOrderLine.findMany({
+                where: {
+                  orgId,
+                  externalOrderId: {
+                    in: lineExternalOrderIds,
+                  },
+                },
+                select: {
+                  externalOrderId: true,
+                  productName: true,
+                  quantity: true,
+                  unitPrice: true,
+                  isSample: true,
+                  itemStrain: true,
+                  itemCategory: true,
+                  itemClass: true,
+                },
+              })
+            ).map(nabisOrderLineFingerprint),
+          )
+        : null;
 
-      await prisma.nabisOrderLine.deleteMany({
-        where: {
-          orgId,
-          externalOrderId: {
-            in: lineExternalOrderIds,
+      if (!options?.historicalBackfill) {
+        await prisma.nabisOrderLine.deleteMany({
+          where: {
+            orgId,
+            externalOrderId: {
+              in: lineExternalOrderIds,
+            },
           },
-        },
-      });
+        });
+      }
 
       const linesToCreate = lineRows
         .map((line) => {
@@ -1504,7 +1739,12 @@ async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?:
             itemClass: line.itemClass,
           };
         })
-        .filter((line): line is NonNullable<typeof line> => Boolean(line));
+        .filter((line): line is NonNullable<typeof line> => {
+          if (!line) {
+            return false;
+          }
+          return !existingHistoricalLineFingerprints?.has(nabisOrderLineFingerprint(line));
+        });
 
       for (const batch of chunkArray(linesToCreate, ORDER_UPSERT_BATCH_SIZE)) {
         await prisma.nabisOrderLine.createMany({
@@ -1539,22 +1779,22 @@ async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?:
       recordsIn: orders.length,
       recordsUpserted: upserted,
       metadata: {
+        ...loadedOrders.metadata,
         orders: orders.length,
         uniqueOrders: upserted,
         lineItems: upsertedLines,
         metricRows,
-        reconciliation: Boolean(options?.reconciliation),
       },
     };
   });
 }
 
-export async function syncNabisRetailersAndOrders(orgId: string, actor?: SyncActor, options?: { reconciliation?: boolean; syncCrm?: boolean }) {
+export async function syncNabisRetailersAndOrders(orgId: string, actor?: SyncActor, options?: OrderSyncOptions & { syncCrm?: boolean }) {
   await ensureActivePolicySnapshot(orgId, actor);
   const integration = await ensureNabisIntegration(orgId);
 
   return withNabisSyncLease(
-    { orgId, integrationId: integration.id, module: options?.reconciliation ? 'retailers_and_orders_reconcile' : 'retailers_and_orders', actor },
+    { orgId, integrationId: integration.id, module: options?.historicalBackfill ? 'retailers_and_orders_historical_backfill' : options?.reconciliation ? 'retailers_and_orders_reconcile' : 'retailers_and_orders', actor },
     async () => {
       const retailerResult = await syncNabisRetailersCore(orgId, integration.id, actor, { syncCrm: options?.syncCrm === true });
       const orderResult = await syncNabisOrdersCore(orgId, integration.id, actor, options);

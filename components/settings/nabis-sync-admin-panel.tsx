@@ -29,7 +29,17 @@ type SyncModule = {
     retailers: number | null;
     lineItems: number | null;
     metricRows: number | null;
+    pagesScanned: number | null;
   };
+  historicalBackfill: boolean;
+  cutoffDate: string | null;
+  cutoffReached: boolean;
+  nextPage: number | null;
+  hasMore: boolean;
+  skipped: boolean;
+  skipReason: string | null;
+  earliestOrderCreatedAt: string | null;
+  latestOrderCreatedAt: string | null;
 };
 
 type SyncRun = {
@@ -69,7 +79,7 @@ type NabisSyncStatusResponse = {
   controls: {
     recentOrders: { enabled: boolean; module: string; label: string };
     retailers: { enabled: boolean; module: string; label: string };
-    historicalBackfill: { enabled: boolean; module: string; label: string; disabledReason: string };
+    historicalBackfill: { enabled: boolean; module: string; label: string; description: string };
   };
 };
 
@@ -77,6 +87,7 @@ const moduleLabels: Record<string, string> = {
   orders: 'Recent order sync',
   retailers: 'Retailer sync',
   orders_reconcile: 'Historical reconciliation',
+  orders_historical_backfill: 'Historical backfill',
   nabis_global_sync_lease: 'Global sync lease',
 };
 
@@ -110,7 +121,7 @@ export function NabisSyncAdminPanel() {
 
   const modules = useMemo(() => {
     const source = status?.modules ?? [];
-    return ['orders', 'retailers', 'orders_reconcile', 'nabis_global_sync_lease']
+    return ['orders', 'retailers', 'orders_reconcile', 'orders_historical_backfill', 'nabis_global_sync_lease']
       .map((module) => source.find((entry) => entry.module === module))
       .filter((entry): entry is SyncModule => Boolean(entry));
   }, [status?.modules]);
@@ -231,6 +242,16 @@ export function NabisSyncAdminPanel() {
                     <p>Expires: {formatDateTime(module.leaseExpiresAt, 'not active')}</p>
                   </div>
                 ) : null}
+                {module.historicalBackfill ? (
+                  <div className="mt-3 rounded-xl bg-white px-3 py-2 text-[12px] text-[#5c6674]">
+                    <p>Cutoff: {formatDateTime(module.cutoffDate, 'not recorded')}</p>
+                    <p>Pages scanned: {formatNumber(module.stats.pagesScanned)}</p>
+                    <p>Next page: {module.nextPage ?? 'complete'}</p>
+                    <p>Coverage: {formatDateRange(module.earliestOrderCreatedAt, module.latestOrderCreatedAt)}</p>
+                    <p>{module.cutoffReached ? 'Cutoff reached' : module.hasMore ? 'More batches available' : 'Batch complete'}</p>
+                    {module.skipped && module.skipReason ? <p>{module.skipReason}</p> : null}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -255,10 +276,10 @@ export function NabisSyncAdminPanel() {
             <SyncActionButton
               icon={<TimerReset className="h-4 w-4" />}
               title={status.controls.historicalBackfill.label}
-              description={status.controls.historicalBackfill.disabledReason}
-              disabled
-              loading={false}
-              onClick={() => undefined}
+              description={status.controls.historicalBackfill.description}
+              disabled={!status.controls.historicalBackfill.enabled || Boolean(runningModule)}
+              loading={runningModule === status.controls.historicalBackfill.module}
+              onClick={() => void runSync(status.controls.historicalBackfill.module, status.controls.historicalBackfill.label)}
             />
           </div>
 

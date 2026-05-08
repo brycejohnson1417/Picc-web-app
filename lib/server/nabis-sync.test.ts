@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { IntegrationSyncStatus } from '@prisma/client';
-import { evaluateNabisSyncLease, getRetryDelayMs, parseNabisOrderLineForCache } from '@/lib/server/nabis-sync';
+import {
+  evaluateNabisSyncLease,
+  filterOrderRowsOnOrAfterCutoff,
+  getRetryDelayMs,
+  nabisOrderLineFingerprint,
+  pageIsOlderThanCutoff,
+  parseNabisOrderLineForCache,
+} from '@/lib/server/nabis-sync';
 
 describe('Nabis sync line cache parsing', () => {
   it('extracts order line detail needed for local PPP savings calculations', () => {
@@ -95,5 +102,84 @@ describe('Nabis rate-limit backoff', () => {
     expect(getRetryDelayMs(retryAfterDateResponse, 0)).toBeGreaterThan(0);
     expect(getRetryDelayMs(retryAfterDateResponse, 0)).toBeLessThanOrEqual(12_000);
     expect(getRetryDelayMs(fallbackResponse, 3)).toBe(8000);
+  });
+});
+
+describe('Nabis historical backfill paging', () => {
+  it('batch-cutoff only stops after a full order page is older than the requested historical start date', () => {
+    const cutoff = new Date('2025-01-01T00:00:00.000Z');
+
+    expect(
+      pageIsOlderThanCutoff(
+        [
+          { id: 'oldest-in-page', createdDate: '2024-12-31T23:59:59.000Z' },
+          { id: 'still-needed', createdDate: '2025-01-01T00:00:00.000Z' },
+        ],
+        cutoff,
+      ),
+    ).toBe(false);
+
+    expect(
+      pageIsOlderThanCutoff(
+        [
+          { id: 'older-a', createdDate: '2024-12-30T00:00:00.000Z' },
+          { id: 'older-b', createdTimestamp: '2024-12-31T23:59:59.000Z' },
+        ],
+        cutoff,
+      ),
+    ).toBe(true);
+  });
+
+  it('batch-cutoff excludes pre-cutoff rows from the historical backfill page before upsert', () => {
+    const cutoff = new Date('2025-01-01T00:00:00.000Z');
+
+    expect(
+      filterOrderRowsOnOrAfterCutoff(
+        [
+          { id: 'older-row', createdDate: '2024-12-31T23:59:59.000Z' },
+          { id: 'cutoff-row', createdDate: '2025-01-01T00:00:00.000Z' },
+          { id: 'newer-row', createdTimestamp: '2025-02-01T00:00:00.000Z' },
+        ],
+        cutoff,
+      ).map((row) => row.id),
+    ).toEqual(['cutoff-row', 'newer-row']);
+  });
+});
+
+describe('Nabis historical line merge safety', () => {
+  it('builds a stable line fingerprint so resumable batches can avoid duplicate inserts without deleting sibling lines', () => {
+    const first = nabisOrderLineFingerprint({
+      externalOrderId: 'order-1',
+      productName: 'Ichi-Roll Single 1g',
+      quantity: 10,
+      unitPrice: 5,
+      isSample: false,
+      itemStrain: 'Time Warp',
+      itemCategory: 'Pre-roll',
+      itemClass: 'Cannabis',
+    });
+    const same = nabisOrderLineFingerprint({
+      externalOrderId: 'order-1',
+      productName: 'Ichi-Roll Single 1g',
+      quantity: 10.0,
+      unitPrice: 5.0,
+      isSample: false,
+      itemStrain: 'Time Warp',
+      itemCategory: 'Pre-roll',
+      itemClass: 'Cannabis',
+    });
+    const sibling = nabisOrderLineFingerprint({
+      externalOrderId: 'order-1',
+      productName: 'Zips 3.5g',
+      quantity: 4,
+      unitPrice: 20,
+      isSample: false,
+      itemStrain: 'Blue Dream',
+      itemCategory: 'Flower',
+      itemClass: 'Cannabis',
+    });
+
+    expect(first).toBe(same);
+    expect(first).not.toBe(sibling);
   });
 });

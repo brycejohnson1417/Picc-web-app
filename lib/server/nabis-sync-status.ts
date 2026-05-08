@@ -3,7 +3,7 @@ import 'server-only';
 import { IntegrationProvider, IntegrationSyncStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 
-const NABIS_STATUS_MODULES = ['retailers', 'orders', 'orders_reconcile', 'nabis_global_sync_lease'] as const;
+const NABIS_STATUS_MODULES = ['retailers', 'orders', 'orders_reconcile', 'orders_historical_backfill', 'nabis_global_sync_lease'] as const;
 
 type NabisStatusModule = (typeof NABIS_STATUS_MODULES)[number];
 
@@ -23,6 +23,16 @@ type CheckpointMetadata = {
   retailers?: unknown;
   lineItems?: unknown;
   metricRows?: unknown;
+  historicalBackfill?: unknown;
+  cutoffDate?: unknown;
+  pagesScanned?: unknown;
+  cutoffReached?: unknown;
+  nextPage?: unknown;
+  hasMore?: unknown;
+  skipped?: unknown;
+  skipReason?: unknown;
+  earliestOrderCreatedAt?: unknown;
+  latestOrderCreatedAt?: unknown;
 };
 
 function metadataObject(value: unknown): CheckpointMetadata {
@@ -135,7 +145,17 @@ export async function getNabisAdminSyncStatus(orgId: string) {
         retailers: numberValue(metadata.retailers),
         lineItems: numberValue(metadata.lineItems),
         metricRows: numberValue(metadata.metricRows),
+        pagesScanned: numberValue(metadata.pagesScanned),
       },
+      historicalBackfill: metadata.historicalBackfill === true,
+      cutoffDate: stringValue(metadata.cutoffDate),
+      cutoffReached: metadata.cutoffReached === true,
+      nextPage: numberValue(metadata.nextPage),
+      hasMore: metadata.hasMore === true,
+      skipped: metadata.skipped === true,
+      skipReason: stringValue(metadata.skipReason),
+      earliestOrderCreatedAt: stringValue(metadata.earliestOrderCreatedAt),
+      latestOrderCreatedAt: stringValue(metadata.latestOrderCreatedAt),
     };
   });
 
@@ -195,10 +215,10 @@ export async function getNabisAdminSyncStatus(orgId: string) {
         label: 'Run Retailer Sync',
       },
       historicalBackfill: {
-        enabled: false,
+        enabled: true,
         module: 'nabis-historical-backfill',
         label: 'Run Historical Backfill',
-        disabledReason: 'Historical backfill is queued for issue #43 after the admin status surface is live.',
+        description: 'Runs the next bounded historical batch from 2025-01-01 with the global sync lease, rate-limit pacing, and resumable progress.',
       },
     },
   };
