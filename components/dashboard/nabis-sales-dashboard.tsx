@@ -21,18 +21,20 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
-import type { DashboardDateRange, NabisDashboardMetadata, NabisDashboardResponse, ProcessedNabisOrder, RepStat, SerializedNabisOrder } from '@/lib/dashboard/nabis-types';
-import { deserializeOrders, formatCurrency, formatTimestamp, getDefaultDateRange, isDateRangeValid } from '@/lib/dashboard/nabis-client';
+import type { NabisDashboardAnalytics } from '@/lib/dashboard/nabis-analytics';
+import type { DashboardDateRange, NabisDashboardMetadata, NabisDashboardResponse, ProcessedNabisOrder, SerializedNabisOrder } from '@/lib/dashboard/nabis-types';
+import { deserializeOrders, formatCurrency, formatTimestamp, getDefaultDateRange, getPresetDateRange, isDateRangeValid, type DashboardRangePreset } from '@/lib/dashboard/nabis-client';
 import { SalesTrendChart } from '@/components/dashboard/sales-trend-chart';
 
 const REP_COLORS = ['#1d4ed8', '#2563eb', '#0f766e', '#0284c7', '#7c3aed', '#db2777', '#f97316', '#eab308', '#16a34a', '#475569'];
 const DASHBOARD_SNAPSHOT_TTL_MS = 1000 * 60 * 5;
-const DASHBOARD_SNAPSHOT_KEY_PREFIX = 'picc:nabis-dashboard';
+const DASHBOARD_SNAPSHOT_KEY_PREFIX = 'picc:nabis-dashboard:v3';
 
 type DashboardSnapshot = {
   fetchedAt: number;
   orders: SerializedNabisOrder[];
   metadata: NabisDashboardMetadata;
+  analytics: NabisDashboardAnalytics;
 };
 
 function dashboardSnapshotKey(range: DashboardDateRange) {
@@ -69,8 +71,10 @@ function writeDashboardSnapshot(range: DashboardDateRange, payload: DashboardSna
 
 export function NabisSalesDashboard() {
   const [dateRange, setDateRange] = useState<DashboardDateRange>(() => getDefaultDateRange());
+  const [rangePreset, setRangePreset] = useState<DashboardRangePreset>('current-month');
   const [orders, setOrders] = useState<ProcessedNabisOrder[]>([]);
   const [metadata, setMetadata] = useState<NabisDashboardMetadata | null>(null);
+  const [analytics, setAnalytics] = useState<NabisDashboardAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +90,7 @@ export function NabisSalesDashboard() {
     if (snapshot) {
       setOrders(deserializeOrders(snapshot.orders));
       setMetadata(snapshot.metadata);
+      setAnalytics(snapshot.analytics);
       setError(null);
     } else {
       if (initial) {
@@ -123,11 +128,13 @@ export function NabisSalesDashboard() {
 
       setOrders(deserializeOrders(payload.orders));
       setMetadata(payload.metadata);
+      setAnalytics(payload.analytics);
       setError(null);
       writeDashboardSnapshot(nextRange, {
         fetchedAt: Date.now(),
         orders: payload.orders,
         metadata: payload.metadata,
+        analytics: payload.analytics,
       });
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Failed to load dashboard data.';
@@ -145,32 +152,8 @@ export function NabisSalesDashboard() {
     void loadDashboard(getDefaultDateRange(), { initial: true });
   }, []);
 
-  const { availableMonths, monthlyTrend } = useMemo(() => {
-    const months = new Set<string>();
-    const trendMap = new Map<string, number>();
-
-    for (const order of orders) {
-      months.add(order.monthKey);
-      if (!order.isCanceled) {
-        trendMap.set(order.monthKey, (trendMap.get(order.monthKey) || 0) + order.total);
-      }
-    }
-
-    const sortedMonths = [...months].sort();
-    return {
-      availableMonths: sortedMonths,
-      monthlyTrend: [...trendMap.entries()]
-        .map(([monthKey, revenue]) => ({
-          monthKey,
-          name: new Date(`${monthKey}-15T12:00:00`).toLocaleDateString('en-US', {
-            month: 'short',
-            year: 'numeric',
-          }),
-          revenue,
-        }))
-        .sort((left, right) => left.monthKey.localeCompare(right.monthKey)),
-    };
-  }, [orders]);
+  const monthlyTrend = useMemo(() => analytics?.monthlyTrend ?? [], [analytics]);
+  const availableMonths = useMemo(() => monthlyTrend.map((month) => month.monthKey), [monthlyTrend]);
 
   useEffect(() => {
     const latestMonth = availableMonths[availableMonths.length - 1] || '';
@@ -187,40 +170,38 @@ export function NabisSalesDashboard() {
   const monthlyData = useMemo(() => orders.filter((order) => order.monthKey === selectedMonth), [orders, selectedMonth]);
 
   const tableData = useMemo(() => {
-    const base = showCanceled ? monthlyData : monthlyData.filter((order) => !order.isCanceled);
+    const base = showCanceled ? orders : orders.filter((order) => !order.isCanceled);
     return [...base].sort((left, right) => {
       if (left.createdDate.getTime() === right.createdDate.getTime()) {
         return right.orderNumber.localeCompare(left.orderNumber);
       }
       return right.createdDate.getTime() - left.createdDate.getTime();
     });
-  }, [monthlyData, showCanceled]);
+  }, [orders, showCanceled]);
 
-  const stats = useMemo(() => {
-    const validOrders = monthlyData.filter((order) => !order.isCanceled);
-    const totalRevenue = validOrders.reduce((sum, order) => sum + order.total, 0);
-    const totalOrders = validOrders.length;
+  const stats = analytics ?? {
+    totalRevenue: 0,
+    totalOrders: 0,
+    activeSalesReps: 0,
+    monthlyTrend: [],
+    repStats: [],
+    repMonthlyMetrics: [],
+    dataNotes: [],
+  };
 
-    const repMap = new Map<string, RepStat>();
-    for (const order of validOrders) {
-      const current = repMap.get(order.salesRep) || { name: order.salesRep, revenue: 0, orderCount: 0 };
-      current.revenue += order.total;
-      current.orderCount += 1;
-      repMap.set(order.salesRep, current);
-    }
-
-    return {
-      totalRevenue,
-      totalOrders,
-      repStats: [...repMap.values()].sort((left, right) => right.revenue - left.revenue),
-    };
-  }, [monthlyData]);
-
-  const selectedMonthLabel = selectedMonth
-    ? new Date(`${selectedMonth}-15T12:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
-    : 'Selected Month';
+  const selectedRangeLabel = `${dateRange.start} to ${dateRange.end}`;
   const rangeIsValid = isDateRangeValid(dateRange);
   const actionLocked = isRefreshing || isGeneratingPDF;
+
+  const handlePresetChange = (preset: DashboardRangePreset) => {
+    setRangePreset(preset);
+    if (preset === 'custom') {
+      return;
+    }
+    const nextRange = getPresetDateRange(preset);
+    setDateRange(nextRange);
+    void loadDashboard(nextRange);
+  };
 
   const handleExportCSV = () => {
     if (tableData.length === 0) {
@@ -244,7 +225,7 @@ export function NabisSalesDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `nabis_orders_${selectedMonth || 'live'}.csv`;
+    link.download = `nabis_orders_${dateRange.start}_to_${dateRange.end}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -294,11 +275,11 @@ export function NabisSalesDashboard() {
       doc.text('PICC Nabis Sales Dashboard', margin, currentY + 6);
       doc.setFontSize(10);
       doc.setTextColor(100, 116, 139);
-      const monthText = `Month: ${selectedMonthLabel}`;
+      const monthText = `Range: ${selectedRangeLabel}`;
       doc.text(monthText, pageWidth - margin - doc.getTextWidth(monthText), currentY + 6);
       currentY += 15;
 
-      for (const sectionId of ['kpi-section', 'trend-chart-section', 'sales-trend-section', 'rep-revenue-chart', 'market-share-card']) {
+      for (const sectionId of ['kpi-section', 'trend-chart-section', 'sales-trend-section', 'rep-revenue-chart', 'rep-month-metrics-card', 'market-share-card']) {
         await addSection(sectionId);
       }
 
@@ -308,7 +289,7 @@ export function NabisSalesDashboard() {
       } else {
         doc.setFontSize(12);
         doc.setTextColor(30, 41, 59);
-        doc.text(`Order Details (${selectedMonthLabel})`, margin, currentY);
+        doc.text(`Order Details (${selectedRangeLabel})`, margin, currentY);
         currentY += 5;
       }
 
@@ -329,7 +310,7 @@ export function NabisSalesDashboard() {
         margin: { left: margin, right: margin, bottom: margin },
       });
 
-      doc.save(`Nabis_Sales_Report_${selectedMonth}.pdf`);
+      doc.save(`Nabis_Sales_Report_${dateRange.start}_to_${dateRange.end}.pdf`);
     } catch (caughtError) {
       console.error('PDF generation failed', caughtError);
       toast.error('Failed to generate the PDF report.');
@@ -401,6 +382,26 @@ export function NabisSalesDashboard() {
             </div>
 
             <div className={`flex flex-col gap-3 xl:items-end ${isGeneratingPDF ? 'opacity-0' : ''}`}>
+              <div className="grid w-full grid-cols-2 gap-2 rounded-2xl border border-[#d3d9e2] bg-white p-1 shadow-sm sm:grid-cols-4 xl:w-auto">
+                {[
+                  ['current-month', 'Current Month'],
+                  ['ytd', 'YTD'],
+                  ['trailing-12', 'Trailing 12'],
+                  ['custom', 'Custom'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => handlePresetChange(value as DashboardRangePreset)}
+                    disabled={actionLocked}
+                    className={`h-9 rounded-xl px-3 text-sm font-semibold transition ${
+                      rangePreset === value ? 'bg-[#18212d] text-white shadow-sm' : 'text-[#536070] hover:bg-[#f2f5f9]'
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[180px_160px_160px_auto_auto]">
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -424,7 +425,10 @@ export function NabisSalesDashboard() {
                   <input
                     type="date"
                     value={dateRange.start}
-                    onChange={(event) => setDateRange((current) => ({ ...current, start: event.target.value }))}
+                    onChange={(event) => {
+                      setRangePreset('custom');
+                      setDateRange((current) => ({ ...current, start: event.target.value }));
+                    }}
                     className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#243040] outline-none"
                   />
                 </label>
@@ -434,7 +438,10 @@ export function NabisSalesDashboard() {
                   <input
                     type="date"
                     value={dateRange.end}
-                    onChange={(event) => setDateRange((current) => ({ ...current, end: event.target.value }))}
+                    onChange={(event) => {
+                      setRangePreset('custom');
+                      setDateRange((current) => ({ ...current, end: event.target.value }));
+                    }}
                     className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#243040] outline-none"
                   />
                 </label>
@@ -456,7 +463,7 @@ export function NabisSalesDashboard() {
                   className="inline-flex items-center justify-center rounded-xl border border-[#d3d9e2] bg-white px-4 py-2.5 text-sm font-semibold text-[#243040] shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <RefreshCcw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  Refresh
+                  Sync Now
                 </button>
               </div>
 
@@ -485,7 +492,7 @@ export function NabisSalesDashboard() {
 
           {metadata ? (
             <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
-              <InfoCard label="Requested Range" value={`${metadata.range.startCreatedAt} to ${metadata.range.endCreatedAt}`} />
+              <InfoCard label="Selected Range" value={`${metadata.range.startCreatedAt} to ${metadata.range.endCreatedAt}`} />
               <InfoCard
                 label="Valid Orders Loaded"
                 value={metadata.uniqueOrders.toLocaleString()}
@@ -499,9 +506,9 @@ export function NabisSalesDashboard() {
                   .join(' · ')}
               />
               <InfoCard
-                label="Local Rows Loaded"
-                value={`${metadata.lineItems.toLocaleString()} synced order row${metadata.lineItems === 1 ? '' : 's'}`}
-                note={metadata.syncLagSeconds != null ? `Sync lag ${Math.max(1, Math.round(metadata.syncLagSeconds / 60))} min` : undefined}
+                label="Cache Coverage"
+                value={metadata.cacheCoverage.fullyCovered ? 'Fully covered' : 'Partial cache'}
+                note={`${metadata.cacheCoverage.cachedOrderCount.toLocaleString()} cached orders · ${metadata.cacheCoverage.cachedLineItemCount.toLocaleString()} cached lines`}
               />
             </div>
           ) : null}
@@ -515,9 +522,15 @@ export function NabisSalesDashboard() {
 
           {metadata?.staleWarning ? <Banner tone="info">{metadata.staleWarning}</Banner> : null}
 
-          {metadata?.partialScan ? (
+          {metadata?.cacheCoverage ? <Banner tone={metadata.cacheCoverage.fullyCovered ? 'info' : 'warning'}>{metadata.cacheCoverage.message}</Banner> : null}
+
+          {metadata?.territorySnapshot.available === false ? (
+            <Banner tone="warning">Territory status cache is unavailable, so customer, VMI, and sampled-lead metrics are hidden until the cache is restored.</Banner>
+          ) : null}
+
+          {metadata?.territorySnapshot.available && metadata.territorySnapshot.syncedAt ? (
             <Banner tone="info">
-              The NY feed is scanned incrementally from newest to oldest. If a broader date range looks incomplete, narrow the window and reload.
+              Store status metrics use the cached territory snapshot from {formatTimestamp(metadata.territorySnapshot.syncedAt)}. Historical VMI status changes are not cached, so New VMI is a current-status proxy.
             </Banner>
           ) : null}
 
@@ -537,9 +550,9 @@ export function NabisSalesDashboard() {
           ) : (
             <>
               <div id="kpi-section" className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <KpiCard icon={<DollarSign className="h-7 w-7 text-emerald-600" />} iconBg="bg-emerald-50" label={`Total Revenue (${selectedMonth})`} value={formatCurrency(stats.totalRevenue)} helper="Net sales" />
-                <KpiCard icon={<ShoppingBag className="h-7 w-7 text-blue-600" />} iconBg="bg-blue-50" label={`Total Orders (${selectedMonth})`} value={String(stats.totalOrders)} helper="Valid orders" />
-                <KpiCard icon={<Users className="h-7 w-7 text-indigo-600" />} iconBg="bg-indigo-50" label="Active Sales Reps" value={String(stats.repStats.length)} helper="Contributors" />
+                <KpiCard icon={<DollarSign className="h-7 w-7 text-emerald-600" />} iconBg="bg-emerald-50" label="Total Revenue" value={formatCurrency(stats.totalRevenue)} helper={selectedRangeLabel} />
+                <KpiCard icon={<ShoppingBag className="h-7 w-7 text-blue-600" />} iconBg="bg-blue-50" label="Paid Orders" value={String(stats.totalOrders)} helper="Canceled and transfers excluded" />
+                <KpiCard icon={<Users className="h-7 w-7 text-indigo-600" />} iconBg="bg-indigo-50" label="Active Sales Reps" value={String(stats.activeSalesReps)} helper="With paid orders in range" />
               </div>
 
               <div id="trend-chart-section" className="rounded-[24px] border border-[#dfe3ea] bg-white p-5 shadow-sm">
@@ -575,7 +588,7 @@ export function NabisSalesDashboard() {
 
               <div className="grid gap-6 lg:grid-cols-3">
                 <div id="rep-revenue-chart" className="rounded-[24px] border border-[#dfe3ea] bg-white p-5 shadow-sm lg:col-span-2">
-                  <h2 className="mb-5 text-lg font-semibold text-[#18212d]">Revenue by Sales Rep ({selectedMonth})</h2>
+                  <h2 className="mb-5 text-lg font-semibold text-[#18212d]">Revenue by Sales Rep ({selectedRangeLabel})</h2>
                   <div className="h-[420px] w-full min-w-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={stats.repStats} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
@@ -598,7 +611,7 @@ export function NabisSalesDashboard() {
                 </div>
 
                 <div id="market-share-card" className="flex min-w-0 flex-col rounded-[24px] border border-[#dfe3ea] bg-white p-5 shadow-sm">
-                  <h2 className="mb-4 text-lg font-semibold text-[#18212d]">Market Share ({selectedMonth})</h2>
+                  <h2 className="mb-4 text-lg font-semibold text-[#18212d]">Rep Share ({selectedRangeLabel})</h2>
                   <div className="mb-6 h-[250px] w-full min-w-0 shrink-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -635,11 +648,65 @@ export function NabisSalesDashboard() {
                 </div>
               </div>
 
+              <div id="rep-month-metrics-card" className="overflow-hidden rounded-[24px] border border-[#dfe3ea] bg-white shadow-sm">
+                <div className="border-b border-[#e3e7ee] px-5 py-4">
+                  <h2 className="text-lg font-semibold text-[#18212d]">Rep Metrics by Month</h2>
+                  <p className="mt-1 text-sm text-[#5f6773]">VMI is Preferred Partner. Store counts use the cached territory status snapshot; sales and reorders use cached Nabis paid orders.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-[1180px] divide-y divide-[#e5e7eb]">
+                    <thead className="bg-[#f7f9fc]">
+                      <tr>
+                        {[
+                          'Month',
+                          'Rep',
+                          'Sales',
+                          'Stores',
+                          'New Stores',
+                          'VMI',
+                          'New VMI',
+                          'Non-VMI',
+                          'Non-VMI Reorders',
+                          'Reorder %',
+                          'Sampled Leads',
+                        ].map((label) => (
+                          <th key={label} className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.08em] text-[#6c7480] ${['Sales', 'Stores', 'New Stores', 'VMI', 'New VMI', 'Non-VMI', 'Non-VMI Reorders', 'Reorder %', 'Sampled Leads'].includes(label) ? 'text-right' : ''}`}>
+                            {label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#eef1f5] bg-white">
+                      {stats.repMonthlyMetrics.map((row) => (
+                        <tr key={`${row.monthKey}-${row.repName}`}>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-[#243040]">{row.monthLabel}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-[#18212d]">{row.repName}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-[#18212d]">{formatCurrency(row.salesInTerritory)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-[#5f6773]">{row.customerStoreCount.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-[#5f6773]">{row.newStoreCount.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-[#5f6773]">{row.vmiStoreCount.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-[#5f6773]">{row.newVmiStoreCount.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-[#5f6773]">{row.nonVmiStoreCount.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-[#5f6773]">{row.nonVmiReorderCount.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-[#18212d]">{row.reorderPercent == null ? 'N/A' : `${row.reorderPercent.toFixed(2)}%`}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-[#5f6773]">{row.nonClosedSampledStoreCount.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {stats.dataNotes.length > 0 ? (
+                  <div className="border-t border-[#e3e7ee] bg-[#f9fafc] px-5 py-3 text-xs leading-5 text-[#66707d]">
+                    {stats.dataNotes.join(' ')}
+                  </div>
+                ) : null}
+              </div>
+
               <div className="overflow-hidden rounded-[24px] border border-[#dfe3ea] bg-white shadow-sm">
                 <div className="flex flex-col gap-4 border-b border-[#e3e7ee] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold text-[#18212d]">Order Details ({selectedMonthLabel})</h2>
-                    <p className="mt-1 text-sm text-[#5f6773]">Live order-level view deduplicated from the NY line-item feed.</p>
+                    <h2 className="text-lg font-semibold text-[#18212d]">Order Details ({selectedRangeLabel})</h2>
+                    <p className="mt-1 text-sm text-[#5f6773]">Cached Postgres order-level view deduplicated from the NY line-item feed.</p>
                   </div>
                   <div className={`flex items-center gap-2 ${isGeneratingPDF ? 'hidden' : ''}`}>
                     <input

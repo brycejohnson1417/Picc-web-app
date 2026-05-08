@@ -1,11 +1,21 @@
 import 'server-only';
 
 import { prisma } from '@/lib/db/prisma';
+import {
+  buildCacheCoverage,
+  formatNabisSalesRep,
+  summarizeNabisDashboardAnalytics,
+  type AnalyticsOrder,
+  type AnalyticsTerritoryStore,
+} from '@/lib/dashboard/nabis-analytics';
 import { getNabisSyncFreshness, syncNabisOrders } from '@/lib/server/nabis-sync';
+import { readNotionCacheSnapshot } from '@/lib/server/notion-cache-store';
 import { excludedInternalTransferRetailers } from '@/lib/nabis/internal-transfers';
 import type { NabisDashboardMetadata, NabisDashboardResponse, SerializedNabisOrder } from '@/lib/dashboard/nabis-types';
+import type { TerritoryStorePin } from '@/lib/territory/types';
 
 const CANCELED_STATUSES = new Set(['CANCELED', 'CANCELLED', 'VOID', 'VOIDED', 'REJECTED', 'REFUNDED']);
+const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v3';
 
 export function isIsoDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -58,6 +68,95 @@ function staleWarning(syncLagSeconds: number | null) {
   return null;
 }
 
+function isCanceledStatus(status: string | null | undefined) {
+  return CANCELED_STATUSES.has(String(status || '').toUpperCase());
+}
+
+function isValidDashboardOrder(row: { status: string | null; isInternalTransfer: boolean; orderTotal: unknown }) {
+  const total = row.orderTotal ? Number(row.orderTotal) : 0;
+  return !row.isInternalTransfer && !isCanceledStatus(row.status) && total > 0;
+}
+
+function serializeOrder(row: {
+  id: string;
+  externalOrderId: string;
+  orderNumber: string | null;
+  licensedLocationId: string | null;
+  licensedLocationName: string | null;
+  orderCreatedDate: Date | null;
+  status: string | null;
+  isInternalTransfer: boolean;
+  orderTotal: unknown;
+  salesRep: string | null;
+  account: { id: string; name: string } | null;
+}): SerializedNabisOrder {
+  return {
+    id: row.id,
+    orderNumber: row.orderNumber ?? row.externalOrderId,
+    createdDate: toDateKey(row.orderCreatedDate ?? new Date()),
+    status: row.status ?? 'UNKNOWN',
+    customerName: row.licensedLocationName ?? 'Unknown Retailer',
+    total: row.orderTotal ? Number(row.orderTotal) : 0,
+    salesRep: formatNabisSalesRep(row.salesRep),
+    monthKey: toDateKey(row.orderCreatedDate ?? new Date()).slice(0, 7),
+    isCanceled: isCanceledStatus(row.status),
+    licensedLocationId: row.licensedLocationId ?? null,
+    matchedAccountId: row.account?.id ?? null,
+    matchedAccountName: row.account?.name ?? null,
+  };
+}
+
+function toAnalyticsOrder(order: SerializedNabisOrder, input?: { isInternalTransfer?: boolean }): AnalyticsOrder {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    createdDate: order.createdDate,
+    status: order.status,
+    customerName: order.customerName,
+    total: order.total,
+    salesRep: order.salesRep,
+    licensedLocationId: order.licensedLocationId,
+    matchedAccountId: order.matchedAccountId,
+    matchedAccountName: order.matchedAccountName,
+    isInternalTransfer: input?.isInternalTransfer ?? false,
+  };
+}
+
+function normalizeCachedTerritoryStores(payload: unknown): TerritoryStorePin[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload.filter((row): row is TerritoryStorePin => {
+    return Boolean(row && typeof row === 'object' && typeof (row as { id?: unknown }).id === 'string' && typeof (row as { name?: unknown }).name === 'string');
+  });
+}
+
+function toAnalyticsTerritoryStore(store: TerritoryStorePin): AnalyticsTerritoryStore {
+  return {
+    id: store.id,
+    name: store.name,
+    statusKey: store.statusKey,
+    repNames: Array.isArray(store.repNames) ? store.repNames : [],
+    licenseNumber: store.licenseNumber ?? null,
+    isPreferredPartner: store.isPreferredPartner ?? false,
+    lastSampleOrderDate: store.lastSampleOrderDate ?? null,
+    lastSampleDeliveryDate: store.lastSampleDeliveryDate ?? null,
+  };
+}
+
+async function loadCachedTerritoryStores() {
+  const snapshot = await readNotionCacheSnapshot<TerritoryStorePin[]>(TERRITORY_SNAPSHOT_KEY);
+  const stores = normalizeCachedTerritoryStores(snapshot?.payload);
+
+  return {
+    stores: stores.map(toAnalyticsTerritoryStore),
+    syncedAt: snapshot?.syncedAt ?? null,
+    recordsRead: snapshot?.recordsRead ?? stores.length,
+    available: stores.length > 0,
+  };
+}
+
 export async function getDashboardPayload(input: {
   orgId: string;
   start: string;
@@ -69,19 +168,22 @@ export async function getDashboardPayload(input: {
     await syncNabisOrders(input.orgId, input.actor);
   }
 
+  const orderWhere = {
+    orgId: input.orgId,
+    orderCreatedDate: {
+      lte: endOfDayUtc(input.end),
+    },
+    NOT: excludedInternalTransferRetailers.map((value) => ({
+      licensedLocationName: {
+        equals: value,
+        mode: 'insensitive' as const,
+      },
+    })),
+  };
+
   const rows = await prisma.nabisOrder.findMany({
     where: {
-      orgId: input.orgId,
-      orderCreatedDate: {
-        gte: startOfDayUtc(input.start),
-        lte: endOfDayUtc(input.end),
-      },
-      NOT: excludedInternalTransferRetailers.map((value) => ({
-        licensedLocationName: {
-          equals: value,
-          mode: 'insensitive' as const,
-        },
-      })),
+      ...orderWhere,
     },
     select: {
       id: true,
@@ -104,31 +206,71 @@ export async function getDashboardPayload(input: {
     orderBy: [{ orderCreatedDate: 'desc' }, { externalOrderId: 'desc' }],
   });
 
-  const canceledOrders = rows.filter((row) => CANCELED_STATUSES.has(String(row.status || '').toUpperCase())).length;
-  const internalTransferOrders = rows.filter((row) => row.isInternalTransfer).length;
+  const rangeRows = rows.filter((row) => {
+    const dateKey = row.orderCreatedDate ? toDateKey(row.orderCreatedDate) : null;
+    return Boolean(dateKey && dateKey >= input.start && dateKey <= input.end);
+  });
+  const canceledOrders = rangeRows.filter((row) => isCanceledStatus(row.status)).length;
+  const internalTransferOrders = rangeRows.filter((row) => row.isInternalTransfer).length;
 
-  const orders: SerializedNabisOrder[] = rows
-    .filter((row) => !row.isInternalTransfer && !CANCELED_STATUSES.has(String(row.status || '').toUpperCase()))
-    .map((row) => ({
-      id: row.id,
-      orderNumber: row.orderNumber ?? row.externalOrderId,
-      createdDate: toDateKey(row.orderCreatedDate ?? new Date()),
-      status: row.status ?? 'UNKNOWN',
-      customerName: row.licensedLocationName ?? 'Unknown Retailer',
-      total: row.orderTotal ? Number(row.orderTotal) : 0,
-      salesRep: row.salesRep ?? 'Unassigned',
-      monthKey: toDateKey(row.orderCreatedDate ?? new Date()).slice(0, 7),
-      isCanceled: false,
-      licensedLocationId: row.licensedLocationId ?? null,
-      matchedAccountId: row.account?.id ?? null,
-      matchedAccountName: row.account?.name ?? null,
-    }));
+  const allSerializedOrders = rows.map(serializeOrder);
+  const orders = rangeRows.filter(isValidDashboardOrder).map(serializeOrder);
 
-  const freshness = await getNabisSyncFreshness(input.orgId);
+  const [freshness, territorySnapshot, coverageAggregate, cachedOrderCount, cachedLineItemCount, rangeLineItems] = await Promise.all([
+    getNabisSyncFreshness(input.orgId),
+    loadCachedTerritoryStores(),
+    prisma.nabisOrder.aggregate({
+      where: {
+        orgId: input.orgId,
+      },
+      _min: {
+        orderCreatedDate: true,
+      },
+      _max: {
+        orderCreatedDate: true,
+      },
+    }),
+    prisma.nabisOrder.count({
+      where: {
+        orgId: input.orgId,
+      },
+    }),
+    prisma.nabisOrderLine.count({
+      where: {
+        orgId: input.orgId,
+      },
+    }),
+    prisma.nabisOrderLine.count({
+      where: {
+        orgId: input.orgId,
+        nabisOrder: {
+          orderCreatedDate: {
+            gte: startOfDayUtc(input.start),
+            lte: endOfDayUtc(input.end),
+          },
+        },
+      },
+    }),
+  ]);
+
   const syncLag = secondsSince(freshness.lastOrderSyncAt);
+  const cacheCoverage = buildCacheCoverage({
+    requestedRange: { start: input.start, end: input.end },
+    earliestOrderCreatedAt: coverageAggregate._min.orderCreatedDate?.toISOString() ?? null,
+    latestOrderCreatedAt: coverageAggregate._max.orderCreatedDate?.toISOString() ?? null,
+    cachedOrderCount,
+    cachedLineItemCount,
+  });
+
+  const analytics = summarizeNabisDashboardAnalytics({
+    orders: allSerializedOrders.map((order) => toAnalyticsOrder(order)),
+    territoryStores: territorySnapshot.stores,
+    range: { start: input.start, end: input.end },
+  });
 
   return {
     orders,
+    analytics,
     metadata: {
       fetchedAt: freshness.lastOrderSyncAt ?? new Date().toISOString(),
       dataSource: 'local-postgres',
@@ -139,17 +281,23 @@ export async function getDashboardPayload(input: {
       uniqueOrders: orders.length,
       canceledOrders,
       internalTransferOrders,
-      lineItems: rows.length,
-      totalCount: rows.length,
+      lineItems: rangeLineItems,
+      totalCount: rangeRows.length,
       totalPages: 1,
       pagesScanned: 0,
-      partialScan: false,
+      partialScan: !cacheCoverage.fullyCovered,
       cacheHit: false,
       lastOrderSyncAt: freshness.lastOrderSyncAt,
       lastRetailerSyncAt: freshness.lastRetailerSyncAt,
       lastReconciliationAt: freshness.lastReconciliationAt,
       syncLagSeconds: syncLag,
       staleWarning: staleWarning(syncLag),
+      cacheCoverage,
+      territorySnapshot: {
+        syncedAt: territorySnapshot.syncedAt,
+        recordsRead: territorySnapshot.recordsRead,
+        available: territorySnapshot.available,
+      },
     } satisfies NabisDashboardMetadata,
   } satisfies NabisDashboardResponse;
 }
