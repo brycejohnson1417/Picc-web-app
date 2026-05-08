@@ -728,6 +728,13 @@ export function pageIsOlderThanCutoff(rows: NabisOrderApiRow[], cutoff: Date) {
   return validDates[validDates.length - 1].getTime() < cutoff.getTime();
 }
 
+export function filterOrderRowsOnOrAfterCutoff(rows: NabisOrderApiRow[], cutoff: Date) {
+  return rows.filter((row) => {
+    const createdAt = parseDate(row.createdTimestamp ?? row.createdDate ?? null);
+    return !createdAt || createdAt.getTime() >= cutoff.getTime();
+  });
+}
+
 function resolveOrderSyncCutoff(options?: OrderSyncOptions) {
   if (options?.historicalBackfill) {
     const requested = options.historicalStartDate ? new Date(options.historicalStartDate) : new Date(HISTORICAL_ORDER_BACKFILL_START_DATE);
@@ -784,7 +791,8 @@ async function loadOrdersFromNabis(
 
     const payload = await fetchNabisPage<NabisOrderApiRow>('/v2/ny/order', page);
     const pageRows = payload.data ?? [];
-    const parsedRows = pageRows.map(parseOrderRow).filter((row): row is ParsedOrder => Boolean(row));
+    const rowsToParse = options?.historicalBackfill ? filterOrderRowsOnOrAfterCutoff(pageRows, cutoff) : pageRows;
+    const parsedRows = rowsToParse.map(parseOrderRow).filter((row): row is ParsedOrder => Boolean(row));
     rows.push(...parsedRows);
     pagesScanned += 1;
     recordsRead += pageRows.length;

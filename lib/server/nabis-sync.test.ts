@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { IntegrationSyncStatus } from '@prisma/client';
-import { evaluateNabisSyncLease, getRetryDelayMs, pageIsOlderThanCutoff, parseNabisOrderLineForCache } from '@/lib/server/nabis-sync';
+import {
+  evaluateNabisSyncLease,
+  filterOrderRowsOnOrAfterCutoff,
+  getRetryDelayMs,
+  pageIsOlderThanCutoff,
+  parseNabisOrderLineForCache,
+} from '@/lib/server/nabis-sync';
 
 describe('Nabis sync line cache parsing', () => {
   it('extracts order line detail needed for local PPP savings calculations', () => {
@@ -121,5 +127,20 @@ describe('Nabis historical backfill paging', () => {
         cutoff,
       ),
     ).toBe(true);
+  });
+
+  it('batch-cutoff excludes pre-cutoff rows from the historical backfill page before upsert', () => {
+    const cutoff = new Date('2025-01-01T00:00:00.000Z');
+
+    expect(
+      filterOrderRowsOnOrAfterCutoff(
+        [
+          { id: 'older-row', createdDate: '2024-12-31T23:59:59.000Z' },
+          { id: 'cutoff-row', createdDate: '2025-01-01T00:00:00.000Z' },
+          { id: 'newer-row', createdTimestamp: '2025-02-01T00:00:00.000Z' },
+        ],
+        cutoff,
+      ).map((row) => row.id),
+    ).toEqual(['cutoff-row', 'newer-row']);
   });
 });
