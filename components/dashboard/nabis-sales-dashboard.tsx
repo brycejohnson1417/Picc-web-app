@@ -402,7 +402,7 @@ export function NabisSalesDashboard() {
                   </button>
                 ))}
               </div>
-              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[180px_160px_160px_auto_auto]">
+              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[180px_minmax(190px,1fr)_minmax(190px,1fr)_auto_auto]">
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                     <Calendar className="h-4 w-4 text-[#8a919c]" />
@@ -429,7 +429,7 @@ export function NabisSalesDashboard() {
                       setRangePreset('custom');
                       setDateRange((current) => ({ ...current, start: event.target.value }));
                     }}
-                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#243040] outline-none"
+                    className="min-w-[7.75rem] flex-1 border-0 bg-transparent p-0 text-sm text-[#243040] outline-none"
                   />
                 </label>
 
@@ -442,7 +442,7 @@ export function NabisSalesDashboard() {
                       setRangePreset('custom');
                       setDateRange((current) => ({ ...current, end: event.target.value }));
                     }}
-                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-[#243040] outline-none"
+                    className="min-w-[7.75rem] flex-1 border-0 bg-transparent p-0 text-sm text-[#243040] outline-none"
                   />
                 </label>
 
@@ -513,32 +513,7 @@ export function NabisSalesDashboard() {
             </div>
           ) : null}
 
-          {error ? (
-            <Banner tone="warning">
-              {metadata ? 'Showing the last successful sync. ' : ''}
-              {error}
-            </Banner>
-          ) : null}
-
-          {metadata?.staleWarning ? <Banner tone="info">{metadata.staleWarning}</Banner> : null}
-
-          {metadata?.cacheCoverage ? <Banner tone={metadata.cacheCoverage.fullyCovered ? 'info' : 'warning'}>{metadata.cacheCoverage.message}</Banner> : null}
-
-          {metadata?.territorySnapshot.available === false ? (
-            <Banner tone="warning">Territory status cache is unavailable, so customer, VMI, and sampled-lead metrics are hidden until the cache is restored.</Banner>
-          ) : null}
-
-          {metadata?.territorySnapshot.available && metadata.territorySnapshot.syncedAt ? (
-            <Banner tone="info">
-              Store status metrics use the cached territory snapshot from {formatTimestamp(metadata.territorySnapshot.syncedAt)}. Historical VMI status changes are not cached, so New VMI is a current-status proxy.
-            </Banner>
-          ) : null}
-
-          {orders.length === 0 ? (
-            <Banner tone="info">
-              The local order cache is still warming up. This dashboard reads saved Postgres data first for speed, and only refreshes Nabis when you explicitly ask it to or when the production cron runs.
-            </Banner>
-          ) : null}
+          <DashboardStatusStrip error={error} metadata={metadata} hasOrders={orders.length > 0} />
         </div>
 
         <div className="space-y-6 px-4 py-5 sm:px-6">
@@ -808,11 +783,74 @@ function InfoCard({ label, value, note }: { label: string; value: string; note?:
   );
 }
 
-function Banner({ tone, children }: { tone: 'warning' | 'info'; children: React.ReactNode }) {
+function DashboardStatusStrip({ error, metadata, hasOrders }: { error: string | null; metadata: NabisDashboardMetadata | null; hasOrders: boolean }) {
+  const items: Array<{ label: string; value: string; tone: 'warning' | 'info' | 'ok' }> = [];
+  const details: string[] = [];
+
+  if (error) {
+    items.push({ label: 'Dashboard', value: metadata ? 'Showing saved data' : 'Load issue', tone: 'warning' });
+    details.push(error);
+  }
+
+  if (metadata?.cacheCoverage) {
+    const coverage = metadata.cacheCoverage;
+    items.push({
+      label: 'Nabis cache',
+      value: coverage.status === 'empty' ? 'No orders found' : coverage.fullyCovered ? 'Covered' : 'Partial',
+      tone: coverage.fullyCovered ? 'ok' : 'warning',
+    });
+
+    if (!coverage.fullyCovered || coverage.status === 'empty') {
+      details.push(coverage.message);
+    }
+  }
+
+  if (metadata?.staleWarning) {
+    items.push({ label: 'Sync', value: 'Needs attention', tone: 'info' });
+    details.push(metadata.staleWarning);
+  }
+
+  if (metadata?.territorySnapshot.available === false) {
+    items.push({ label: 'Store status', value: 'Unavailable', tone: 'warning' });
+    details.push('Customer, VMI, and sampled-lead metrics are hidden until the territory cache is restored.');
+  } else if (metadata?.territorySnapshot.available && metadata.territorySnapshot.syncedAt) {
+    items.push({ label: 'Store status', value: formatTimestamp(metadata.territorySnapshot.syncedAt), tone: 'info' });
+    details.push('VMI is based on the current territory snapshot; historical VMI status changes are not cached.');
+  }
+
+  if (metadata?.cacheCoverage.status === 'empty' && !hasOrders) {
+    details.push('This dashboard reads saved Postgres data first; manual refresh only checks Nabis when you explicitly request it.');
+  }
+
+  if (items.length === 0) {
+    return null;
+  }
+
   return (
-    <div className={tone === 'warning' ? 'mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800' : 'mt-4 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800'}>
-      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-      <p>{children}</p>
+    <div className="mt-4 rounded-xl border border-[#d8dee8] bg-white/75 px-3 py-2 text-xs text-[#4f5661]">
+      <div className="flex flex-wrap items-center gap-2">
+        {items.map((item) => (
+          <StatusPill key={`${item.label}:${item.value}`} item={item} />
+        ))}
+      </div>
+      {details.length > 0 ? <p className="mt-2 leading-5 text-[#68717e]">{Array.from(new Set(details)).join(' ')}</p> : null}
     </div>
+  );
+}
+
+function StatusPill({ item }: { item: { label: string; value: string; tone: 'warning' | 'info' | 'ok' } }) {
+  const className =
+    item.tone === 'warning'
+      ? 'border-amber-200 bg-amber-50 text-amber-800'
+      : item.tone === 'ok'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : 'border-sky-200 bg-sky-50 text-sky-800';
+
+  return (
+    <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium ${className}`}>
+      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+      <span className="shrink-0 text-[#596170]">{item.label}</span>
+      <span className="truncate">{item.value}</span>
+    </span>
   );
 }
