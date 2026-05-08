@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
 import { prisma } from '@/lib/db/prisma';
-import { NabisSyncLeaseError, syncNabisRetailersAndOrders, syncNabisRetailersWithOptions } from '@/lib/server/nabis-sync';
+import { NabisSyncLeaseError, syncNabisOrders, syncNabisRetailersAndOrders, syncNabisRetailersWithOptions } from '@/lib/server/nabis-sync';
 
 export async function POST(req: Request) {
   const ctx = await guard(['ADMIN', 'OPS_TEAM', 'FINANCE']);
@@ -14,8 +14,11 @@ export async function POST(req: Request) {
     email: ctx.email,
   };
 
-  if (['all', 'nabis', 'nabis-orders', 'nabis-retailers'].includes(syncModule)) {
+  if (['all', 'nabis', 'nabis-orders', 'nabis-retailers', 'nabis-historical-backfill'].includes(syncModule)) {
     const run = async () => {
+      if (syncModule === 'nabis-historical-backfill') {
+        return syncNabisOrders(ctx.orgId, actor, { historicalBackfill: true, historicalStartDate: '2025-01-01T00:00:00.000Z' });
+      }
       if (syncModule === 'nabis-orders') {
         return syncNabisRetailersAndOrders(ctx.orgId, actor, { reconciliation: false, syncCrm: false });
       }

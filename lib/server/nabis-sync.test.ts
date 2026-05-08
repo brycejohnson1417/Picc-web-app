@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { IntegrationSyncStatus } from '@prisma/client';
-import { evaluateNabisSyncLease, getRetryDelayMs, parseNabisOrderLineForCache } from '@/lib/server/nabis-sync';
+import { evaluateNabisSyncLease, getRetryDelayMs, pageIsOlderThanCutoff, parseNabisOrderLineForCache } from '@/lib/server/nabis-sync';
 
 describe('Nabis sync line cache parsing', () => {
   it('extracts order line detail needed for local PPP savings calculations', () => {
@@ -95,5 +95,31 @@ describe('Nabis rate-limit backoff', () => {
     expect(getRetryDelayMs(retryAfterDateResponse, 0)).toBeGreaterThan(0);
     expect(getRetryDelayMs(retryAfterDateResponse, 0)).toBeLessThanOrEqual(12_000);
     expect(getRetryDelayMs(fallbackResponse, 3)).toBe(8000);
+  });
+});
+
+describe('Nabis historical backfill paging', () => {
+  it('batch-cutoff only stops after a full order page is older than the requested historical start date', () => {
+    const cutoff = new Date('2025-01-01T00:00:00.000Z');
+
+    expect(
+      pageIsOlderThanCutoff(
+        [
+          { id: 'oldest-in-page', createdDate: '2024-12-31T23:59:59.000Z' },
+          { id: 'still-needed', createdDate: '2025-01-01T00:00:00.000Z' },
+        ],
+        cutoff,
+      ),
+    ).toBe(false);
+
+    expect(
+      pageIsOlderThanCutoff(
+        [
+          { id: 'older-a', createdDate: '2024-12-30T00:00:00.000Z' },
+          { id: 'older-b', createdTimestamp: '2024-12-31T23:59:59.000Z' },
+        ],
+        cutoff,
+      ),
+    ).toBe(true);
   });
 });
