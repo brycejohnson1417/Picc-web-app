@@ -17,7 +17,11 @@ export async function POST(req: Request) {
   if (['all', 'nabis', 'nabis-orders', 'nabis-retailers', 'nabis-historical-backfill'].includes(syncModule)) {
     const run = async () => {
       if (syncModule === 'nabis-historical-backfill') {
-        return syncNabisOrders(ctx.orgId, actor, { historicalBackfill: true, historicalStartDate: '2025-01-01T00:00:00.000Z' });
+        return syncNabisOrders(ctx.orgId, actor, {
+          historicalBackfill: true,
+          historicalStartDate: '2025-01-01T00:00:00.000Z',
+          resetHistoricalBackfill: body.reset === true,
+        });
       }
       if (syncModule === 'nabis-orders') {
         return syncNabisRetailersAndOrders(ctx.orgId, actor, { reconciliation: false, syncCrm: false });

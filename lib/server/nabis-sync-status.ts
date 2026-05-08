@@ -27,6 +27,10 @@ type CheckpointMetadata = {
   cutoffDate?: unknown;
   pagesScanned?: unknown;
   cutoffReached?: unknown;
+  nextPage?: unknown;
+  hasMore?: unknown;
+  skipped?: unknown;
+  skipReason?: unknown;
   earliestOrderCreatedAt?: unknown;
   latestOrderCreatedAt?: unknown;
 };
@@ -146,6 +150,10 @@ export async function getNabisAdminSyncStatus(orgId: string) {
       historicalBackfill: metadata.historicalBackfill === true,
       cutoffDate: stringValue(metadata.cutoffDate),
       cutoffReached: metadata.cutoffReached === true,
+      nextPage: numberValue(metadata.nextPage),
+      hasMore: metadata.hasMore === true,
+      skipped: metadata.skipped === true,
+      skipReason: stringValue(metadata.skipReason),
       earliestOrderCreatedAt: stringValue(metadata.earliestOrderCreatedAt),
       latestOrderCreatedAt: stringValue(metadata.latestOrderCreatedAt),
     };
@@ -210,7 +218,7 @@ export async function getNabisAdminSyncStatus(orgId: string) {
         enabled: true,
         module: 'nabis-historical-backfill',
         label: 'Run Historical Backfill',
-        description: 'Backfills cached Nabis orders and order lines from 2025-01-01 with the global sync lease and rate-limit pacing.',
+        description: 'Runs the next bounded historical batch from 2025-01-01 with the global sync lease, rate-limit pacing, and resumable progress.',
       },
     },
   };

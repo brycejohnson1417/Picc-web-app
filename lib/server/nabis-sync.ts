@@ -16,6 +16,7 @@ const MAX_ORDER_PAGES = 220;
 const RECENT_ORDER_SYNC_DAYS = 120;
 const RECONCILIATION_ORDER_SYNC_DAYS = 400;
 const HISTORICAL_ORDER_BACKFILL_START_DATE = '2025-01-01T00:00:00.000Z';
+const HISTORICAL_ORDER_BACKFILL_BATCH_PAGES = 20;
 const ORDER_UPSERT_BATCH_SIZE = 50;
 const NABIS_SYNC_LEASE_MODULE = 'nabis_global_sync_lease';
 const NABIS_SYNC_LEASE_REFRESH_MS = 30_000;
@@ -142,6 +143,9 @@ type OrderSyncOptions = {
   reconciliation?: boolean;
   historicalBackfill?: boolean;
   historicalStartDate?: string;
+  resetHistoricalBackfill?: boolean;
+  startPage?: number;
+  maxPagesPerRun?: number;
 };
 
 type LoadedOrdersFromNabis = {
@@ -153,6 +157,9 @@ type LoadedOrdersFromNabis = {
     pagesScanned: number;
     recordsRead: number;
     cutoffReached: boolean;
+    startPage: number;
+    nextPage: number | null;
+    hasMore: boolean;
     earliestOrderCreatedAt: string | null;
     latestOrderCreatedAt: string | null;
   };
@@ -771,6 +778,15 @@ function orderSyncModule(options?: OrderSyncOptions) {
   return 'orders';
 }
 
+function numberFromMetadata(metadata: unknown, key: string) {
+  const value = toJsonObject(metadata)?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function booleanFromMetadata(metadata: unknown, key: string) {
+  return toJsonObject(metadata)?.[key] === true;
+}
+
 async function loadOrdersFromNabis(
   options?: OrderSyncOptions & {
     onProgress?: (metadata: LoadedOrdersFromNabis['metadata']) => Promise<void>;
@@ -779,13 +795,17 @@ async function loadOrdersFromNabis(
   const rows: ParsedOrder[] = [];
   const cutoff = resolveOrderSyncCutoff(options);
   const cutoffDate = cutoff.toISOString();
-  let page = 0;
+  const startPage = options?.historicalBackfill ? Math.max(0, options.startPage ?? 0) : 0;
+  const maxPagesPerRun = options?.historicalBackfill ? (options.maxPagesPerRun ?? HISTORICAL_ORDER_BACKFILL_BATCH_PAGES) : MAX_ORDER_PAGES;
+  let page = startPage;
   let pagesScanned = 0;
   let recordsRead = 0;
   let cutoffReached = false;
+  let nextPage: number | null = null;
+  let hasMore = false;
 
-  while (page < MAX_ORDER_PAGES) {
-    if (page > 0) {
+  while (page < MAX_ORDER_PAGES && pagesScanned < maxPagesPerRun) {
+    if (pagesScanned > 0 || page > startPage) {
       await wait(175);
     }
 
@@ -797,28 +817,31 @@ async function loadOrdersFromNabis(
     pagesScanned += 1;
     recordsRead += pageRows.length;
 
-    if (!pageRows.length || payload.nextPage == null || payload.nextPage <= page) {
+    const payloadNextPage = payload.nextPage != null && payload.nextPage > page ? payload.nextPage : null;
+    cutoffReached = pageIsOlderThanCutoff(pageRows, cutoff);
+    const exhausted = !pageRows.length || payloadNextPage == null || cutoffReached;
+    const hitPageBudget = pagesScanned >= maxPagesPerRun;
+    nextPage = exhausted ? null : payloadNextPage;
+    hasMore = Boolean(nextPage != null && (hitPageBudget || !exhausted));
+
+    await options?.onProgress?.({
+      cutoffDate,
+      historicalBackfill: Boolean(options?.historicalBackfill),
+      reconciliation: Boolean(options?.reconciliation),
+      pagesScanned,
+      recordsRead,
+      cutoffReached,
+      startPage,
+      nextPage,
+      hasMore,
+      ...orderDateCoverage(rows),
+    });
+
+    if (exhausted || hitPageBudget || nextPage == null) {
       break;
     }
 
-    if (pageIsOlderThanCutoff(pageRows, cutoff)) {
-      cutoffReached = true;
-      break;
-    }
-
-    if (options?.onProgress) {
-      await options.onProgress({
-        cutoffDate,
-        historicalBackfill: Boolean(options?.historicalBackfill),
-        reconciliation: Boolean(options?.reconciliation),
-        pagesScanned,
-        recordsRead,
-        cutoffReached,
-        ...orderDateCoverage(rows),
-      });
-    }
-
-    page = payload.nextPage;
+    page = nextPage;
   }
 
   return {
@@ -830,6 +853,9 @@ async function loadOrdersFromNabis(
       pagesScanned,
       recordsRead,
       cutoffReached,
+      startPage,
+      nextPage,
+      hasMore,
       ...orderDateCoverage(rows),
     },
   };
@@ -1446,8 +1472,48 @@ export async function syncNabisOrders(orgId: string, actor?: SyncActor, options?
 async function syncNabisOrdersCore(orgId: string, integrationId: string, actor?: SyncActor, options?: OrderSyncOptions) {
   const syncModuleName = orderSyncModule(options);
   return withSyncRun({ orgId, integrationId, module: syncModuleName, actor }, async () => {
+    const previousCheckpoint = options?.historicalBackfill
+      ? await prisma.syncCheckpoint.findUnique({
+          where: {
+            integrationId_module: {
+              integrationId,
+              module: syncModuleName,
+            },
+          },
+          select: {
+            metadata: true,
+          },
+        })
+      : null;
+    const previousMetadata = previousCheckpoint?.metadata;
+    const previousCutoffReached = booleanFromMetadata(previousMetadata, 'cutoffReached');
+    const previousNextPage = numberFromMetadata(previousMetadata, 'nextPage');
+    const resumeStartPage =
+      options?.historicalBackfill && !options.resetHistoricalBackfill && previousNextPage != null && !previousCutoffReached ? previousNextPage : undefined;
+
+    if (options?.historicalBackfill && previousCutoffReached && !options.resetHistoricalBackfill) {
+      const metadata = {
+        ...(toJsonObject(previousMetadata) ?? {}),
+        historicalBackfill: true,
+        skipped: true,
+        skipReason: 'Historical Nabis backfill already reached the cutoff. Pass resetHistoricalBackfill to restart.',
+      };
+      return {
+        result: {
+          orders: 0,
+          upserted: 0,
+          lineItems: 0,
+          metricRows: 0,
+        },
+        recordsIn: 0,
+        recordsUpserted: 0,
+        metadata,
+      };
+    }
+
     const loadedOrders = await loadOrdersFromNabis({
       ...options,
+      startPage: resumeStartPage ?? options?.startPage,
       onProgress: async (metadata) => {
         await markSyncCheckpoint({
           orgId,

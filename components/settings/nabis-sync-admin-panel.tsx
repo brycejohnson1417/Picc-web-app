@@ -34,6 +34,10 @@ type SyncModule = {
   historicalBackfill: boolean;
   cutoffDate: string | null;
   cutoffReached: boolean;
+  nextPage: number | null;
+  hasMore: boolean;
+  skipped: boolean;
+  skipReason: string | null;
   earliestOrderCreatedAt: string | null;
   latestOrderCreatedAt: string | null;
 };
@@ -242,8 +246,10 @@ export function NabisSyncAdminPanel() {
                   <div className="mt-3 rounded-xl bg-white px-3 py-2 text-[12px] text-[#5c6674]">
                     <p>Cutoff: {formatDateTime(module.cutoffDate, 'not recorded')}</p>
                     <p>Pages scanned: {formatNumber(module.stats.pagesScanned)}</p>
+                    <p>Next page: {module.nextPage ?? 'complete'}</p>
                     <p>Coverage: {formatDateRange(module.earliestOrderCreatedAt, module.latestOrderCreatedAt)}</p>
-                    <p>Cutoff reached: {module.cutoffReached ? 'yes' : 'not yet'}</p>
+                    <p>{module.cutoffReached ? 'Cutoff reached' : module.hasMore ? 'More batches available' : 'Batch complete'}</p>
+                    {module.skipped && module.skipReason ? <p>{module.skipReason}</p> : null}
                   </div>
                 ) : null}
               </div>
