@@ -3,6 +3,7 @@ import { IntegrationSyncStatus } from '@prisma/client';
 import {
   evaluateNabisSyncLease,
   filterOrderRowsOnOrAfterCutoff,
+  formatNabisSyncLeaseConflictMessage,
   getRetryDelayMs,
   nabisOrderLineFingerprint,
   pageIsOlderThanCutoff,
@@ -110,6 +111,21 @@ describe('Nabis sync lease coordination', () => {
       activeHolderId: 'first-holder',
       activeModule: 'orders',
     });
+  });
+
+  it('formats active lease conflicts as an in-progress sync instead of a moving retry timestamp', () => {
+    const message = formatNabisSyncLeaseConflictMessage({
+      canAcquire: false,
+      reason: 'held',
+      activeHolderId: 'first-holder',
+      activeModule: 'orders',
+      activeRefreshedAt: '2026-05-11T23:35:02.059Z',
+      activeExpiresAt: '2026-05-11T23:36:02.059Z',
+    });
+
+    expect(message).toBe('Nabis order sync is already running. Showing saved data while it finishes; refresh status in a minute.');
+    expect(message).not.toContain('try again after');
+    expect(message).not.toContain('2026-05-11T23:36:02.059Z');
   });
 
   it('stale-recovery lets a new holder acquire an expired lease', () => {

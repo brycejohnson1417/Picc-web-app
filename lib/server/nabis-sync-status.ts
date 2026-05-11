@@ -160,6 +160,10 @@ export async function getNabisAdminSyncStatus(orgId: string) {
   });
 
   const latestErrorRun = (integration?.syncRuns ?? []).find((run) => run.status === IntegrationSyncStatus.ERROR || run.error);
+  const globalLease = modules.find((module) => module.module === 'nabis_global_sync_lease');
+  const globalLeaseExpiresAt = globalLease?.leaseExpiresAt ? new Date(globalLease.leaseExpiresAt) : null;
+  const globalLeaseHasFutureExpiry = globalLeaseExpiresAt ? !Number.isNaN(globalLeaseExpiresAt.getTime()) && globalLeaseExpiresAt.getTime() > Date.now() : true;
+  const activeGlobalLease = globalLease?.status === IntegrationSyncStatus.RUNNING && globalLeaseHasFutureExpiry;
 
   return {
     integration: integration
@@ -205,17 +209,17 @@ export async function getNabisAdminSyncStatus(orgId: string) {
     })),
     controls: {
       recentOrders: {
-        enabled: true,
+        enabled: !activeGlobalLease,
         module: 'nabis-orders',
         label: 'Refresh Recent Orders',
       },
       retailers: {
-        enabled: true,
+        enabled: !activeGlobalLease,
         module: 'nabis-retailers',
         label: 'Run Retailer Sync',
       },
       historicalBackfill: {
-        enabled: true,
+        enabled: !activeGlobalLease,
         module: 'nabis-historical-backfill',
         label: 'Run Historical Backfill',
         description: 'Runs the next bounded historical batch from 2025-01-01 with the global sync lease, rate-limit pacing, and resumable progress.',
