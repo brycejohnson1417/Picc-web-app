@@ -437,6 +437,20 @@ function parseRetailerRow(row: NabisRetailerApiRow): ParsedRetailer | null {
   };
 }
 
+export function staleNabisRetailerIdsToPrune(existingLicensedLocationIds: readonly string[], currentLicensedLocationIds: readonly string[]) {
+  const currentIds = new Set(
+    currentLicensedLocationIds.map((licensedLocationId) => normalizeIdentity(licensedLocationId)).filter((value): value is string => Boolean(value)),
+  );
+  if (currentIds.size === 0) {
+    return [];
+  }
+
+  return existingLicensedLocationIds.filter((licensedLocationId) => {
+    const normalized = normalizeIdentity(licensedLocationId);
+    return Boolean(normalized && !currentIds.has(normalized));
+  });
+}
+
 export function parseNabisOrderForCache(row: NabisOrderApiRow): ParsedOrder | null {
   const externalOrderId = compactString(row.id ?? row.order);
   if (!externalOrderId) {
@@ -711,6 +725,7 @@ async function withNabisSyncLease<T>(
 
 async function loadRetailersFromNabis() {
   const rows: ParsedRetailer[] = [];
+  const feedLicensedLocationIds = new Set<string>();
   let page = 0;
 
   while (page < MAX_RETAILER_PAGES) {
@@ -719,17 +734,27 @@ async function loadRetailersFromNabis() {
     }
 
     const payload = await fetchNabisPage<NabisRetailerApiRow>('/v2/ny/retailer', page);
-    const pageRows = (payload.data ?? []).map(parseRetailerRow).filter((row): row is ParsedRetailer => Boolean(row));
+    const rawRows = payload.data ?? [];
+    for (const rawRow of rawRows) {
+      const rawLicensedLocationId = compactString(rawRow.licensedLocationId ?? rawRow.retailerId ?? rawRow.id);
+      if (rawLicensedLocationId) {
+        feedLicensedLocationIds.add(rawLicensedLocationId);
+      }
+    }
+    const pageRows = rawRows.map(parseRetailerRow).filter((row): row is ParsedRetailer => Boolean(row));
     rows.push(...pageRows);
 
-    if (!pageRows.length || payload.nextPage == null || payload.nextPage <= page) {
+    if (!rawRows.length || payload.nextPage == null || payload.nextPage <= page) {
       break;
     }
 
     page = payload.nextPage;
   }
 
-  return rows;
+  return {
+    rows,
+    feedLicensedLocationIds: [...feedLicensedLocationIds],
+  };
 }
 
 export function pageIsOlderThanCutoff(rows: NabisOrderApiRow[], cutoff: Date) {
@@ -1408,7 +1433,30 @@ async function syncNabisRetailersCore(orgId: string, integrationId: string, acto
   const orderBackedStores = new Set(existingOrderIds.map((row) => row.licensedLocationId).filter((value): value is string => Boolean(value)));
 
   return withSyncRun({ orgId, integrationId, module: 'retailers', actor }, async () => {
-    const retailers = await loadRetailersFromNabis();
+    const loadedRetailers = await loadRetailersFromNabis();
+    const retailers = loadedRetailers.rows;
+    const existingRetailers = await prisma.nabisRetailer.findMany({
+      where: { orgId },
+      select: { licensedLocationId: true },
+    });
+    const staleLicensedLocationIds = staleNabisRetailerIdsToPrune(
+      existingRetailers.map((retailer) => retailer.licensedLocationId),
+      loadedRetailers.feedLicensedLocationIds,
+    );
+    const prunedRetailers =
+      staleLicensedLocationIds.length > 0
+        ? (
+            await prisma.nabisRetailer.deleteMany({
+              where: {
+                orgId,
+                licensedLocationId: {
+                  in: staleLicensedLocationIds,
+                },
+              },
+            })
+          ).count
+        : 0;
+
     await prisma.nabisRetailer.deleteMany({
       where: {
         orgId,
@@ -1480,11 +1528,13 @@ async function syncNabisRetailersCore(orgId: string, integrationId: string, acto
       result: {
         retailers: retailers.length,
         upserted,
+        pruned: prunedRetailers,
       },
       recordsIn: retailers.length,
       recordsUpserted: upserted,
       metadata: {
         retailers: retailers.length,
+        prunedRetailers,
         crmMirrored: options?.syncCrm === true,
       },
     };
