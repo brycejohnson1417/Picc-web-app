@@ -6,10 +6,30 @@ import {
   getRetryDelayMs,
   nabisOrderLineFingerprint,
   pageIsOlderThanCutoff,
+  parseNabisOrderForCache,
   parseNabisOrderLineForCache,
 } from '@/lib/server/nabis-sync';
 
 describe('Nabis sync line cache parsing', () => {
+  it('stores promo-adjusted order totals for NY V2 orders with discounts', () => {
+    const order = parseNabisOrderForCache({
+      id: 'af9c9739-82d6-42fd-81e9-bb2e44fde193',
+      order: '924483',
+      retailer: 'The Emerald - Brooklyn',
+      orderAction: 'DELIVERY_TO_RETAILER',
+      status: 'SCHEDULED',
+      createdTimestamp: '2026-04-27T14:02:00.000Z',
+      orderTotal: '3056.50',
+      creditMemo: 98.54,
+      orderDiscount: '479.00',
+      lineItemDiscount: '0.00',
+      siteLicenseNumber: 'OCM-CAURD-24-000057-D1',
+      retailerId: '6593a111-5c6e-4dcf-861d-3c1333aed04e',
+    });
+
+    expect(order?.orderTotal).toBe(2478.96);
+  });
+
   it('extracts order line detail needed for local PPP savings calculations', () => {
     const line = parseNabisOrderLineForCache({
       id: 'order-id-1',
@@ -34,6 +54,36 @@ describe('Nabis sync line cache parsing', () => {
       itemCategory: 'Pre-roll',
       itemClass: 'Cannabis',
     });
+  });
+
+  it('uses line item discount when Nabis does not provide an after-discount line subtotal', () => {
+    const line = parseNabisOrderLineForCache({
+      id: 'order-id-2',
+      order: '924483',
+      skuCode: 'SOM-1G',
+      units: '10',
+      lineItemSubtotal: '80.00',
+      lineItemDiscount: '20.00',
+      skuPricePerUnit: '8.00',
+      itemClass: 'Cannabis',
+    });
+
+    expect(line?.unitPrice).toBe(6);
+  });
+
+  it('preserves zero-dollar unit price for fully discounted line items', () => {
+    const line = parseNabisOrderLineForCache({
+      id: 'order-id-3',
+      order: '924484',
+      skuCode: 'PROMO-1G',
+      units: '4',
+      lineItemSubtotal: '40.00',
+      lineItemDiscount: '40.00',
+      skuPricePerUnit: '10.00',
+      itemClass: 'Cannabis',
+    });
+
+    expect(line?.unitPrice).toBe(0);
   });
 });
 
