@@ -28,7 +28,7 @@ import { SalesTrendChart } from '@/components/dashboard/sales-trend-chart';
 
 const REP_COLORS = ['#1d4ed8', '#2563eb', '#0f766e', '#0284c7', '#7c3aed', '#db2777', '#f97316', '#eab308', '#16a34a', '#475569'];
 const DASHBOARD_SNAPSHOT_TTL_MS = 1000 * 60 * 5;
-const DASHBOARD_SNAPSHOT_KEY_PREFIX = 'picc:nabis-dashboard:v4';
+const DASHBOARD_SNAPSHOT_KEY_PREFIX = 'picc:nabis-dashboard:v5';
 
 type DashboardSnapshot = {
   fetchedAt: number;
@@ -505,11 +505,15 @@ export function NabisSalesDashboard() {
                   .filter(Boolean)
                   .join(' · ')}
               />
-              <InfoCard
-                label="Cache Coverage"
-                value={metadata.cacheCoverage.fullyCovered ? 'Fully covered' : 'Partial cache'}
-                note={`${metadata.cacheCoverage.cachedOrderCount.toLocaleString()} cached orders · ${metadata.cacheCoverage.cachedLineItemCount.toLocaleString()} cached lines`}
-              />
+              {metadata.cacheCoverage ? (
+                <InfoCard
+                  label="Cache Coverage"
+                  value={metadata.cacheCoverage.fullyCovered ? 'Fully covered' : 'Partial cache'}
+                  note={`${metadata.cacheCoverage.cachedOrderCount.toLocaleString()} cached orders · ${metadata.cacheCoverage.cachedLineItemCount.toLocaleString()} cached lines`}
+                />
+              ) : (
+                <InfoCard label="Cache Coverage" value="Refreshing metadata" note="Reload the dashboard to update local cache details." />
+              )}
             </div>
           ) : null}
 
@@ -785,11 +789,12 @@ function InfoCard({ label, value, note }: { label: string; value: string; note?:
 
 function DashboardStatusStrip({ error, metadata, hasOrders }: { error: string | null; metadata: NabisDashboardMetadata | null; hasOrders: boolean }) {
   const items: Array<{ label: string; value: string; tone: 'warning' | 'info' | 'ok' }> = [];
-  const details: string[] = [];
+  const warnings: string[] = [];
+  const notes: string[] = [];
 
   if (error) {
     items.push({ label: 'Dashboard', value: metadata ? 'Showing saved data' : 'Load issue', tone: 'warning' });
-    details.push(error);
+    warnings.push(error);
   }
 
   if (metadata?.cacheCoverage) {
@@ -801,25 +806,25 @@ function DashboardStatusStrip({ error, metadata, hasOrders }: { error: string | 
     });
 
     if (!coverage.fullyCovered || coverage.status === 'empty') {
-      details.push(coverage.message);
+      warnings.push(coverage.message);
     }
   }
 
   if (metadata?.staleWarning) {
     items.push({ label: 'Sync', value: 'Needs attention', tone: 'info' });
-    details.push(metadata.staleWarning);
+    warnings.push(metadata.staleWarning);
   }
 
   if (metadata?.territorySnapshot.available === false) {
     items.push({ label: 'Store status', value: 'Unavailable', tone: 'warning' });
-    details.push('Customer, VMI, and sampled-lead metrics are hidden until the territory cache is restored.');
+    warnings.push('Customer, VMI, and sampled-lead metrics are hidden until the territory cache is restored.');
   } else if (metadata?.territorySnapshot.available && metadata.territorySnapshot.syncedAt) {
     items.push({ label: 'Store status', value: formatTimestamp(metadata.territorySnapshot.syncedAt), tone: 'info' });
-    details.push('VMI is based on the current territory snapshot; historical VMI status changes are not cached.');
+    notes.push('VMI uses the current territory snapshot. Historical VMI status changes are not cached.');
   }
 
-  if (metadata?.cacheCoverage.status === 'empty' && !hasOrders) {
-    details.push('This dashboard reads saved Postgres data first; manual refresh only checks Nabis when you explicitly request it.');
+  if (metadata?.cacheCoverage?.status === 'empty' && !hasOrders) {
+    notes.push('This dashboard reads saved Postgres data first; manual refresh only checks Nabis when you explicitly request it.');
   }
 
   if (items.length === 0) {
@@ -833,7 +838,20 @@ function DashboardStatusStrip({ error, metadata, hasOrders }: { error: string | 
           <StatusPill key={`${item.label}:${item.value}`} item={item} />
         ))}
       </div>
-      {details.length > 0 ? <p className="mt-2 leading-5 text-[#68717e]">{Array.from(new Set(details)).join(' ')}</p> : null}
+      {warnings.length > 0 ? (
+        <div className="mt-2 space-y-1 leading-5 text-[#8a4a12]">
+          {Array.from(new Set(warnings)).map((detail) => (
+            <p key={detail}>{detail}</p>
+          ))}
+        </div>
+      ) : null}
+      {notes.length > 0 ? (
+        <div className="mt-2 space-y-1 leading-5 text-[#68717e]">
+          {Array.from(new Set(notes)).map((detail) => (
+            <p key={detail}>{detail}</p>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

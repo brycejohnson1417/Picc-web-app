@@ -118,6 +118,7 @@ export function NabisSyncAdminPanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [runningModule, setRunningModule] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeSyncNotice, setActiveSyncNotice] = useState<string | null>(null);
 
   const modules = useMemo(() => {
     const source = status?.modules ?? [];
@@ -125,6 +126,10 @@ export function NabisSyncAdminPanel() {
       .map((module) => source.find((entry) => entry.module === module))
       .filter((entry): entry is SyncModule => Boolean(entry));
   }, [status?.modules]);
+  const activeLease = useMemo(() => modules.find((module) => module.module === 'nabis_global_sync_lease' && module.status === 'RUNNING'), [modules]);
+  const syncControlsLocked = status ? !status.controls.recentOrders.enabled && !status.controls.retailers.enabled && !status.controls.historicalBackfill.enabled : false;
+  const activeLeaseStatus =
+    activeLease && syncControlsLocked ? `${shortModuleLabel(activeLease.activeModule ?? 'nabis sync')} is running. Controls unlock when this sync releases its lease.` : null;
 
   const loadStatus = useCallback(async (mode: 'initial' | 'refresh' = 'refresh') => {
     if (mode === 'initial') {
@@ -133,6 +138,7 @@ export function NabisSyncAdminPanel() {
       setRefreshing(true);
     }
     setError(null);
+    setActiveSyncNotice(null);
     try {
       const response = await fetch('/api/sync/status', { cache: 'no-store' });
       const payload = await response.json().catch(() => ({}));
@@ -155,6 +161,7 @@ export function NabisSyncAdminPanel() {
   async function runSync(module: string, label: string) {
     setRunningModule(module);
     setError(null);
+    setActiveSyncNotice(null);
     try {
       const response = await fetch('/api/sync/run', {
         method: 'POST',
@@ -163,6 +170,13 @@ export function NabisSyncAdminPanel() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
+        const message = payload?.error ?? `${label} failed`;
+        if (response.status === 409) {
+          await loadStatus('refresh');
+          setActiveSyncNotice(message);
+          toast.info(message);
+          return;
+        }
         throw new Error(payload?.error ?? `${label} failed`);
       }
       toast.success(`${label} started and completed.`);
@@ -198,6 +212,16 @@ export function NabisSyncAdminPanel() {
       {error ? (
         <div className="rounded-2xl border border-[#f1b8a8] bg-[#fff5f1] px-4 py-3 text-sm text-[#a23b22]">
           {error}
+        </div>
+      ) : null}
+      {activeSyncNotice ? (
+        <div className="rounded-2xl border border-[#b7d4ff] bg-[#f1f7ff] px-4 py-3 text-sm text-[#24518d]">
+          {activeSyncNotice}
+        </div>
+      ) : null}
+      {!activeSyncNotice && activeLeaseStatus ? (
+        <div className="rounded-2xl border border-[#b7d4ff] bg-[#f1f7ff] px-4 py-3 text-sm text-[#24518d]">
+          {activeLeaseStatus}
         </div>
       ) : null}
 

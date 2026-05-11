@@ -185,15 +185,24 @@ type NabisLeaseDecision = {
   activeExpiresAt: string | null;
 };
 
+function syncModuleActionLabel(module: string | null) {
+  if (module === 'orders') return 'order sync';
+  if (module === 'retailers') return 'retailer sync';
+  if (module === 'orders_reconcile') return 'historical reconciliation';
+  if (module === 'orders_historical_backfill') return 'historical backfill';
+  return 'sync';
+}
+
+export function formatNabisSyncLeaseConflictMessage(decision: NabisLeaseDecision) {
+  const syncLabel = syncModuleActionLabel(decision.activeModule);
+  return `Nabis ${syncLabel} is already running. Showing saved data while it finishes; refresh status in a minute.`;
+}
+
 export class NabisSyncLeaseError extends Error {
   readonly statusCode = 409;
 
   constructor(public readonly decision: NabisLeaseDecision) {
-    super(
-      `Nabis sync already running${decision.activeModule ? ` for ${decision.activeModule}` : ''}; try again after ${
-        decision.activeExpiresAt ?? 'the active sync finishes'
-      }`,
-    );
+    super(formatNabisSyncLeaseConflictMessage(decision));
     this.name = 'NabisSyncLeaseError';
   }
 }
