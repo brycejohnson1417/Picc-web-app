@@ -8,6 +8,7 @@ import {
   pageIsOlderThanCutoff,
   parseNabisOrderForCache,
   parseNabisOrderLineForCache,
+  staleNabisRetailerIdsToPrune,
 } from '@/lib/server/nabis-sync';
 
 describe('Nabis sync line cache parsing', () => {
@@ -132,6 +133,21 @@ describe('Nabis sync lease coordination', () => {
       activeHolderId: 'stale-holder',
       activeModule: 'orders_reconcile',
     });
+  });
+});
+
+describe('Nabis retailer cache pruning', () => {
+  it('removes cached retailer rows that no longer appear in the current Nabis retailer feed', () => {
+    expect(
+      staleNabisRetailerIdsToPrune(
+        ['retailer-current', 'brand-stale', ' RETAILER-CASE '],
+        ['retailer-current', 'retailer-case'],
+      ),
+    ).toEqual(['brand-stale']);
+  });
+
+  it('does not prune anything when the current retailer feed is empty or unparsable', () => {
+    expect(staleNabisRetailerIdsToPrune(['retailer-current', 'brand-stale'], [])).toEqual([]);
   });
 });
 
