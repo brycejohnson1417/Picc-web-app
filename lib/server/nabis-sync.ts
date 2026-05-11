@@ -437,7 +437,7 @@ function parseRetailerRow(row: NabisRetailerApiRow): ParsedRetailer | null {
   };
 }
 
-export function staleNabisRetailerIdsToPrune(existingLicensedLocationIds: readonly string[], currentLicensedLocationIds: readonly string[]) {
+export function staleNabisRetailerIdsMissingFromFeed(existingLicensedLocationIds: readonly string[], currentLicensedLocationIds: readonly string[]) {
   const currentIds = new Set(
     currentLicensedLocationIds.map((licensedLocationId) => normalizeIdentity(licensedLocationId)).filter((value): value is string => Boolean(value)),
   );
@@ -1439,23 +1439,11 @@ async function syncNabisRetailersCore(orgId: string, integrationId: string, acto
       where: { orgId },
       select: { licensedLocationId: true },
     });
-    const staleLicensedLocationIds = staleNabisRetailerIdsToPrune(
+    const staleLicensedLocationIds = staleNabisRetailerIdsMissingFromFeed(
       existingRetailers.map((retailer) => retailer.licensedLocationId),
       loadedRetailers.feedLicensedLocationIds,
     );
-    const prunedRetailers =
-      staleLicensedLocationIds.length > 0
-        ? (
-            await prisma.nabisRetailer.deleteMany({
-              where: {
-                orgId,
-                licensedLocationId: {
-                  in: staleLicensedLocationIds,
-                },
-              },
-            })
-          ).count
-        : 0;
+    const staleRetailersRetained = staleLicensedLocationIds.length;
 
     await prisma.nabisRetailer.deleteMany({
       where: {
@@ -1479,48 +1467,64 @@ async function syncNabisRetailersCore(orgId: string, integrationId: string, acto
         { syncCrm: options?.syncCrm === true },
       );
 
-      await prisma.nabisRetailer.upsert({
+      const matchingCacheRows = await prisma.nabisRetailer.findMany({
         where: {
-          orgId_licensedLocationId: {
-            orgId,
-            licensedLocationId: retailer.licensedLocationId,
-          },
-        },
-        update: {
-          accountId: account.id,
-          notionPageId: account.notionPageId,
-          externalRetailerId: retailer.externalRetailerId,
-          licenseNumber: retailer.licenseNumber,
-          name: retailer.name,
-          doingBusinessAs: retailer.doingBusinessAs,
-          address1: retailer.address1,
-          address2: retailer.address2,
-          city: retailer.city,
-          state: retailer.state,
-          zipcode: retailer.zipcode,
-          geoLat: retailer.geoLat,
-          geoLng: retailer.geoLng,
-          lastSyncedAt: new Date(),
-        },
-        create: {
           orgId,
-          accountId: account.id,
-          notionPageId: account.notionPageId,
-          licensedLocationId: retailer.licensedLocationId,
-          externalRetailerId: retailer.externalRetailerId,
-          licenseNumber: retailer.licenseNumber,
-          name: retailer.name,
-          doingBusinessAs: retailer.doingBusinessAs,
-          address1: retailer.address1,
-          address2: retailer.address2,
-          city: retailer.city,
-          state: retailer.state,
-          zipcode: retailer.zipcode,
-          geoLat: retailer.geoLat,
-          geoLng: retailer.geoLng,
-          lastSyncedAt: new Date(),
+          OR: [
+            { licensedLocationId: retailer.licensedLocationId },
+            ...(retailer.externalRetailerId ? [{ externalRetailerId: retailer.externalRetailerId }] : []),
+          ],
         },
+        select: { id: true, licensedLocationId: true, externalRetailerId: true },
       });
+      const existingCacheRow =
+        matchingCacheRows.find((row) => normalizeIdentity(row.licensedLocationId) === normalizeIdentity(retailer.licensedLocationId)) ??
+        matchingCacheRows.find((row) => normalizeIdentity(row.externalRetailerId) === normalizeIdentity(retailer.externalRetailerId)) ??
+        matchingCacheRows[0] ??
+        null;
+      const retailerCacheData = {
+        accountId: account.id,
+        notionPageId: account.notionPageId,
+        licensedLocationId: retailer.licensedLocationId,
+        externalRetailerId: retailer.externalRetailerId,
+        licenseNumber: retailer.licenseNumber,
+        name: retailer.name,
+        doingBusinessAs: retailer.doingBusinessAs,
+        address1: retailer.address1,
+        address2: retailer.address2,
+        city: retailer.city,
+        state: retailer.state,
+        zipcode: retailer.zipcode,
+        geoLat: retailer.geoLat,
+        geoLng: retailer.geoLng,
+        lastSyncedAt: new Date(),
+      };
+
+      if (existingCacheRow) {
+        const duplicateCacheRowIds = matchingCacheRows.map((row) => row.id).filter((id) => id !== existingCacheRow.id);
+        if (duplicateCacheRowIds.length > 0) {
+          await prisma.nabisRetailer.deleteMany({
+            where: {
+              orgId,
+              id: {
+                in: duplicateCacheRowIds,
+              },
+            },
+          });
+        }
+
+        await prisma.nabisRetailer.update({
+          where: { id: existingCacheRow.id },
+          data: retailerCacheData,
+        });
+      } else {
+        await prisma.nabisRetailer.create({
+          data: {
+            orgId,
+            ...retailerCacheData,
+          },
+        });
+      }
       upserted += 1;
     }
 
@@ -1528,13 +1532,15 @@ async function syncNabisRetailersCore(orgId: string, integrationId: string, acto
       result: {
         retailers: retailers.length,
         upserted,
-        pruned: prunedRetailers,
+        pruned: 0,
+        staleRetailersRetained,
       },
       recordsIn: retailers.length,
       recordsUpserted: upserted,
       metadata: {
         retailers: retailers.length,
-        prunedRetailers,
+        prunedRetailers: 0,
+        staleRetailersRetained,
         crmMirrored: options?.syncCrm === true,
       },
     };

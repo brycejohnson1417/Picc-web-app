@@ -8,7 +8,7 @@ import {
   pageIsOlderThanCutoff,
   parseNabisOrderForCache,
   parseNabisOrderLineForCache,
-  staleNabisRetailerIdsToPrune,
+  staleNabisRetailerIdsMissingFromFeed,
 } from '@/lib/server/nabis-sync';
 
 describe('Nabis sync line cache parsing', () => {
@@ -136,18 +136,18 @@ describe('Nabis sync lease coordination', () => {
   });
 });
 
-describe('Nabis retailer cache pruning', () => {
-  it('removes cached retailer rows that no longer appear in the current Nabis retailer feed', () => {
+describe('Nabis retailer cache retention', () => {
+  it('identifies cached retailer rows missing from the current Nabis retailer feed without deleting them', () => {
     expect(
-      staleNabisRetailerIdsToPrune(
+      staleNabisRetailerIdsMissingFromFeed(
         ['retailer-current', 'brand-stale', ' RETAILER-CASE '],
         ['retailer-current', 'retailer-case'],
       ),
     ).toEqual(['brand-stale']);
   });
 
-  it('does not prune anything when the current retailer feed is empty or unparsable', () => {
-    expect(staleNabisRetailerIdsToPrune(['retailer-current', 'brand-stale'], [])).toEqual([]);
+  it('does not mark anything missing when the current retailer feed is empty or unparsable', () => {
+    expect(staleNabisRetailerIdsMissingFromFeed(['retailer-current', 'brand-stale'], [])).toEqual([]);
   });
 });
 
