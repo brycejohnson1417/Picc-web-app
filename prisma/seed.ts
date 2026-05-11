@@ -446,6 +446,113 @@ async function main() {
     },
   });
 
+  const nabisConnection = await prisma.integrationConnection.create({
+    data: {
+      orgId: org.id,
+      provider: 'NABIS',
+      name: 'Nabis NY V2 API',
+      config: { market: 'NY', mode: 'local-seed' },
+      enabled: true,
+      status: 'SUCCESS',
+      lastSyncedAt: new Date(),
+    },
+  });
+
+  const nabisOrders = [
+    {
+      externalOrderId: 'NY924483',
+      orderNumber: 'NY924483',
+      account: accounts[2],
+      licensedLocationId: 'LIC-NY-924483',
+      licensedLocationName: 'The Emerald - Brooklyn',
+      orderCreatedDate: new Date('2026-05-08T15:30:00.000Z'),
+      status: 'DELIVERED',
+      orderTotal: '2478.96',
+      salesRep: 'Bryce Johnson',
+      lines: [
+        { productName: 'PICC AIO Hybrid 1g', quantity: '120', unitPrice: '12.50', itemCategory: 'Vape' },
+        { productName: 'PICC Gummies 10pk', quantity: '80', unitPrice: '8.12', itemCategory: 'Edible' },
+        { productName: 'PICC Flower Eighth', quantity: '20', unitPrice: '16.52', itemCategory: 'Flower' },
+      ],
+    },
+    {
+      externalOrderId: 'NY924501',
+      orderNumber: 'NY924501',
+      account: accounts[1],
+      licensedLocationId: 'LIC-NY-924501',
+      licensedLocationName: accounts[1].name,
+      orderCreatedDate: new Date('2026-05-07T18:15:00.000Z'),
+      status: 'DELIVERED',
+      orderTotal: '1840.25',
+      salesRep: 'Benjamin Rosenthal',
+      lines: [
+        { productName: 'PICC Mini Preroll 10pk', quantity: '100', unitPrice: '10.75', itemCategory: 'Preroll' },
+        { productName: 'PICC Live Resin AIO', quantity: '45', unitPrice: '17.00', itemCategory: 'Vape' },
+      ],
+    },
+    {
+      externalOrderId: 'NY924522',
+      orderNumber: 'NY924522',
+      account: accounts[6],
+      licensedLocationId: 'LIC-NY-924522',
+      licensedLocationName: accounts[6].name,
+      orderCreatedDate: new Date('2026-05-05T14:45:00.000Z'),
+      status: 'DELIVERED',
+      orderTotal: '3265.40',
+      salesRep: 'Bryce Johnson',
+      lines: [
+        { productName: 'PICC Flower Quarter', quantity: '70', unitPrice: '23.00', itemCategory: 'Flower' },
+        { productName: 'PICC Solventless Rosin', quantity: '60', unitPrice: '27.59', itemCategory: 'Concentrate' },
+      ],
+    },
+    {
+      externalOrderId: 'NY924566',
+      orderNumber: 'NY924566',
+      account: accounts[0],
+      licensedLocationId: 'LIC-NY-924566',
+      licensedLocationName: accounts[0].name,
+      orderCreatedDate: new Date('2026-05-02T16:20:00.000Z'),
+      status: 'DELIVERED',
+      orderTotal: '1295.00',
+      salesRep: 'Avry Aviles',
+      lines: [
+        { productName: 'PICC Gummies 10pk', quantity: '120', unitPrice: '7.25', itemCategory: 'Edible' },
+        { productName: 'PICC Infused Preroll', quantity: '50', unitPrice: '8.50', itemCategory: 'Preroll' },
+      ],
+    },
+  ];
+
+  for (const order of nabisOrders) {
+    const created = await prisma.nabisOrder.create({
+      data: {
+        orgId: org.id,
+        accountId: order.account.id,
+        externalOrderId: order.externalOrderId,
+        orderNumber: order.orderNumber,
+        licensedLocationId: order.licensedLocationId,
+        licensedLocationName: order.licensedLocationName,
+        orderCreatedDate: order.orderCreatedDate,
+        status: order.status,
+        orderTotal: order.orderTotal,
+        paymentStatus: 'PAID',
+        deliveryDate: order.orderCreatedDate,
+        salesRep: order.salesRep,
+      },
+    });
+
+    await prisma.nabisOrderLine.createMany({
+      data: order.lines.map((line) => ({
+        orgId: org.id,
+        nabisOrderId: created.id,
+        externalOrderId: order.externalOrderId,
+        productName: line.productName,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        itemCategory: line.itemCategory,
+      })),
+    });
+  }
+
   await prisma.syncCheckpoint.create({
     data: {
       orgId: org.id,
@@ -456,6 +563,40 @@ async function main() {
       checksum: 'seed-checksum',
       metadata: { rows: 863 },
     },
+  });
+
+  const syncMetadata = { lastSuccessfulSyncAt: new Date().toISOString(), source: 'local-seed' };
+
+  await prisma.syncCheckpoint.createMany({
+    data: [
+      {
+        orgId: org.id,
+        integrationId: nabisConnection.id,
+        module: 'orders',
+        status: 'SUCCESS',
+        cursor: 'seed-orders-cursor',
+        checksum: 'seed-orders-checksum',
+        metadata: syncMetadata,
+      },
+      {
+        orgId: org.id,
+        integrationId: nabisConnection.id,
+        module: 'retailers',
+        status: 'SUCCESS',
+        cursor: 'seed-retailers-cursor',
+        checksum: 'seed-retailers-checksum',
+        metadata: syncMetadata,
+      },
+      {
+        orgId: org.id,
+        integrationId: nabisConnection.id,
+        module: 'orders_reconcile',
+        status: 'SUCCESS',
+        cursor: 'seed-reconcile-cursor',
+        checksum: 'seed-reconcile-checksum',
+        metadata: syncMetadata,
+      },
+    ],
   });
 
   console.log('Seed complete');

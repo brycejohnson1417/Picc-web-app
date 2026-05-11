@@ -58,6 +58,8 @@ type NabisOrderApiRow = {
   orderSubtotal?: string | number | null;
   wholesaleValue?: string | number | null;
   creditMemo?: string | number | null;
+  orderDiscount?: string | number | null;
+  lineItemDiscount?: string | number | null;
   lineItemSubtotalAfterDiscount?: string | number | null;
   lineItemSubtotal?: string | number | null;
   orderAction?: string | null;
@@ -390,17 +392,18 @@ function getNetSales(row: NabisOrderApiRow) {
   const orderSubtotal = parseCurrency(row.orderSubtotal);
   const wholesaleValue = parseCurrency(row.wholesaleValue);
   const creditMemo = parseCurrency(row.creditMemo);
+  const orderDiscount = parseCurrency(row.orderDiscount);
 
   if (orderTotal > 0) {
-    return Math.max(0, orderTotal - creditMemo);
+    return Math.max(0, orderTotal - creditMemo - orderDiscount);
   }
 
   if (orderSubtotal > 0) {
-    return Math.max(0, orderSubtotal - creditMemo);
+    return Math.max(0, orderSubtotal - creditMemo - orderDiscount);
   }
 
   if (wholesaleValue > 0) {
-    return Math.max(0, wholesaleValue - creditMemo);
+    return Math.max(0, wholesaleValue - creditMemo - orderDiscount);
   }
 
   return Math.max(0, parseCurrency(row.lineItemSubtotalAfterDiscount || row.lineItemSubtotal));
@@ -434,7 +437,7 @@ function parseRetailerRow(row: NabisRetailerApiRow): ParsedRetailer | null {
   };
 }
 
-function parseOrderRow(row: NabisOrderApiRow): ParsedOrder | null {
+export function parseNabisOrderForCache(row: NabisOrderApiRow): ParsedOrder | null {
   const externalOrderId = compactString(row.id ?? row.order);
   if (!externalOrderId) {
     return null;
@@ -470,9 +473,16 @@ export function parseNabisOrderLineForCache(row: NabisOrderApiRow): ParsedOrderL
   const externalOrderId = compactString(row.id ?? row.order);
   const productName = compactString(row.skuName ?? row.skuDisplayName ?? row.productName ?? row.lineItemProductName ?? row.skuCode ?? row.unitDescription);
   const quantity = parseNumber(row.units ?? row.quantity ?? row.lineItemQuantity);
-  const subtotal = parseCurrency(row.lineItemSubtotalAfterDiscount ?? row.lineItemSubtotal);
+  const rawSubtotalAfterDiscount = row.lineItemSubtotalAfterDiscount;
+  const hasExplicitSubtotal =
+    (rawSubtotalAfterDiscount !== null && rawSubtotalAfterDiscount !== undefined && rawSubtotalAfterDiscount !== '') ||
+    (row.lineItemSubtotal !== null && row.lineItemSubtotal !== undefined && row.lineItemSubtotal !== '');
+  const subtotal =
+    rawSubtotalAfterDiscount !== null && rawSubtotalAfterDiscount !== undefined && rawSubtotalAfterDiscount !== ''
+      ? parseCurrency(rawSubtotalAfterDiscount)
+      : Math.max(0, parseCurrency(row.lineItemSubtotal) - parseCurrency(row.lineItemDiscount));
   const fallbackUnitPrice = parseNumber(row.skuPricePerUnit ?? row.lineItemPricePerUnitAfterDiscount ?? row.pricePerUnit ?? row.unitPrice ?? row.lineItemPricePerUnit);
-  const unitPrice = quantity && quantity > 0 && subtotal > 0 ? subtotal / quantity : fallbackUnitPrice;
+  const unitPrice = quantity && quantity > 0 && hasExplicitSubtotal ? subtotal / quantity : fallbackUnitPrice;
 
   if (!externalOrderId || !productName || !quantity || quantity <= 0 || unitPrice == null || unitPrice < 0) {
     return null;
@@ -834,7 +844,7 @@ async function loadOrdersFromNabis(
     const payload = await fetchNabisPage<NabisOrderApiRow>('/v2/ny/order', page);
     const pageRows = payload.data ?? [];
     const rowsToParse = options?.historicalBackfill ? filterOrderRowsOnOrAfterCutoff(pageRows, cutoff) : pageRows;
-    const parsedRows = rowsToParse.map(parseOrderRow).filter((row): row is ParsedOrder => Boolean(row));
+    const parsedRows = rowsToParse.map(parseNabisOrderForCache).filter((row): row is ParsedOrder => Boolean(row));
     rows.push(...parsedRows);
     pagesScanned += 1;
     recordsRead += pageRows.length;
