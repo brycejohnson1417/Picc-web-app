@@ -823,7 +823,7 @@ function DashboardStatusStrip({ error, metadata, hasOrders }: { error: string | 
     notes.push('VMI uses the current territory snapshot. Historical VMI status changes are not cached.');
   }
 
-  if (metadata?.cacheCoverage.status === 'empty' && !hasOrders) {
+  if (metadata?.cacheCoverage?.status === 'empty' && !hasOrders) {
     notes.push('This dashboard reads saved Postgres data first; manual refresh only checks Nabis when you explicitly request it.');
   }
 
