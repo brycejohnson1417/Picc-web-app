@@ -119,6 +119,7 @@ export function NabisSyncAdminPanel() {
   const [runningModule, setRunningModule] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeSyncNotice, setActiveSyncNotice] = useState<string | null>(null);
+  const [mirrorRetailersToCrm, setMirrorRetailersToCrm] = useState(false);
 
   const modules = useMemo(() => {
     const source = status?.modules ?? [];
@@ -162,11 +163,12 @@ export function NabisSyncAdminPanel() {
     setRunningModule(module);
     setError(null);
     setActiveSyncNotice(null);
+    const syncCrm = module === 'nabis-retailers' && mirrorRetailersToCrm;
     try {
       const response = await fetch('/api/sync/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ module }),
+        body: JSON.stringify({ module, syncCrm }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -280,6 +282,21 @@ export function NabisSyncAdminPanel() {
             ))}
           </div>
 
+          <label className="flex items-start gap-3 rounded-2xl border border-[#d6dae2] bg-[#f7f9fc] px-4 py-4">
+            <input
+              type="checkbox"
+              checked={mirrorRetailersToCrm}
+              onChange={(event) => setMirrorRetailersToCrm(event.currentTarget.checked)}
+              className="mt-1 h-4 w-4 rounded border-[#aeb6c4] text-[#1d5eea] accent-[#1d5eea]"
+            />
+            <span>
+              <span className="block text-[15px] font-semibold text-[#1d1f23]">Mirror new Nabis retailers to CRM during manual retailer sync</span>
+              <span className="mt-1 block text-sm text-[#5c6674]">
+                Daily cron already creates missing Dispensary Master List pages from Nabis. Turn this on only when manually running retailer sync and you want the same CRM mirroring.
+              </span>
+            </span>
+          </label>
+
           <div className="grid gap-3 xl:grid-cols-3">
             <SyncActionButton
               icon={<RefreshCw className="h-4 w-4" />}
@@ -292,7 +309,7 @@ export function NabisSyncAdminPanel() {
             <SyncActionButton
               icon={<Store className="h-4 w-4" />}
               title={status.controls.retailers.label}
-              description="Refreshes local Nabis retailer records without CRM mirroring."
+              description={mirrorRetailersToCrm ? 'Refreshes local retailer records and creates missing CRM pages from Nabis.' : 'Refreshes local Nabis retailer records without CRM mirroring.'}
               disabled={!status.controls.retailers.enabled || Boolean(runningModule)}
               loading={runningModule === status.controls.retailers.module}
               onClick={() => void runSync(status.controls.retailers.module, status.controls.retailers.label)}
