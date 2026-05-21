@@ -1,29 +1,29 @@
-# Session: Issue #71 Nabis Dashboard Background Sync
+# Session: Issue #75 Territory Map Search Suggestions
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/71
+- https://github.com/brycejohnson1417/Picc-web-app/issues/75
 
 ## Scope
-- Make Nabis dashboard manual refresh start the retailer + order sync in the background instead of blocking the browser response.
-- Return saved local Postgres dashboard data immediately after the user clicks manual refresh.
-- Show a clear dashboard status that the sync was started in the background.
-- Preserve the create-only CRM mirroring rule: match existing CRM pages by `Licensed Location ID`, link local accounts to existing pages, and do not patch existing CRM properties.
-- Keep daily cron behavior protected and unchanged.
+- Make territory map search show selectable store matches while the user types.
+- Stop auto-focusing the first matching store from search text alone.
+- Let explicit suggestion clicks focus/highlight the selected store and open the selected-account card.
+- Preserve the current Google Maps provider, route controls, filter sheet, and mobile-first shell.
 
 ## Out Of Scope
 - No schema migration.
-- No Nabis write API usage.
-- No production data backfill.
-- No manual production cron execution.
-- No change to order parsing, retailer matching, or Notion property mapping.
-- No Google Maps fix in this branch; tracked separately in issue #67.
+- No Notion writes or production data mutation.
+- No auth, Clerk, Vercel, or provider changes.
+- No map provider rewrite.
+- No Nabis dashboard/server sync changes; open PR #74 owns that area.
 
 ## Constraints
-- This is a fast-lane surgical UX/runtime fix; it does not add a new production write surface beyond the already-approved sync path.
-- Do not print secrets or run production cron manually.
+- This is production triage: keep it surgical and revertable.
+- Keep all requested behavior usable directly from the browser UI.
+- Owned path globs: `components/mobile/territory-*`, `lib/territory/map-search-*`, `lib/territory/*.test.ts`, `SESSION.md`.
+- Open PR overlap checked: PR #74 touches Nabis dashboard/server sync files only; no expected path overlap.
 - Keep the change surgical and revertable.
 
 ## Validation Plan
-- RED test first for dashboard refresh metadata where practical.
-- Focused unit/unit-route test after implementation if the existing harness supports it.
-- Then run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` before completion.
+- RED test first for search suggestion ranking/selection behavior in a focused territory helper.
+- Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`.
+- Start the local app and verify `/territory` in a browser with the map search flow.
