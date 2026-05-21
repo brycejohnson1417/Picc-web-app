@@ -810,7 +810,10 @@ function DashboardStatusStrip({ error, metadata, hasOrders }: { error: string | 
     }
   }
 
-  if (metadata?.staleWarning) {
+  if (metadata?.activeSync) {
+    items.push({ label: 'Sync', value: 'Running', tone: 'info' });
+    notes.push('Nabis sync is actively running. Saved dashboard data stays visible until the latest run finishes.');
+  } else if (metadata?.staleWarning) {
     items.push({ label: 'Sync', value: 'Needs attention', tone: 'info' });
     warnings.push(metadata.staleWarning);
   }

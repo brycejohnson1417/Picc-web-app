@@ -308,6 +308,31 @@ export function evaluateNabisSyncLease(input: {
   return { canAcquire: false, reason: 'held', activeHolderId, activeModule, activeRefreshedAt, activeExpiresAt };
 }
 
+export function activeNabisSyncFromLease(input: {
+  status?: IntegrationSyncStatus | null;
+  metadata?: unknown;
+  updatedAt?: Date | null;
+  now?: Date;
+}) {
+  if (input.status !== IntegrationSyncStatus.RUNNING) {
+    return null;
+  }
+
+  const metadata = toJsonObject(input.metadata);
+  const refreshedAt = isoFromUnknown(metadata?.refreshedAt) ?? input.updatedAt?.toISOString() ?? null;
+  const expiresAt = isoFromUnknown(metadata?.expiresAt);
+  const expiresAtDate = dateFromUnknown(metadata?.expiresAt);
+  if (expiresAtDate && expiresAtDate.getTime() <= (input.now ?? new Date()).getTime()) {
+    return null;
+  }
+
+  return {
+    module: isoFromUnknown(metadata?.module),
+    refreshedAt,
+    expiresAt,
+  };
+}
+
 function compactString(value: unknown) {
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -1894,7 +1919,7 @@ export async function getNabisSyncFreshness(orgId: string) {
       checkpoints: {
         where: {
           module: {
-            in: ['retailers', 'orders', 'orders_reconcile'],
+            in: ['retailers', 'orders', 'orders_reconcile', NABIS_SYNC_LEASE_MODULE],
           },
         },
         select: {
@@ -1912,6 +1937,7 @@ export async function getNabisSyncFreshness(orgId: string) {
   const retailerCheckpoint = byModule.get('retailers');
   const orderCheckpoint = byModule.get('orders');
   const reconcileCheckpoint = byModule.get('orders_reconcile');
+  const leaseCheckpoint = byModule.get(NABIS_SYNC_LEASE_MODULE);
 
   const orderSyncAt =
     ((orderCheckpoint?.metadata as Record<string, unknown> | null)?.lastSuccessfulSyncAt as string | undefined) ??
@@ -1931,5 +1957,10 @@ export async function getNabisSyncFreshness(orgId: string) {
       ((reconcileCheckpoint?.metadata as Record<string, unknown> | null)?.lastSuccessfulSyncAt as string | undefined) ??
       reconcileCheckpoint?.updatedAt.toISOString() ??
       null,
+    activeSync: activeNabisSyncFromLease({
+      status: leaseCheckpoint?.status,
+      metadata: leaseCheckpoint?.metadata,
+      updatedAt: leaseCheckpoint?.updatedAt,
+    }),
   };
 }

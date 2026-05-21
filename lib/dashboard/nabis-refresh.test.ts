@@ -17,6 +17,7 @@ function dashboardPayload(): NabisDashboardResponse {
     metadata: {
       fetchedAt: '2026-05-21T14:00:00.000Z',
       dataSource: 'local-postgres',
+      activeSync: null,
       range: {
         startCreatedAt: '2026-05-01',
         endCreatedAt: '2026-05-21',

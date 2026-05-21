@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { IntegrationSyncStatus } from '@prisma/client';
 import {
+  activeNabisSyncFromLease,
   evaluateNabisSyncLease,
   filterOrderRowsOnOrAfterCutoff,
   formatNabisSyncLeaseConflictMessage,
@@ -90,6 +91,38 @@ describe('Nabis sync line cache parsing', () => {
 });
 
 describe('Nabis sync lease coordination', () => {
+  it('exposes an active global sync lease for dashboard freshness', () => {
+    const active = activeNabisSyncFromLease({
+      status: IntegrationSyncStatus.RUNNING,
+      metadata: {
+        module: 'retailers_and_orders',
+        refreshedAt: '2026-05-21T14:53:38.850Z',
+        expiresAt: '2026-05-21T14:54:38.850Z',
+      },
+      now: new Date('2026-05-21T14:53:48.000Z'),
+    });
+
+    expect(active).toEqual({
+      module: 'retailers_and_orders',
+      refreshedAt: '2026-05-21T14:53:38.850Z',
+      expiresAt: '2026-05-21T14:54:38.850Z',
+    });
+  });
+
+  it('does not expose an expired global sync lease as active', () => {
+    const active = activeNabisSyncFromLease({
+      status: IntegrationSyncStatus.RUNNING,
+      metadata: {
+        module: 'retailers_and_orders',
+        refreshedAt: '2026-05-21T14:53:38.850Z',
+        expiresAt: '2026-05-21T14:54:38.850Z',
+      },
+      now: new Date('2026-05-21T14:55:00.000Z'),
+    });
+
+    expect(active).toBeNull();
+  });
+
   it('lease-refusal blocks a second active holder before the lease is stale', () => {
     const now = new Date('2026-05-07T18:00:00.000Z');
     const decision = evaluateNabisSyncLease({
