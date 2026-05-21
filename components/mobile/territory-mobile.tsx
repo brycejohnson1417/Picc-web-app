@@ -238,7 +238,7 @@ export function TerritoryMobile() {
         : 'all',
     );
     setShowRouteOnly(Boolean(parsed.showRouteOnly));
-    setPinColorMode(parsed.pinColorMode === 'rep' ? 'rep' : 'status');
+    setPinColorMode(parsed.pinColorMode === 'rep' || parsed.pinColorMode === 'follow-up-date' ? parsed.pinColorMode : 'status');
     setSavedFiltersAt(typeof parsed.savedAt === 'string' ? parsed.savedAt : null);
     toast.success('Loaded saved territory filters');
   }, []);

@@ -8,6 +8,7 @@ import {
   preferredPartnerLabel,
   type PreferredPartnerFilter,
 } from '@/lib/territory/preferred-partner';
+import type { PinColorMode } from '@/lib/territory/pin-colors';
 import { normalizeStatus, type TerritoryFilterCount, type TerritoryStorePin } from '@/lib/territory/types';
 
 const CONFIGURED_ORG_ID = process.env.TERRITORY_ORG_ID?.trim() ?? '';
@@ -23,7 +24,7 @@ export interface TerritoryFilterPresetInput {
   selectedStatuses: string[];
   selectedReps: string[];
   showRouteOnly: boolean;
-  pinColorMode: 'status' | 'rep';
+  pinColorMode: PinColorMode;
 }
 
 function asDate(value: string | null | undefined) {

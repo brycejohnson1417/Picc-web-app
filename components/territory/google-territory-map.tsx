@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdvancedMarker, APIProvider, Map as GoogleMap, Marker, Pin, useMap } from '@vis.gl/react-google-maps';
 import { GoogleTerritoryBoundaries, type TerritoryBoundaryDraft } from '@/components/territory/google-territory-boundaries';
 import { GoogleTerritoryMarkers, GoogleTerritoryMarkersFallback } from '@/components/territory/google-territory-markers';
-import { pinColorForStore, type PinColorMode } from '@/lib/territory/pin-colors';
+import { pinColorForStore, pinGlyphColorForStore, pinGlyphForStore, type PinColorMode } from '@/lib/territory/pin-colors';
 import type { TerritoryBoundary, TerritoryMarker, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
@@ -321,8 +321,8 @@ function markerScale({
 
 const fallbackMarkerIconCache = new Map<string, string>();
 
-function fallbackMarkerIcon(fillColor: string, approximate: boolean, preferredPartner: boolean, scale = 1) {
-  const key = `${fillColor}|${approximate ? 'approx' : 'exact'}|${preferredPartner ? 'preferred' : 'standard'}|${scale}`;
+function fallbackMarkerIcon(fillColor: string, approximate: boolean, preferredPartner: boolean, glyph: string, glyphColor: string, scale = 1) {
+  const key = `${fillColor}|${approximate ? 'approx' : 'exact'}|${preferredPartner ? 'preferred' : 'standard'}|${glyph}|${glyphColor}|${scale}`;
   const existing = fallbackMarkerIconCache.get(key);
   if (existing) {
     return existing;
@@ -331,12 +331,14 @@ function fallbackMarkerIcon(fillColor: string, approximate: boolean, preferredPa
   const width = Math.round(30 * scale);
   const height = Math.round(38 * scale);
   const stroke = preferredPartner ? '#111111' : approximate ? '#111827' : '#ffffff';
-  const glyph = preferredPartner
-    ? `<text x="15" y="15.5" text-anchor="middle" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#ffffff">P</text>`
-    : `<circle cx="15" cy="13" r="4" fill="white" fill-opacity="${approximate ? '0.65' : '0.95'}"/>`;
+  const markerGlyph = glyph
+    ? `<text x="15" y="16" text-anchor="middle" font-family="Arial, sans-serif" font-size="${glyph.length > 2 ? '7.2' : '8.8'}" font-weight="800" fill="${glyphColor}">${glyph}</text>`
+    : approximate
+      ? `<circle cx="15" cy="13" r="4" fill="white" fill-opacity="0.65"/>`
+      : '';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 30 38">
     <path d="M15 1C8.37258 1 3 6.37258 3 13C3 22 15 37 15 37C15 37 27 22 27 13C27 6.37258 21.6274 1 15 1Z" fill="${fillColor}" stroke="${stroke}" stroke-width="${preferredPartner ? '2.6' : '2'}"/>
-    ${glyph}
+    ${markerGlyph}
   </svg>`;
   const encoded = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   fallbackMarkerIconCache.set(key, encoded);
@@ -603,9 +605,11 @@ export function GoogleTerritoryMap({
             const selected = selectedSet.has(store.id);
             const approximate = Boolean(store.isApproximate);
             const preferredPartner = Boolean(store.isPreferredPartner);
-            const glyph = preferredPartner ? 'P' : approximate ? '≈' : '';
+            const glyph = pinGlyphForStore(store, pinColorMode);
+            const glyphColor = pinGlyphColorForStore(store, pinColorMode);
             const scale = markerScale({ focused, highlighted, selected, approximate });
             const borderColor = preferredPartner ? '#111111' : approximate ? '#111827' : '#ffffff';
+            const background = pinColorForStore(store, pinColorMode, repColorMap);
 
             if (useAdvancedMarkers) {
               return (
@@ -616,9 +620,9 @@ export function GoogleTerritoryMap({
                     title={store.name}
                 >
                   <Pin
-                    background={pinColorForStore(store, pinColorMode, repColorMap)}
+                    background={background}
                     borderColor={borderColor}
-                    glyphColor="#ffffff"
+                    glyphColor={glyphColor}
                     scale={scale}
                     glyph={glyph}
                   />
@@ -634,7 +638,7 @@ export function GoogleTerritoryMap({
                 title={store.name}
                 opacity={approximate ? 0.78 : 1}
                 icon={{
-                  url: fallbackMarkerIcon(pinColorForStore(store, pinColorMode, repColorMap), approximate, preferredPartner, scale),
+                  url: fallbackMarkerIcon(background, approximate, preferredPartner, glyph, glyphColor, scale),
                 }}
               />
             );

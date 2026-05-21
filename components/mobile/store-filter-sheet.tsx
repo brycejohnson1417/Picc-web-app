@@ -130,29 +130,39 @@ export function StoreFilterSheet({
         <div className="flex-1 overflow-y-auto px-4 py-4">
           <section className="mb-4 rounded-xl border border-[#c7c9cf] bg-white p-3">
             <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Pin Colors</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className={cn(
-                  'rounded-lg border px-3 py-2 text-[13px] font-medium',
-                  pinColorMode === 'status' ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
-                )}
-                onClick={() => onSetPinColorMode('status')}
-              >
-                By Status
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  'rounded-lg border px-3 py-2 text-[13px] font-medium',
-                  pinColorMode === 'rep' ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
-                )}
-                onClick={() => onSetPinColorMode('rep')}
-              >
-                By Rep
-              </button>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { mode: 'status' as const, label: 'By Status' },
+                { mode: 'rep' as const, label: 'By Rep' },
+                { mode: 'follow-up-date' as const, label: 'Follow Up Date' },
+              ].map((option) => (
+                <button
+                  key={option.mode}
+                  type="button"
+                  className={cn(
+                    'rounded-lg border px-2 py-2 text-[12px] font-medium sm:text-[13px]',
+                    pinColorMode === option.mode ? 'border-[#cd3814] bg-[#cd3814] text-white' : 'border-[#c3c5cb] bg-white text-[#4a4c52]',
+                  )}
+                  onClick={() => onSetPinColorMode(option.mode)}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
-            <p className="mt-2 text-[12px] text-[#72757d]">Filter results are still applied. This only changes pin coloring. Preferred Partner pins keep the PICC marker treatment in both modes.</p>
+            {pinColorMode === 'follow-up-date' ? (
+              <div className="mt-3 overflow-hidden rounded-lg border border-[#c3c5cb] bg-white">
+                <div className="h-2 bg-[linear-gradient(90deg,#0616b7_0%,#a7dcff_32%,#00e63a_50%,#ffcf24_64%,#ff7a00_76%,#d00000_100%)]" />
+                <div className="grid grid-cols-4 gap-1 px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-[#72757d]">
+                  <span>No Date</span>
+                  <span>Upcoming</span>
+                  <span>Today</span>
+                  <span className="text-right">Overdue</span>
+                </div>
+              </div>
+            ) : null}
+            <p className="mt-2 text-[12px] text-[#72757d]">
+              Filter results are still applied. Follow Up Date mode shows days until follow-up inside pins; Preferred Partner pins keep the bold outline but hide the P.
+            </p>
           </section>
 
           <FilterSection
