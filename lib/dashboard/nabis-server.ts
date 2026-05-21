@@ -250,6 +250,7 @@ export async function getDashboardPayload(input: {
   ]);
 
   const syncLag = secondsSince(freshness.lastOrderSyncAt);
+  const activeSync = freshness.activeSync;
   const cacheCoverage = buildCacheCoverage({
     requestedRange: { start: input.start, end: input.end },
     earliestOrderCreatedAt: coverageAggregate._min.orderCreatedDate?.toISOString() ?? null,
@@ -287,7 +288,8 @@ export async function getDashboardPayload(input: {
       lastRetailerSyncAt: freshness.lastRetailerSyncAt,
       lastReconciliationAt: freshness.lastReconciliationAt,
       syncLagSeconds: syncLag,
-      staleWarning: staleWarning(syncLag),
+      staleWarning: activeSync ? null : staleWarning(syncLag),
+      activeSync,
       cacheCoverage,
       territorySnapshot: {
         syncedAt: territorySnapshot.syncedAt,
