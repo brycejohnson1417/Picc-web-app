@@ -5,6 +5,7 @@
 
 ## Scope
 - Enable the scheduled Nabis cron to mirror newly discovered retailers into the Dispensary Master List CRM.
+- Make manual dashboard refresh run retailer + order sync with CRM mirroring so new Nabis retailers are added to the app cache and Dispensary Master List.
 - Add an explicit admin UI control for manual retailer/all sync CRM mirroring.
 - Keep the existing Nabis lease and order sync behavior intact.
 

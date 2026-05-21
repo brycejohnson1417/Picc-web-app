@@ -463,7 +463,7 @@ export function NabisSalesDashboard() {
                   className="inline-flex items-center justify-center rounded-xl border border-[#d3d9e2] bg-white px-4 py-2.5 text-sm font-semibold text-[#243040] shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <RefreshCcw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  Sync Now
+                  Sync Orders + Retailers
                 </button>
               </div>
 
@@ -824,7 +824,7 @@ function DashboardStatusStrip({ error, metadata, hasOrders }: { error: string | 
   }
 
   if (metadata?.cacheCoverage?.status === 'empty' && !hasOrders) {
-    notes.push('This dashboard reads saved Postgres data first; manual refresh only checks Nabis when you explicitly request it.');
+    notes.push('This dashboard reads saved Postgres data first; manual refresh syncs Nabis orders, local retailer records, and missing CRM retailer pages.');
   }
 
   if (items.length === 0) {
