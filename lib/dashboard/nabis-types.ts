@@ -3,6 +3,10 @@ import type { CacheCoverage, NabisDashboardAnalytics } from '@/lib/dashboard/nab
 export interface NabisDashboardMetadata {
   fetchedAt: string;
   dataSource: 'local-postgres';
+  manualRefresh?: {
+    status: 'background-started';
+    startedAt: string;
+  } | null;
   range: {
     startCreatedAt: string;
     endCreatedAt: string;
