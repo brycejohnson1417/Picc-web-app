@@ -138,7 +138,7 @@ function buildRetailerProperties(input: CrmRetailerSyncInput, options?: { includ
   return properties;
 }
 
-export async function upsertDispensaryCrmPageFromRetailer(input: CrmRetailerSyncInput) {
+export async function ensureDispensaryCrmPageFromRetailer(input: CrmRetailerSyncInput) {
   const existing =
     (input.notionPageId
       ? ({
@@ -161,19 +161,14 @@ export async function upsertDispensaryCrmPageFromRetailer(input: CrmRetailerSync
       pageId: created.id,
       created: true,
       updated: false,
+      skippedExisting: false,
     };
   }
-
-  await notionRequest<NotionPage>(`/pages/${existing.id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      properties: buildRetailerProperties(input),
-    }),
-  });
 
   return {
     pageId: existing.id,
     created: false,
-    updated: true,
+    updated: false,
+    skippedExisting: true,
   };
 }

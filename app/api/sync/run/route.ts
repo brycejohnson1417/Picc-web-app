@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
 import { prisma } from '@/lib/db/prisma';
+import { nabisManualSyncOptions } from '@/lib/server/nabis-sync-options';
 import { NabisSyncLeaseError, syncNabisOrders, syncNabisRetailersAndOrders, syncNabisRetailersWithOptions } from '@/lib/server/nabis-sync';
 
 export async function POST(req: Request) {
@@ -9,6 +10,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const syncModule = body.module || 'all';
+  const crmOptions = nabisManualSyncOptions(syncModule, body);
   const actor = {
     clerkUserId: ctx.userId,
     email: ctx.email,
@@ -24,12 +26,12 @@ export async function POST(req: Request) {
         });
       }
       if (syncModule === 'nabis-orders') {
-        return syncNabisRetailersAndOrders(ctx.orgId, actor, { reconciliation: false, syncCrm: false });
+        return syncNabisRetailersAndOrders(ctx.orgId, actor, { reconciliation: false, syncCrm: crmOptions.syncCrm });
       }
       if (syncModule === 'nabis-retailers') {
-        return syncNabisRetailersWithOptions(ctx.orgId, actor, { syncCrm: false });
+        return syncNabisRetailersWithOptions(ctx.orgId, actor, crmOptions);
       }
-      return syncNabisRetailersAndOrders(ctx.orgId, actor, { reconciliation: body.reconciliation === true, syncCrm: false });
+      return syncNabisRetailersAndOrders(ctx.orgId, actor, { reconciliation: body.reconciliation === true, syncCrm: crmOptions.syncCrm });
     };
 
     const result = await run().catch((error: unknown) => {
