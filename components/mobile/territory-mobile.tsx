@@ -732,6 +732,8 @@ export function TerritoryMobile() {
             searchSuggestions={mapSearchSuggestions}
             onSelectSearchSuggestion={(storeId) => {
               setFocusedId(storeId);
+              setMapSearch('');
+              setDebouncedMapSearch('');
               setShowMapSearch(false);
               setFocusRequestToken((current) => current + 1);
             }}
