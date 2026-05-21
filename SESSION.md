@@ -1,29 +1,26 @@
-# Session: Issue #75 Territory Map Search Suggestions
+# Session: Issue #77 Reuse Notion Tab From Territory Map
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/75
+- https://github.com/brycejohnson1417/Picc-web-app/issues/77
 
 ## Scope
-- Make territory map search show selectable store matches while the user types.
-- Stop auto-focusing the first matching store from search text alone.
-- Let explicit suggestion clicks focus/highlight the selected store and open the selected-account card.
-- Preserve the current Google Maps provider, route controls, filter sheet, and mobile-first shell.
+- Change the territory focused-card "N" shortcut so it opens Notion in a named app tab instead of `_blank`.
+- Preserve the existing Notion destination URL generated from the selected store's Notion page ID.
+- Add a focused regression test for the tab target and opener-clearing behavior.
 
 ## Out Of Scope
-- No schema migration.
-- No Notion writes or production data mutation.
-- No auth, Clerk, Vercel, or provider changes.
-- No map provider rewrite.
-- No Nabis dashboard/server sync changes; open PR #74 owns that area.
+- No Notion workspace writes or Notion API mutation.
+- No schema migration, auth change, production data write, or Vercel config change.
+- No redesign of the account detail sheet or unrelated Notion archive links.
+- No change to Google Maps routing behavior.
 
 ## Constraints
-- This is production triage: keep it surgical and revertable.
-- Keep all requested behavior usable directly from the browser UI.
-- Owned path globs: `components/mobile/territory-*`, `lib/territory/map-search-*`, `lib/territory/*.test.ts`, `SESSION.md`.
-- Open PR overlap checked: PR #74 touches Nabis dashboard/server sync files only; no expected path overlap.
+- This is a fast-lane surgical frontend behavior fix.
+- Keep Notion behind the existing URL handoff; do not add any external-system writes.
 - Keep the change surgical and revertable.
+- Open PR #76 was checked; it currently changes `SESSION.md` and `lib/territory/map-search-suggestions.test.ts`.
 
 ## Validation Plan
-- RED test first for search suggestion ranking/selection behavior in a focused territory helper.
-- Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`.
-- Start the local app and verify `/territory` in a browser with the map search flow.
+- RED test first for the Notion CRM tab target helper.
+- Then run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` before completion.
+- Browser verify `/territory` if the local protected route can be loaded.
