@@ -1,26 +1,40 @@
-# Session: Issue #77 Reuse Notion Tab From Territory Map
+# Session: Issue #79 Follow-Up Date Pin Heatmap
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/77
+- https://github.com/brycejohnson1417/Picc-web-app/issues/79
 
 ## Scope
-- Change the territory focused-card "N" shortcut so it opens Notion in a named app tab instead of `_blank`.
-- Preserve the existing Notion destination URL generated from the selected store's Notion page ID.
-- Add a focused regression test for the tab target and opener-clearing behavior.
+- Add a Follow Up Date option to the territory Pin Colors UI.
+- Color territory map pins by follow-up urgency using the provided blue-to-green-to-red heatmap direction.
+- Show days until follow-up inside map pins only in Follow Up Date mode.
+- Keep Preferred Partner bold pin outline in Follow Up Date mode while suppressing the `P` glyph.
 
 ## Out Of Scope
-- No Notion workspace writes or Notion API mutation.
-- No schema migration, auth change, production data write, or Vercel config change.
-- No redesign of the account detail sheet or unrelated Notion archive links.
-- No change to Google Maps routing behavior.
+- No Notion, Neon, Supabase, GHL, Nabis, Vercel, schema, auth, or production data writes.
+- No map provider changes.
+- No unrelated territory search, account-detail, Notion-link, or route-planning behavior changes.
+
+## Owned Paths
+- `lib/territory/pin-colors.ts`
+- `lib/territory/*.test.ts`
+- `components/mobile/store-filter-sheet.tsx`
+- `components/mobile/territory-mobile.tsx`
+- `components/territory/google-territory-map.tsx`
+- `app/api/territory/filter-presets/route.ts`
+- `SESSION.md`
+
+## Open PR Overlap Check
+- Checked open PR #76. It owns broad `components/mobile/territory-*` search-suggestion paths and `SESSION.md`; this slice avoids search behavior.
+- Checked open PR #78. It owns the focused Notion card/link helper and `SESSION.md`; this slice avoids Notion-link behavior.
+- During rebase, `SESSION.md` conflicted with the landed issue #77 session note. This branch keeps the current issue #79 scope note.
 
 ## Constraints
-- This is a fast-lane surgical frontend behavior fix.
-- Keep Notion behind the existing URL handoff; do not add any external-system writes.
-- Keep the change surgical and revertable.
-- Open PR #76 was checked; it currently changes `SESSION.md` and `lib/territory/map-search-suggestions.test.ts`.
+- Production triage style: surgical, additive, one issue per PR.
+- Keep UI components thin; put follow-up date classification/color logic in `lib/territory/pin-colors.ts`.
+- The running browser UI is the source of truth for the feature.
 
 ## Validation Plan
-- RED test first for the Notion CRM tab target helper.
-- Then run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` before completion.
-- Browser verify `/territory` if the local protected route can be loaded.
+- RED test first for follow-up date pin color and label classification.
+- Then implement the helper/UI wiring.
+- Run focused tests, typecheck, lint, full test suite, and build.
+- Browser-verify `/territory`: open filters, select Follow Up Date, apply, and confirm map pins show heatmap colors with day labels.
