@@ -5,7 +5,7 @@ import { IntegrationProvider, IntegrationSyncStatus, Prisma } from '@prisma/clie
 import { prisma } from '@/lib/db/prisma';
 import { ensureAccountIdentityMappings, resolveCanonicalAccountByIdentifiers } from '@/lib/server/account-identity';
 import { appendAuditEvent } from '@/lib/server/audit-log';
-import { upsertDispensaryCrmPageFromRetailer } from '@/lib/server/notion-crm-sync';
+import { ensureDispensaryCrmPageFromRetailer } from '@/lib/server/notion-crm-sync';
 import { ensureActivePolicySnapshot } from '@/lib/server/policy-snapshots';
 import { excludedInternalTransferRetailers, isExcludedInternalTransferRetailerName } from '@/lib/nabis/internal-transfers';
 
@@ -1199,7 +1199,7 @@ async function upsertLocalAccountFromRetailer(
   const shouldSyncCrm = options?.syncCrm === true;
 
   if (shouldSyncCrm && (changed || !account.notionPageId)) {
-    const notion = await upsertDispensaryCrmPageFromRetailer({
+    const notion = await ensureDispensaryCrmPageFromRetailer({
       licensedLocationId: retailer.licensedLocationId,
       nabisRetailerId: retailer.externalRetailerId,
       licenseNumber: retailer.licenseNumber,
@@ -1224,7 +1224,7 @@ async function upsertLocalAccountFromRetailer(
 
     await appendAuditEvent({
       orgId,
-      action: notion.created ? 'CRM_ACCOUNT_CREATED_FROM_NABIS' : 'CRM_ACCOUNT_UPDATED_FROM_NABIS',
+      action: notion.created ? 'CRM_ACCOUNT_CREATED_FROM_NABIS' : 'CRM_ACCOUNT_LINKED_FROM_NABIS',
       entityType: 'Account',
       entityId: account.id,
       actorClerkUserId: actor?.clerkUserId ?? null,
