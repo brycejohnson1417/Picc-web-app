@@ -6,6 +6,7 @@ Use this file as the canonical handoff context for any other AI working on this 
 
 - Local repo path: `/Users/brycejohnson/Code/PICC-Web-App`
 - GitHub repo: `https://github.com/brycejohnson1417/Picc-web-app.git`
+- Linear project: `PICC-Web-app`
 - Canonical branch: `main`
 - Current canonical snapshot commit: `cdbe07389dce9465666def8099335bc6b523c8c2`
 
@@ -19,10 +20,22 @@ Use this file as the canonical handoff context for any other AI working on this 
 
 ## Do Not Use These As Canonical
 
+- Do not use `/Users/brycejohnson/Code/map-app`
+- Do not use `https://github.com/brycejohnson1417/Map-APP`
+- Do not use the Linear `Map-APP` project
+- Do not use `map-app-supabase.vercel.app`
 - Do not use `picc-command-center.vercel.app`
 - Do not use `picc-dispensary-crm.vercel.app`
 - Do not use old local repos like `Picc-web-app-fix-accounts`
 - Do not use any legacy Vite/root app surface if it appears in old history
+
+## Project Boundary And Private Documentation
+
+- This is the live PICC production app, not the new multi-tenant map-app platform.
+- If a user request includes a screenshot or UI clue, compare it against this production app before choosing a repo. Ask for clarification if the target project is not clear.
+- Public GitHub documentation should stay public-safe: repo identity, setup, validation, architecture boundaries, and issue/PR execution rules.
+- Private PICC workflows, business intelligence, customer-specific decisions, roadmap detail, screenshots with sensitive data, and long-form planning notes belong in Linear or a future authenticated in-app tenant knowledge base, not public GitHub.
+- GitHub issues remain the execution source for code work in this repo. Linear should be the private control plane for roadmap, decisions, and cross-time planning.
 
 ## Product / UX Direction
 
@@ -77,4 +90,4 @@ Use this file as the canonical handoff context for any other AI working on this 
 
 ## Short Prompt To Give Another AI
 
-Work only in `/Users/brycejohnson/Code/PICC-Web-App`, which is the canonical repo for the live PICC app. Use `main` in `https://github.com/brycejohnson1417/Picc-web-app.git`. The canonical production deployment is `https://piccnewyork.org`, backed by the Vercel project `picc-push` (`prj_zKro1cfUOP9D2MTh0ZahYDREcRUA`). Do not use legacy repos, old Vercel projects, old map providers, or rebuild a separate app surface. Keep Google Maps, the mobile-first PWA shell, Clerk Google-only auth, comment-first check-ins, and Dispensary Master List vendor-day properties as the current baseline.
+Work only in `/Users/brycejohnson/Code/PICC-Web-App`, which is the canonical repo for the live PICC app. Use `main` in `https://github.com/brycejohnson1417/Picc-web-app.git` and the Linear project `PICC-Web-app`. The canonical production deployment is `https://piccnewyork.org`, backed by the Vercel project `picc-push` (`prj_zKro1cfUOP9D2MTh0ZahYDREcRUA`). Do not use `map-app`, `Map-APP`, legacy repos, old Vercel projects, old map providers, or rebuild a separate app surface. Keep Google Maps, the mobile-first PWA shell, Clerk Google-only auth, comment-first check-ins, and Dispensary Master List vendor-day properties as the current baseline.
