@@ -25,6 +25,7 @@ import { MapRenderBoundary } from '@/components/mobile/map-render-boundary';
 import { createRepColorMap, type PinColorMode } from '@/lib/territory/pin-colors';
 import type { PreferredPartnerFilter } from '@/lib/territory/preferred-partner';
 import type { TerritoryStorePin } from '@/lib/territory/types';
+import { getTerritoryMapSearchSuggestions } from '@/lib/territory/map-search-suggestions';
 import { clearSavedTerritoryFilters, countActiveTerritoryFilters, loadSavedTerritoryFilters, persistSavedTerritoryFilters, type TerritorySavedFiltersPayload } from '@/lib/territory/filter-storage';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
 
@@ -403,55 +404,10 @@ export function TerritoryMobile() {
     }
   }, [pinColorMode]);
 
-  const highlightedSearchStore = useMemo(() => {
-    const query = debouncedMapSearch.trim().toLowerCase();
-    if (!query) {
-      return null;
-    }
-
-    const scoreStore = (store: TerritoryStorePin) => {
-      const haystacks = [
-        store.name,
-        store.locationAddress ?? '',
-        store.locationLabel ?? '',
-      ]
-        .join(' ')
-        .toLowerCase();
-
-      if (store.name.toLowerCase() === query) return 0;
-      if (store.name.toLowerCase().startsWith(query)) return 1;
-      if (haystacks.includes(query)) return 2;
-      return 3;
-    };
-
-    return [...mapStores].sort((left, right) => {
-      const scoreDiff = scoreStore(left) - scoreStore(right);
-      if (scoreDiff !== 0) return scoreDiff;
-      return left.name.localeCompare(right.name);
-    })[0] ?? null;
-  }, [debouncedMapSearch, mapStores]);
-
-  const lastSearchFocusRef = useRef<string>('');
-
-  useEffect(() => {
-    if (view !== 'map') {
-      return;
-    }
-
-    const highlightedId = highlightedSearchStore?.id ?? '';
-    if (!highlightedId) {
-      lastSearchFocusRef.current = '';
-      return;
-    }
-
-    if (lastSearchFocusRef.current === highlightedId) {
-      return;
-    }
-
-    lastSearchFocusRef.current = highlightedId;
-    setFocusedId(highlightedId);
-    setFocusRequestToken((current) => current + 1);
-  }, [highlightedSearchStore?.id, view]);
+  const mapSearchSuggestions = useMemo(
+    () => getTerritoryMapSearchSuggestions(debouncedMapSearch, mapStores),
+    [debouncedMapSearch, mapStores],
+  );
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
   const activeFiltersCount = countActiveTerritoryFilters({
@@ -736,7 +692,7 @@ export function TerritoryMobile() {
               selectedStopIds={routePlan.selectedStopIds}
               orderedStopIds={routePlan.orderedStopIds}
               focusedStoreId={focusedStore?.id ?? null}
-              highlightedStoreId={highlightedSearchStore?.id ?? null}
+              highlightedStoreId={null}
               currentLocation={currentLocation}
               locationRequestToken={locationRequestToken}
               focusRequestToken={focusRequestToken}
@@ -763,14 +719,25 @@ export function TerritoryMobile() {
             onFinishLasso={finishLasso}
             showMapSearch={showMapSearch}
             mapSearch={mapSearch}
-            onMapSearchChange={setMapSearch}
+            onMapSearchChange={(value) => {
+              setMapSearch(value);
+              setFocusedId(null);
+            }}
             onClearMapSearch={() => {
               setMapSearch('');
               setDebouncedMapSearch('');
               setShowMapSearch(false);
-              lastSearchFocusRef.current = '';
+              setFocusedId(null);
             }}
-            highlightedSearchStoreName={highlightedSearchStore?.name ?? null}
+            searchSuggestions={mapSearchSuggestions}
+            onSelectSearchSuggestion={(storeId) => {
+              setFocusedId(storeId);
+              setMapSearch('');
+              setDebouncedMapSearch('');
+              setShowMapSearch(false);
+              setFocusRequestToken((current) => current + 1);
+            }}
+            selectedSearchStoreId={focusedId}
             hasRoadRouteGeometry={hasRoadRouteGeometry}
             routeModeLabel={
               routePlan.optimizedRoute?.mode === 'transit'
