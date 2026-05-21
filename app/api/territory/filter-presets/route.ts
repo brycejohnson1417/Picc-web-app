@@ -9,7 +9,7 @@ const presetSchema = z.object({
   selectedStatuses: z.array(z.string().trim().min(1)).max(25).default([]),
   selectedReps: z.array(z.string().trim().min(1)).max(25).default([]),
   showRouteOnly: z.boolean().default(false),
-  pinColorMode: z.enum(['status', 'rep']).default('status'),
+  pinColorMode: z.enum(['status', 'rep', 'follow-up-date']).default('status'),
 });
 
 export const dynamic = 'force-dynamic';

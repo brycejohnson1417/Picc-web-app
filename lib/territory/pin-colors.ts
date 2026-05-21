@@ -1,6 +1,12 @@
 import type { TerritoryStorePin } from '@/lib/territory/types';
 
-export type PinColorMode = 'status' | 'rep';
+export type PinColorMode = 'status' | 'rep' | 'follow-up-date';
+
+export interface TerritoryPinPresentation {
+  color: string;
+  daysUntil: number | null;
+  glyph: string;
+}
 
 const DISTINCT_REP_COLORS = [
   '#7c3aed',
@@ -34,6 +40,13 @@ const FIXED_REP_COLORS: Record<string, string> = {
   eric: '#60a5fa',
   'eric acosta': '#60a5fa',
 };
+
+const FOLLOW_UP_NO_DATE_COLOR = '#0616b7';
+const FOLLOW_UP_UPCOMING_SOON_COLOR = '#a7dcff';
+const FOLLOW_UP_UPCOMING_LATER_COLOR = '#5f7cff';
+const FOLLOW_UP_TODAY_COLOR = '#00e63a';
+const FOLLOW_UP_OVERDUE_RECENT_COLOR = '#ff7a00';
+const FOLLOW_UP_OVERDUE_OLD_COLOR = '#d00000';
 
 function normalizeRepLabel(label: string) {
   return label.trim();
@@ -81,10 +94,86 @@ export function createRepColorMap(labels: string[]) {
   return map;
 }
 
-export function pinColorForStore(store: TerritoryStorePin, mode: PinColorMode, repColorMap?: Map<string, string>) {
+function dateKeyToUtcDay(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+  return Date.UTC(year, month - 1, day);
+}
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function daysUntilFollowUp(followUpDate: string | null | undefined, referenceDate = new Date()) {
+  const dateKey = followUpDate?.slice(0, 10);
+  if (!dateKey) {
+    return null;
+  }
+
+  const followUpDay = dateKeyToUtcDay(dateKey);
+  const referenceDay = dateKeyToUtcDay(localDateKey(referenceDate));
+  if (followUpDay === null || referenceDay === null) {
+    return null;
+  }
+
+  return Math.round((followUpDay - referenceDay) / 86_400_000);
+}
+
+function followUpColorForDays(daysUntil: number | null) {
+  if (daysUntil === null) {
+    return FOLLOW_UP_NO_DATE_COLOR;
+  }
+  if (daysUntil === 0) {
+    return FOLLOW_UP_TODAY_COLOR;
+  }
+  if (daysUntil > 0) {
+    return daysUntil <= 7 ? FOLLOW_UP_UPCOMING_SOON_COLOR : FOLLOW_UP_UPCOMING_LATER_COLOR;
+  }
+  return Math.abs(daysUntil) <= 7 ? FOLLOW_UP_OVERDUE_RECENT_COLOR : FOLLOW_UP_OVERDUE_OLD_COLOR;
+}
+
+export function followUpPinPresentation(store: Pick<TerritoryStorePin, 'followUpDate'>, referenceDate = new Date()): TerritoryPinPresentation {
+  const daysUntil = daysUntilFollowUp(store.followUpDate, referenceDate);
+  return {
+    color: followUpColorForDays(daysUntil),
+    daysUntil,
+    glyph: daysUntil === null ? '' : String(daysUntil),
+  };
+}
+
+export function pinColorForStore(store: TerritoryStorePin, mode: PinColorMode, repColorMap?: Map<string, string>, referenceDate = new Date()) {
+  if (mode === 'follow-up-date') {
+    return followUpPinPresentation(store, referenceDate).color;
+  }
   if (mode === 'rep') {
     const rep = store.repNames.find((name) => name.trim().length > 0) ?? 'Unassigned';
     return repColorMap?.get(rep) ?? repColorForLabel(rep);
   }
   return store.statusColor;
+}
+
+export function pinGlyphForStore(store: TerritoryStorePin, mode: PinColorMode, referenceDate = new Date()) {
+  if (mode === 'follow-up-date') {
+    return followUpPinPresentation(store, referenceDate).glyph;
+  }
+  if (store.isPreferredPartner) {
+    return 'P';
+  }
+  if (store.isApproximate) {
+    return '≈';
+  }
+  return '';
+}
+
+export function pinGlyphColorForStore(store: TerritoryStorePin, mode: PinColorMode, referenceDate = new Date()) {
+  if (mode === 'follow-up-date') {
+    const { daysUntil } = followUpPinPresentation(store, referenceDate);
+    return daysUntil !== null && daysUntil >= 0 ? '#0f172a' : '#ffffff';
+  }
+  return '#ffffff';
 }

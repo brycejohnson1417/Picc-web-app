@@ -4,6 +4,7 @@ import { Crosshair, Filter, Layers3, RefreshCw, Search } from 'lucide-react';
 import { MobileSearch } from '@/components/mobile/mobile-search';
 import type { TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
+import type { PinColorMode } from '@/lib/territory/pin-colors';
 
 interface TerritoryRepLegendEntry {
   label: string;
@@ -28,7 +29,7 @@ interface TerritoryMapOverlayControlsProps {
   selectedSearchStoreId: string | null;
   hasRoadRouteGeometry: boolean;
   routeModeLabel: string | null;
-  pinColorMode: 'status' | 'rep';
+  pinColorMode: PinColorMode;
   repLegend: TerritoryRepLegendEntry[];
   showRepLegend: boolean;
   onToggleRepLegend: () => void;
