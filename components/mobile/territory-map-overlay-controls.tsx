@@ -2,6 +2,7 @@
 
 import { Crosshair, Filter, Layers3, RefreshCw, Search } from 'lucide-react';
 import { MobileSearch } from '@/components/mobile/mobile-search';
+import type { TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
 interface TerritoryRepLegendEntry {
@@ -22,7 +23,9 @@ interface TerritoryMapOverlayControlsProps {
   mapSearch: string;
   onMapSearchChange: (value: string) => void;
   onClearMapSearch: () => void;
-  highlightedSearchStoreName: string | null;
+  searchSuggestions: TerritoryStorePin[];
+  onSelectSearchSuggestion: (storeId: string) => void;
+  selectedSearchStoreId: string | null;
   hasRoadRouteGeometry: boolean;
   routeModeLabel: string | null;
   pinColorMode: 'status' | 'rep';
@@ -51,7 +54,9 @@ export function TerritoryMapOverlayControls({
   mapSearch,
   onMapSearchChange,
   onClearMapSearch,
-  highlightedSearchStoreName,
+  searchSuggestions,
+  onSelectSearchSuggestion,
+  selectedSearchStoreId,
   hasRoadRouteGeometry,
   routeModeLabel,
   pinColorMode,
@@ -129,9 +134,45 @@ export function TerritoryMapOverlayControls({
               </button>
             </div>
             {mapSearch.trim().length > 0 ? (
-              <p className="mt-2 px-1 text-[12px] text-[#62666f]">
-                {highlightedSearchStoreName ? `Highlighting ${highlightedSearchStoreName}` : 'No dispensaries match this search yet'}
-              </p>
+              <div className="mt-2 overflow-hidden rounded-xl border border-[#e1e3e8] bg-white">
+                {searchSuggestions.length > 0 ? (
+                  <div role="listbox" aria-label="Matching stores" className="max-h-[260px] overflow-y-auto">
+                    {searchSuggestions.map((store) => {
+                      const selected = selectedSearchStoreId === store.id;
+                      return (
+                        <button
+                          key={store.id}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          onClick={() => onSelectSearchSuggestion(store.id)}
+                          className={cn(
+                            'flex w-full items-center justify-between gap-3 border-b px-3 py-2.5 text-left last:border-b-0 active:bg-[#f3f5f8]',
+                            selected ? 'border-[#cfe2ff] bg-[#f4f8ff]' : 'border-[#eef0f3]',
+                          )}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-[14px] font-semibold text-[#24272f]">{store.name}</span>
+                            <span className="mt-0.5 block truncate text-[12px] text-[#62666f]">
+                              {[store.city, store.state].filter(Boolean).join(', ') || store.locationLabel || store.locationAddress || 'No location'}
+                            </span>
+                          </span>
+                          <span
+                            className={cn(
+                              'shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold',
+                              selected ? 'bg-[#1d5eea] text-white' : 'bg-[#eef6ff] text-[#1d5eea]',
+                            )}
+                          >
+                            {selected ? 'Selected' : 'Select'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="px-3 py-2.5 text-[12px] text-[#62666f]">No dispensaries match this search yet.</p>
+                )}
+              </div>
             ) : null}
           </div>
         </div>
