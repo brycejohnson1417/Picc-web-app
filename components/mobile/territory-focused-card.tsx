@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { TerritoryStorePin } from '@/lib/territory/types';
 import type { PinColorMode } from '@/lib/territory/pin-colors';
 import { pinColorForStore } from '@/lib/territory/pin-colors';
+import { openNotionCrmTab } from '@/lib/territory/notion-link-target';
 
 interface TerritoryFocusedCardProps {
   store: TerritoryStorePin;
@@ -64,16 +65,15 @@ export function TerritoryFocusedCard({
             <span className="inline-block h-3.5 w-3.5 rounded-full" style={{ backgroundColor: pinColorForStore(store, pinColorMode, repColorMap) }} />
             Message rep
           </button>
-          <a
-            href={notionPageUrl}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
+            onClick={() => openNotionCrmTab(notionPageUrl)}
             className="grid place-items-center border-l border-[#30333b] text-[20px] font-semibold text-[#d8dde6]"
             aria-label="Open in Notion"
             title="Open in Notion"
           >
             N
-          </a>
+          </button>
           <button type="button" onClick={() => onToggleRouteStop(store.id)} className="grid place-items-center border-l border-[#30333b]">
             <Plus className={cn('h-6 w-6', selectedOnRoute ? 'text-[#4fb649]' : 'text-[#d8dde6]')} />
           </button>
