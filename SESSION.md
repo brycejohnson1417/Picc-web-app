@@ -1,14 +1,12 @@
-# Session: Issue #71 Nabis Dashboard Background Sync
+# Session: Issue #73 Nabis Dashboard Active Sync Status
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/71
+- https://github.com/brycejohnson1417/Picc-web-app/issues/73
 
 ## Scope
-- Make Nabis dashboard manual refresh start the retailer + order sync in the background instead of blocking the browser response.
-- Return saved local Postgres dashboard data immediately after the user clicks manual refresh.
-- Show a clear dashboard status that the sync was started in the background.
-- Preserve the create-only CRM mirroring rule: match existing CRM pages by `Licensed Location ID`, link local accounts to existing pages, and do not patch existing CRM properties.
-- Keep daily cron behavior protected and unchanged.
+- Show an active/running Nabis sync status on the dashboard when the global Nabis sync lease is active.
+- Suppress stale-order warnings while a background Nabis sync is actively running.
+- Keep the manual refresh "started in background" status visible when the user starts the sync.
 
 ## Out Of Scope
 - No schema migration.
@@ -24,6 +22,5 @@
 - Keep the change surgical and revertable.
 
 ## Validation Plan
-- RED test first for dashboard refresh metadata where practical.
-- Focused unit/unit-route test after implementation if the existing harness supports it.
+- RED test first for active-sync dashboard status behavior.
 - Then run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` before completion.
