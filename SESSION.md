@@ -1,26 +1,26 @@
-# Session: Issue #73 Nabis Dashboard Active Sync Status
+# Session: Issue #77 Reuse Notion Tab From Territory Map
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/73
+- https://github.com/brycejohnson1417/Picc-web-app/issues/77
 
 ## Scope
-- Show an active/running Nabis sync status on the dashboard when the global Nabis sync lease is active.
-- Suppress stale-order warnings while a background Nabis sync is actively running.
-- Keep the manual refresh "started in background" status visible when the user starts the sync.
+- Change the territory focused-card "N" shortcut so it opens Notion in a named app tab instead of `_blank`.
+- Preserve the existing Notion destination URL generated from the selected store's Notion page ID.
+- Add a focused regression test for the tab target and opener-clearing behavior.
 
 ## Out Of Scope
-- No schema migration.
-- No Nabis write API usage.
-- No production data backfill.
-- No manual production cron execution.
-- No change to order parsing, retailer matching, or Notion property mapping.
-- No Google Maps fix in this branch; tracked separately in issue #67.
+- No Notion workspace writes or Notion API mutation.
+- No schema migration, auth change, production data write, or Vercel config change.
+- No redesign of the account detail sheet or unrelated Notion archive links.
+- No change to Google Maps routing behavior.
 
 ## Constraints
-- This is a fast-lane surgical UX/runtime fix; it does not add a new production write surface beyond the already-approved sync path.
-- Do not print secrets or run production cron manually.
+- This is a fast-lane surgical frontend behavior fix.
+- Keep Notion behind the existing URL handoff; do not add any external-system writes.
 - Keep the change surgical and revertable.
+- Open PR #76 was checked; it currently changes `SESSION.md` and `lib/territory/map-search-suggestions.test.ts`.
 
 ## Validation Plan
-- RED test first for active-sync dashboard status behavior.
+- RED test first for the Notion CRM tab target helper.
 - Then run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` before completion.
+- Browser verify `/territory` if the local protected route can be loaded.
