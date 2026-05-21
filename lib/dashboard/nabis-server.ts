@@ -8,8 +8,7 @@ import {
   type AnalyticsOrder,
   type AnalyticsTerritoryStore,
 } from '@/lib/dashboard/nabis-analytics';
-import { getNabisSyncFreshness, syncNabisRetailersAndOrders } from '@/lib/server/nabis-sync';
-import { nabisDashboardRefreshSyncOptions } from '@/lib/server/nabis-sync-options';
+import { getNabisSyncFreshness } from '@/lib/server/nabis-sync';
 import { readNotionCacheSnapshot } from '@/lib/server/notion-cache-store';
 import { excludedInternalTransferRetailers } from '@/lib/nabis/internal-transfers';
 import type { NabisDashboardMetadata, NabisDashboardResponse, SerializedNabisOrder } from '@/lib/dashboard/nabis-types';
@@ -165,10 +164,6 @@ export async function getDashboardPayload(input: {
   forceRefresh?: boolean;
   actor?: { clerkUserId?: string | null; email?: string | null };
 }) {
-  if (input.forceRefresh) {
-    await syncNabisRetailersAndOrders(input.orgId, input.actor, nabisDashboardRefreshSyncOptions());
-  }
-
   const orderWhere = {
     orgId: input.orgId,
     orderCreatedDate: {

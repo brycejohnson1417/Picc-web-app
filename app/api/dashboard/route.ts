@@ -1,16 +1,21 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
+import { withBackgroundManualRefreshStarted } from '@/lib/dashboard/nabis-refresh';
 import { resolveNabisDashboardOrgId } from '@/lib/dashboard/nabis-org';
 import { ensureDateRange, getDashboardPayload } from '@/lib/dashboard/nabis-server';
+import type { NabisDashboardResponse } from '@/lib/dashboard/nabis-types';
 import { getUserRole } from '@/lib/rbac/guards';
+import { NabisSyncLeaseError, syncNabisRetailersAndOrders } from '@/lib/server/nabis-sync';
+import { nabisDashboardRefreshSyncOptions } from '@/lib/server/nabis-sync-options';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 const DASHBOARD_RESPONSE_CACHE_TTL_MS = 1000 * 60;
 
 type DashboardCacheEntry = {
   expiresAt: number;
-  payload: Awaited<ReturnType<typeof getDashboardPayload>>;
+  payload: NabisDashboardResponse;
 };
 
 const dashboardResponseCache = new Map<string, DashboardCacheEntry>();
@@ -57,6 +62,7 @@ export async function GET(request: Request) {
     const forceRefresh = searchParams.get('refresh') === '1';
     const dataOrgId = resolveNabisDashboardOrgId();
     const key = cacheKey(dataOrgId, start, end);
+    let manualRefreshStartedAt: string | null = null;
 
     if (forceRefresh) {
       const role = await getUserRole(ctx.orgId, ctx.userId);
@@ -69,6 +75,28 @@ export async function GET(request: Request) {
           },
         );
       }
+
+      manualRefreshStartedAt = new Date().toISOString();
+      const actor = {
+        clerkUserId: ctx.userId,
+        email: ctx.email,
+      };
+
+      after(async () => {
+        try {
+          await syncNabisRetailersAndOrders(dataOrgId, actor, nabisDashboardRefreshSyncOptions());
+        } catch (error) {
+          if (error instanceof NabisSyncLeaseError) {
+            console.info('[picc-nabis-dashboard-refresh]', {
+              status: 'already-running',
+              active: error.decision,
+            });
+            return;
+          }
+
+          console.error('[picc-nabis-dashboard-refresh]', error);
+        }
+      });
     }
 
     if (!forceRefresh) {
@@ -82,21 +110,23 @@ export async function GET(request: Request) {
       orgId: dataOrgId,
       start,
       end,
-      forceRefresh,
+      forceRefresh: false,
       actor: {
         clerkUserId: ctx.userId,
         email: ctx.email,
       },
     });
+    const responsePayload =
+      forceRefresh && manualRefreshStartedAt ? withBackgroundManualRefreshStarted(payload, manualRefreshStartedAt) : payload;
 
     if (!forceRefresh) {
       dashboardResponseCache.set(key, {
         expiresAt: Date.now() + DASHBOARD_RESPONSE_CACHE_TTL_MS,
-        payload,
+        payload: responsePayload,
       });
     }
 
-    return NextResponse.json(payload, { headers: responseHeaders(forceRefresh) });
+    return NextResponse.json(responsePayload, { headers: responseHeaders(forceRefresh) });
   } catch (error) {
     const statusCode = Number((error as Error & { statusCode?: number })?.statusCode || 500);
     const publicMessage =
