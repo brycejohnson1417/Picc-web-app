@@ -4,12 +4,22 @@ This repository is the canonical source of truth for the live PICC app.
 
 ## Canonical Context
 
+- Local canonical path: `/Users/brycejohnson/Code/PICC-Web-App`
 - GitHub repo: `https://github.com/brycejohnson1417/Picc-web-app.git`
+- Linear project: `PICC-Web-app`
 - Canonical branch: `main`
 - Production app: `https://piccnewyork.org`
 - Main production route to verify: `https://piccnewyork.org/territory`
 - Vercel project name: `picc-push`
 - Vercel project ID: `prj_zKro1cfUOP9D2MTh0ZahYDREcRUA`
+
+## Project Boundary
+
+- This repo is the live PICC production app. It is not `map-app`, `Map-APP`, or the multi-tenant product-platform repo.
+- Do not create or mirror PICC production work into `brycejohnson1417/Map-APP` or the Linear `Map-APP` project.
+- If a request, screenshot, issue, or branch could refer to either PICC-Web-App or map-app, verify the UI/repo identity first and ask for clarification if confidence is not high.
+- Treat screenshots as project evidence. If the screenshot matches the PICC production UI, stay in this repo unless the user explicitly says otherwise.
+- Keep public GitHub docs to the skeleton: identity, setup, validation, public-safe architecture, and execution rules. Keep proprietary PICC workflows, private roadmap details, and customer/business intelligence in Linear or a future authenticated in-app tenant knowledge base.
 
 ## Required Baseline
 
@@ -33,8 +43,8 @@ This repository is the canonical source of truth for the live PICC app.
 
 ## Before Making Changes
 
-1. Read [`README.md`](/Users/brycejohnson/Documents/New project/Picc-web-app/README.md).
-2. Read [`AI_HANDOFF.md`](/Users/brycejohnson/Documents/New project/Picc-web-app/AI_HANDOFF.md).
+1. Read [`README.md`](/Users/brycejohnson/Code/PICC-Web-App/README.md).
+2. Read [`AI_HANDOFF.md`](/Users/brycejohnson/Code/PICC-Web-App/AI_HANDOFF.md).
 3. Verify the live app behavior at:
    - `https://piccnewyork.org/sign-in`
    - `https://piccnewyork.org/territory`
