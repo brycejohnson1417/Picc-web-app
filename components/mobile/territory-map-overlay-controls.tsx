@@ -261,6 +261,15 @@ export function TerritoryMapOverlayControls({
             <path d="M12 18.5v2.5" />
           </svg>
         </button>
+        <button
+          type="button"
+          aria-label="Open territory export options"
+          title="Export"
+          className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
+          onClick={onOpenMyMapsExport}
+        >
+          <Download className="h-5 w-5 text-[#7f828a]" />
+        </button>
       </div>
 
       <div className="absolute right-2 top-3 z-[1500] flex flex-col gap-2">
@@ -291,15 +300,6 @@ export function TerritoryMapOverlayControls({
         >
           <Filter className={cn('h-5 w-5', activeFiltersCount > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
           {activeFiltersCount > 0 ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#cd3814] px-1 text-[11px] font-semibold text-white">{activeFiltersCount}</span> : null}
-        </button>
-        <button
-          type="button"
-          aria-label="Export current map view to Google My Maps"
-          title="Export to My Maps"
-          className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
-          onClick={onOpenMyMapsExport}
-        >
-          <Download className="h-5 w-5 text-[#7f828a]" />
         </button>
       </div>
     </>

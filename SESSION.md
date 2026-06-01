@@ -34,6 +34,10 @@
 - `components/mobile/territory-map-overlay-controls.tsx` owns the left/right overlay control placement.
 - `components/mobile/territory-my-maps-export-sheet.tsx` owns the current export sheet UI and KML download action.
 - `lib/territory/google-my-maps-export.ts` owns current viewport/filtered export selection and KML generation.
+- Red test evidence: `npx vitest run lib/territory/account-csv-export.test.ts` initially failed because `@/lib/territory/account-csv-export` did not exist.
+- Browser evidence: the Codex in-app Browser loaded stale territory controls from its cache and did not expose the new export button; after recording that blocker, a fresh Playwright context verified local `/territory`.
+- Fresh Playwright evidence: export button rendered on the left control rail at `x=8`; CSV mode exported `picc-territory-accounts-202606010414.csv` with 733 account rows; unchecking `Status` and checking `Latitude`/`Longitude` changed the CSV header; KML still exported `picc-territory-view-202606010414.kml` with the Accounts folder.
+- Screenshot evidence saved outside the repo: `/tmp/picc-export-left-control.png`, `/tmp/picc-export-kml-mode.png`, `/tmp/picc-export-csv-mode-top.png`, `/tmp/picc-export-csv-mode.png`.
 
 ## Constraints
 - Work only in `/Users/brycejohnson/Code/PICC-Web-App`.
@@ -43,9 +47,9 @@
 
 ## Validation Plan
 - Red first: add focused failing tests for configurable account CSV output.
-- `npx vitest run lib/territory/account-csv-export.test.ts`
-- `npm run typecheck`
-- `npm run lint`
-- `npm test`
-- `npm run build`
-- Browser verification on local `/territory`: export control placement, export sheet mode switching, CSV field toggles, CSV download contents, and existing KML path.
+- `npx vitest run lib/territory/account-csv-export.test.ts lib/territory/google-my-maps-export.test.ts`: exits `0`; 2 files and 4 tests passed.
+- `npm run typecheck`: exits `0`.
+- `npm run lint`: exits `0`.
+- `npm test`: exits `0`; 21 files and 94 tests passed.
+- `npm run build`: exits `0`.
+- Browser verification on local `/territory`: passed in a fresh Playwright context at 390x844; left-side export control visible, export sheet mode switching works, CSV field toggles affect downloaded CSV contents, and existing KML path still downloads.
