@@ -25,6 +25,42 @@ function webhookSecret() {
   return process.env.NOTION_WEBHOOK_SECRET?.trim() || '';
 }
 
+function isProductionWebhookRuntime() {
+  return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+}
+
+function hasRequiredSignatureHeaders(headers: Headers) {
+  return Boolean(headers.get('webhook-id')) && Boolean(headers.get('webhook-signature')) && Boolean(headers.get('webhook-timestamp'));
+}
+
+function verifyWebhookRequest(rawBody: string, headers: Headers) {
+  const secret = webhookSecret();
+
+  if (!secret) {
+    if (isProductionWebhookRuntime()) {
+      return NextResponse.json({ error: 'Notion webhook secret is not configured' }, { status: 401 });
+    }
+
+    return null;
+  }
+
+  if (!hasRequiredSignatureHeaders(headers)) {
+    return NextResponse.json({ error: 'Missing Notion webhook signature headers' }, { status: 401 });
+  }
+
+  try {
+    const verifier = new Webhook(secret);
+    verifier.verify(rawBody, Object.fromEntries(headers.entries()));
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Webhook verification failed' },
+      { status: 401 },
+    );
+  }
+
+  return null;
+}
+
 function resolvePageId(payload: NotionWebhookPayload) {
   const explicitPageId = payload.data?.page_id?.trim();
   if (explicitPageId) {
@@ -53,6 +89,11 @@ function isPageEvent(type: string | undefined) {
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
+  const verificationError = verifyWebhookRequest(rawBody, request.headers);
+  if (verificationError) {
+    return verificationError;
+  }
+
   let parsedPayload: NotionWebhookPayload;
 
   try {
@@ -62,28 +103,10 @@ export async function POST(request: Request) {
   }
 
   if (parsedPayload.verification_token) {
-    console.info('Notion webhook verification token received. Save it to NOTION_WEBHOOK_SECRET if your integration requires signed delivery.', {
-      token: parsedPayload.verification_token,
+    console.info('Notion webhook verification token received. Store it securely if your integration requires signed delivery.', {
+      hasVerificationToken: true,
     });
     return NextResponse.json({ ok: true });
-  }
-
-  const secret = webhookSecret();
-  const hasSignatureHeaders =
-    Boolean(request.headers.get('webhook-id')) &&
-    Boolean(request.headers.get('webhook-signature')) &&
-    Boolean(request.headers.get('webhook-timestamp'));
-
-  if (secret && hasSignatureHeaders) {
-    try {
-      const verifier = new Webhook(secret);
-      verifier.verify(rawBody, Object.fromEntries(request.headers.entries()));
-    } catch (error) {
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : 'Webhook verification failed' },
-        { status: 401 },
-      );
-    }
   }
 
   if (!isCommentEvent(parsedPayload.type) && !isPageEvent(parsedPayload.type)) {

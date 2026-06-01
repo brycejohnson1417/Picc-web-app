@@ -21,7 +21,7 @@
 
 ## Owned Paths
 - `app/api/webhooks/notion/route.ts`
-- `app/api/webhooks/notion/route.test.ts`
+- `lib/server/notion-webhook-route.test.ts`
 - `SESSION.md`
 
 ## Open PR Overlap Check
@@ -33,6 +33,10 @@
 - The endpoint logs the raw verification token value.
 - The endpoint only verifies signatures when both `NOTION_WEBHOOK_SECRET` and all signature headers are present.
 - If the secret is missing, production can accept page/comment events and queue sync work.
+- Red test evidence: `npx vitest run lib/server/notion-webhook-route.test.ts` failed before implementation with `3` failing tests:
+  - production missing secret returned `200` instead of `401`.
+  - production missing signature headers returned `200` instead of `401`.
+  - raw verification token appeared in `console.info` calls.
 
 ## Constraints
 - Keep working only in `/Users/brycejohnson/Code/PICC-Web-App`.
@@ -41,13 +45,13 @@
 - Keep docs updated as implementation and validation evidence changes.
 
 ## Validation Plan
-- Add failing Vitest route coverage:
+- Added Vitest route coverage:
   - production without `NOTION_WEBHOOK_SECRET` rejects signed or unsigned webhooks before queueing work.
   - production with `NOTION_WEBHOOK_SECRET` rejects missing signature headers before queueing work.
   - invalid signatures return `401` before queueing work.
   - valid signed verification-token handling returns `200` without logging the raw token.
-- Run focused webhook route test red, then green after implementation.
-- Run `npm run typecheck`.
-- Run `npm run lint`.
-- Run `npm test`.
-- Run `npm run build`.
+- `npx vitest run lib/server/notion-webhook-route.test.ts`: exits `0`; `4` tests passed.
+- `npm run typecheck`: exits `0`.
+- `npm run lint`: exits `0`.
+- `npm test`: exits `0`; `18` test files and `86` tests passed.
+- `npm run build`: exits `0`.
