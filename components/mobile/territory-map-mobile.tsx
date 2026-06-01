@@ -1,6 +1,7 @@
 'use client';
 
 import type { PinColorMode } from '@/lib/territory/pin-colors';
+import type { GoogleMyMapsViewportBounds } from '@/lib/territory/google-my-maps-export';
 import type { TerritoryBoundary, TerritoryMarker, TerritoryStorePin } from '@/lib/territory/types';
 import type { TerritoryBoundaryDraft } from '@/components/territory/google-territory-boundaries';
 import { GoogleTerritoryMap } from '@/components/territory/google-territory-map';
@@ -30,6 +31,7 @@ interface TerritoryMapMobileProps {
   onSelectStore: (id: string | null) => void;
   onDraftBoundaryChange?: (coordinates: [number, number][]) => void;
   onSelectionBoundaryChange?: (coordinates: [number, number][]) => void;
+  onViewportBoundsChange?: (bounds: GoogleMyMapsViewportBounds | null) => void;
 }
 
 export function TerritoryMapMobile({
@@ -57,6 +59,7 @@ export function TerritoryMapMobile({
   onSelectStore,
   onDraftBoundaryChange,
   onSelectionBoundaryChange,
+  onViewportBoundsChange,
 }: TerritoryMapMobileProps) {
   return (
     <GoogleTerritoryMap
@@ -89,6 +92,7 @@ export function TerritoryMapMobile({
       onSelectStore={onSelectStore}
       onDraftBoundaryChange={onDraftBoundaryChange}
       onSelectionBoundaryChange={onSelectionBoundaryChange}
+      onViewportBoundsChange={onViewportBoundsChange}
     />
   );
 }

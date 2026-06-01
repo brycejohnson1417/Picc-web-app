@@ -1,54 +1,51 @@
-# Session: Issue #88 Lock Down Cron Sync Routes
+# Session: Issue #118 Google My Maps Export
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/88
+- https://github.com/brycejohnson1417/Picc-web-app/issues/118
 
 ## Scope
-- Make cron route authorization fail closed in production when `CRON_SECRET` is missing.
-- Require `Authorization: Bearer <CRON_SECRET>` when a cron secret is configured.
-- Keep local/development `x-vercel-cron` behavior available when `CRON_SECRET` is not configured.
-- Reuse shared authorization logic between `notion-sync` and `nabis-sync`.
-- Add focused regression coverage for production and local cron authorization behavior.
+- Add a polished `/territory` UI action for exporting the current filtered map view.
+- Generate a Google My Maps-friendly KML file from the current pins, visible territory boundaries, and visible home markers.
+- Include configurable export contents, clear download/import guidance, and empty-state feedback directly in the browser UI.
+- Add focused test coverage for KML generation, escaping, and hidden overlay filtering.
 
 ## Out Of Scope
-- No changes to what the Notion or Nabis sync jobs do.
-- No production sync runs.
-- No production data writes.
-- No schema migration or backfill.
-- No unrelated auth, middleware, or dependency changes.
+- No OAuth write/import into a user's Google account.
+- No production data writes, schema changes, backfills, or new background jobs.
+- No map provider change and no reintroduction of MapLibre, Carto, Leaflet, `MapCanvas`, heatmap, hex, or `/api/territory/layers`.
+- No unrelated territory refactors.
 
 ## Owned Paths
-- `app/api/cron/notion-sync/route.ts`
-- `app/api/cron/nabis-sync/route.ts`
-- `lib/server/cron-auth.ts`
-- `lib/server/cron-auth.test.ts`
+- `components/mobile/territory*.tsx`
+- `components/territory/google-territory-map.tsx`
+- `components/territory/*export*.tsx`
+- `lib/territory/*export*.ts`
+- `lib/territory/*export*.test.ts`
 - `SESSION.md`
 
 ## Open PR Overlap Check
-- Checked open PR #82. It is docs-only project-boundary work and does not overlap these cron route paths.
-- Checked open PR #115. It is dependency-manifest work for issue #106 and does not overlap these cron route paths.
-- Checked merged PR #117. It is Notion webhook authorization work and does not overlap these cron route paths.
+- Checked open PR #82 before starting. It touches `AGENTS.md` and `AI_HANDOFF.md` only, so it does not overlap this slice.
 
 ## Current Evidence
-- `app/api/cron/notion-sync/route.ts` and `app/api/cron/nabis-sync/route.ts` each define duplicated `isAuthorized` logic.
-- Both routes currently accept any request containing `x-vercel-cron` when `CRON_SECRET` is not configured.
-- Headers are client-controlled, so production must not trust `x-vercel-cron` as the only authorization signal.
-- Red test evidence: `npx vitest run lib/server/cron-auth.test.ts` failed before implementation because `@/lib/server/cron-auth` did not exist.
+- `README.md` and `AI_HANDOFF.md` confirm Google Maps is the active and only supported territory map provider.
+- `ARCHITECTURE.md` keeps the active app surface under `app/`, `components/`, `lib/`, and `prisma/`.
+- `components/mobile/territory-map-mobile.tsx` passes current pins, boundaries, markers, hidden overlay IDs, and map state into `GoogleTerritoryMap`.
+- `components/territory/google-territory-map.tsx` renders the active Google map surface.
+- Red test evidence: `npx vitest run lib/territory/google-my-maps-export.test.ts` initially failed because `@/lib/territory/google-my-maps-export` did not exist.
+- Browser evidence: a fresh Playwright context opened local `/territory`, found the export control, opened the sheet, switched to filtered results, downloaded `picc-territory-view-202606010355.kml`, and confirmed the KML has Accounts, Territories, and Home markers folders.
+- Local data note: the seeded/current local view had 733 exportable pins and 0 visible territory/home overlays at verification time.
+- In-app Browser note: the Codex in-app browser kept serving stale territory controls after restart and hard reload, so rendered proof used the bundled fresh Playwright browser context after recording that cache issue.
 
 ## Constraints
-- Keep working only in `/Users/brycejohnson/Code/PICC-Web-App`.
-- Keep cron changes surgical and isolated to route authorization.
-- Keep sync job behavior untouched after authorization succeeds.
-- Keep docs updated as implementation and validation evidence changes.
+- Work only in `/Users/brycejohnson/Code/PICC-Web-App`.
+- Keep the current mobile-first PWA shell and Google Maps implementation.
+- Keep the feature fully interactive from the frontend; no backend-only or placeholder export path.
+- Keep business/export formatting logic outside the map component where practical.
 
 ## Validation Plan
-- Added Vitest coverage for the shared cron authorization helper:
-  - production without `CRON_SECRET` rejects `x-vercel-cron`.
-  - production with `CRON_SECRET` rejects missing or wrong bearer token.
-  - production with `CRON_SECRET` accepts the exact bearer token.
-  - development without `CRON_SECRET` still accepts `x-vercel-cron`.
-- `npx vitest run lib/server/cron-auth.test.ts`: exits `0`; `4` tests passed.
+- `npx vitest run lib/territory/google-my-maps-export.test.ts`: exits `0`; 2 tests passed.
 - `npm run typecheck`: exits `0`.
 - `npm run lint`: exits `0`.
-- `npm test`: exits `0`; `18` test files and `86` tests passed.
+- `npm test`: exits `0`; 20 test files and 92 tests passed.
 - `npm run build`: exits `0`.
+- Browser verification on local `/territory`: passed in a fresh Playwright context at 390x844; export button visible, sheet interactive, filtered-result scope selectable, KML download emitted, downloaded file parsed for expected folders, and no relevant console errors beyond the existing Google `Marker` deprecation warning.
