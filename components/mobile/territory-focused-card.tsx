@@ -30,7 +30,7 @@ export function TerritoryFocusedCard({
 }: TerritoryFocusedCardProps) {
   return (
     <div className="fixed bottom-[86px] left-0 right-0 z-[2500]">
-      <div className="mx-auto max-w-[720px] bg-[#1d1f24]/95 text-white shadow-[0_-2px_8px_rgba(0,0,0,0.35)] backdrop-blur-sm">
+      <div className="mx-auto max-w-[720px] picc-shell-enter bg-[#1d1f24]/95 text-white shadow-[0_-2px_8px_rgba(0,0,0,0.35)] backdrop-blur-sm">
         <button type="button" onClick={() => onOpenDetails(store.id)} className="w-full border-b border-[#30333b] px-3 py-2 text-left">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
