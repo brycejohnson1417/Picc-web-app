@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSharedWorkspaceId } from '@/lib/auth/access-policy';
+import { isCronRequestAuthorized } from '@/lib/server/cron-auth';
 import { prewarmLiveCrmCaches } from '@/lib/server/notion-live-crm';
 import { prewarmTerritoryGeocodeCache, processPendingTerritoryStoreSyncQueue } from '@/lib/server/notion-territory';
 import { syncPendingVendorDayArchiveRequests } from '@/lib/server/notion-vendor-days';
@@ -7,19 +8,8 @@ import { runVendorDayMaintenance } from '@/lib/server/vendor-day-ops';
 
 export const dynamic = 'force-dynamic';
 
-function isAuthorized(request: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (secret) {
-    const authHeader = request.headers.get('authorization') ?? '';
-    return authHeader === `Bearer ${secret}`;
-  }
-
-  const cronHeader = request.headers.get('x-vercel-cron');
-  return Boolean(cronHeader);
-}
-
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!isCronRequestAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

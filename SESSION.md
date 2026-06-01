@@ -1,56 +1,53 @@
-# Session: Issue #89 Signed Notion Webhooks
+# Session: Issue #88 Lock Down Cron Sync Routes
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/89
+- https://github.com/brycejohnson1417/Picc-web-app/issues/88
 
 ## Scope
-- Make production Notion webhook handling fail closed when `NOTION_WEBHOOK_SECRET` is missing.
-- Require signature headers and valid `standardwebhooks` verification in production.
-- Ensure invalid signatures return `401` without queuing or syncing work.
-- Stop logging raw Notion verification token values.
-- Preserve local/development setup usability.
-- Add focused route-level tests for webhook authorization and verification-token handling.
+- Make cron route authorization fail closed in production when `CRON_SECRET` is missing.
+- Require `Authorization: Bearer <CRON_SECRET>` when a cron secret is configured.
+- Keep local/development `x-vercel-cron` behavior available when `CRON_SECRET` is not configured.
+- Reuse shared authorization logic between `notion-sync` and `nabis-sync`.
+- Add focused regression coverage for production and local cron authorization behavior.
 
 ## Out Of Scope
-- No redesign of the Notion sync queue.
-- No changes to supported Notion event types unless needed for safety.
-- No production webhook calls.
+- No changes to what the Notion or Nabis sync jobs do.
+- No production sync runs.
 - No production data writes.
 - No schema migration or backfill.
 - No unrelated auth, middleware, or dependency changes.
 
 ## Owned Paths
-- `app/api/webhooks/notion/route.ts`
-- `lib/server/notion-webhook-route.test.ts`
+- `app/api/cron/notion-sync/route.ts`
+- `app/api/cron/nabis-sync/route.ts`
+- `lib/server/cron-auth.ts`
+- `lib/server/cron-auth.test.ts`
 - `SESSION.md`
 
 ## Open PR Overlap Check
-- Checked open PR #82. It is docs-only project-boundary work and does not overlap this webhook route.
-- Checked open PR #116. It is cron route authorization work and does not overlap this webhook route.
+- Checked open PR #82. It is docs-only project-boundary work and does not overlap these cron route paths.
+- Checked open PR #115. It is dependency-manifest work for issue #106 and does not overlap these cron route paths.
+- Checked merged PR #117. It is Notion webhook authorization work and does not overlap these cron route paths.
 
 ## Current Evidence
-- `app/api/webhooks/notion/route.ts` handles `verification_token` before signature enforcement.
-- The endpoint logs the raw verification token value.
-- The endpoint only verifies signatures when both `NOTION_WEBHOOK_SECRET` and all signature headers are present.
-- If the secret is missing, production can accept page/comment events and queue sync work.
-- Red test evidence: `npx vitest run lib/server/notion-webhook-route.test.ts` failed before implementation with `3` failing tests:
-  - production missing secret returned `200` instead of `401`.
-  - production missing signature headers returned `200` instead of `401`.
-  - raw verification token appeared in `console.info` calls.
+- `app/api/cron/notion-sync/route.ts` and `app/api/cron/nabis-sync/route.ts` each define duplicated `isAuthorized` logic.
+- Both routes currently accept any request containing `x-vercel-cron` when `CRON_SECRET` is not configured.
+- Headers are client-controlled, so production must not trust `x-vercel-cron` as the only authorization signal.
+- Red test evidence: `npx vitest run lib/server/cron-auth.test.ts` failed before implementation because `@/lib/server/cron-auth` did not exist.
 
 ## Constraints
 - Keep working only in `/Users/brycejohnson/Code/PICC-Web-App`.
-- Keep webhook changes surgical and isolated to request authorization/token handling.
-- Keep sync queue and mirror behavior untouched after authorization succeeds.
+- Keep cron changes surgical and isolated to route authorization.
+- Keep sync job behavior untouched after authorization succeeds.
 - Keep docs updated as implementation and validation evidence changes.
 
 ## Validation Plan
-- Added Vitest route coverage:
-  - production without `NOTION_WEBHOOK_SECRET` rejects signed or unsigned webhooks before queueing work.
-  - production with `NOTION_WEBHOOK_SECRET` rejects missing signature headers before queueing work.
-  - invalid signatures return `401` before queueing work.
-  - valid signed verification-token handling returns `200` without logging the raw token.
-- `npx vitest run lib/server/notion-webhook-route.test.ts`: exits `0`; `4` tests passed.
+- Added Vitest coverage for the shared cron authorization helper:
+  - production without `CRON_SECRET` rejects `x-vercel-cron`.
+  - production with `CRON_SECRET` rejects missing or wrong bearer token.
+  - production with `CRON_SECRET` accepts the exact bearer token.
+  - development without `CRON_SECRET` still accepts `x-vercel-cron`.
+- `npx vitest run lib/server/cron-auth.test.ts`: exits `0`; `4` tests passed.
 - `npm run typecheck`: exits `0`.
 - `npm run lint`: exits `0`.
 - `npm test`: exits `0`; `18` test files and `86` tests passed.

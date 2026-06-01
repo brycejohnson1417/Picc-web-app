@@ -1,22 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getSharedWorkspaceId } from '@/lib/auth/access-policy';
+import { isCronRequestAuthorized } from '@/lib/server/cron-auth';
 import { nabisCronSyncOptions } from '@/lib/server/nabis-sync-options';
 import { NabisSyncLeaseError, syncNabisRetailersAndOrders } from '@/lib/server/nabis-sync';
 
 export const dynamic = 'force-dynamic';
 
-function isAuthorized(request: Request) {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (secret) {
-    const authHeader = request.headers.get('authorization') ?? '';
-    return authHeader === `Bearer ${secret}`;
-  }
-
-  return Boolean(request.headers.get('x-vercel-cron'));
-}
-
 export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!isCronRequestAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
