@@ -1,5 +1,5 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { Webhook } from 'standardwebhooks';
 import { enqueueTerritoryStoreSync, syncTerritoryCheckInMirrorByPageId } from '@/lib/server/notion-territory';
 
 export const dynamic = 'force-dynamic';
@@ -22,15 +22,15 @@ type NotionWebhookPayload = {
 };
 
 function webhookSecret() {
-  return process.env.NOTION_WEBHOOK_SECRET?.trim() || '';
+  return (
+    process.env.NOTION_WEBHOOK_VERIFICATION_TOKEN?.trim() ||
+    process.env.NOTION_WEBHOOK_SECRET?.trim() ||
+    ''
+  );
 }
 
 function isProductionWebhookRuntime() {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
-}
-
-function hasRequiredSignatureHeaders(headers: Headers) {
-  return Boolean(headers.get('webhook-id')) && Boolean(headers.get('webhook-signature')) && Boolean(headers.get('webhook-timestamp'));
 }
 
 function verifyWebhookRequest(rawBody: string, headers: Headers) {
@@ -44,21 +44,32 @@ function verifyWebhookRequest(rawBody: string, headers: Headers) {
     return null;
   }
 
-  if (!hasRequiredSignatureHeaders(headers)) {
-    return NextResponse.json({ error: 'Missing Notion webhook signature headers' }, { status: 401 });
+  const signature = headers.get('x-notion-signature')?.trim();
+  if (!signature) {
+    return NextResponse.json({ error: 'Missing Notion webhook signature header' }, { status: 401 });
   }
 
-  try {
-    const verifier = new Webhook(secret);
-    verifier.verify(rawBody, Object.fromEntries(headers.entries()));
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Webhook verification failed' },
-      { status: 401 },
-    );
+  if (!isValidNotionSignature(rawBody, secret, signature)) {
+    return NextResponse.json({ error: 'Webhook verification failed' }, { status: 401 });
   }
 
   return null;
+}
+
+function isValidNotionSignature(rawBody: string, secret: string, signature: string) {
+  if (!signature.startsWith('sha256=')) {
+    return false;
+  }
+
+  const expected = `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
+  const expectedBuffer = Buffer.from(expected);
+  const receivedBuffer = Buffer.from(signature);
+
+  if (expectedBuffer.length !== receivedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(expectedBuffer, receivedBuffer);
 }
 
 function resolvePageId(payload: NotionWebhookPayload) {
@@ -89,11 +100,6 @@ function isPageEvent(type: string | undefined) {
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
-  const verificationError = verifyWebhookRequest(rawBody, request.headers);
-  if (verificationError) {
-    return verificationError;
-  }
-
   let parsedPayload: NotionWebhookPayload;
 
   try {
@@ -107,6 +113,11 @@ export async function POST(request: Request) {
       hasVerificationToken: true,
     });
     return NextResponse.json({ ok: true });
+  }
+
+  const verificationError = verifyWebhookRequest(rawBody, request.headers);
+  if (verificationError) {
+    return verificationError;
   }
 
   if (!isCommentEvent(parsedPayload.type) && !isPageEvent(parsedPayload.type)) {
