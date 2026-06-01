@@ -353,7 +353,7 @@ export function StoreFilterSheet({
           </section>
         </div>
 
-        <div className="border-t border-[#c8c9cf] bg-[#f2f2f5] px-4 py-3">
+        <div className="border-t border-[#c8c9cf] bg-[#f2f2f5] px-4 pb-[calc(96px+env(safe-area-inset-bottom))] pt-3 md:pb-[calc(108px+env(safe-area-inset-bottom))]">
           <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
