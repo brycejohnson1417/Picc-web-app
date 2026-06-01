@@ -81,10 +81,6 @@ function toGeoJsonString(coordinates: TerritoryBoundaryCoordinates) {
   return JSON.stringify(toGeoJsonPolygon(coordinates));
 }
 
-function geometryFromCoordinates(coordinates: TerritoryBoundaryCoordinates) {
-  return Prisma.sql`ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(${toGeoJsonString(coordinates)}), 4326))`;
-}
-
 function readCoordinatesFromGeoJson(value: unknown): TerritoryBoundaryCoordinates {
   const polygon = value as GeoJsonPolygon | null | undefined;
   const ring = Array.isArray(polygon?.coordinates?.[0]) ? polygon.coordinates[0] : [];
@@ -187,7 +183,6 @@ export async function createTerritoryBoundary(input: {
         "orgId",
         "name",
         "description",
-        "geometry",
         "color",
         "borderWidth",
         "isVisibleByDefault",
@@ -202,7 +197,6 @@ export async function createTerritoryBoundary(input: {
         ${input.orgId},
         ${name},
         ${description},
-        ${geometryFromCoordinates(coordinates)},
         ${color},
         ${borderWidth},
         ${isVisibleByDefault},
@@ -255,7 +249,7 @@ export async function updateTerritoryBoundary(input: {
   actorEmail?: string | null;
 }) {
   const updateData: Record<string, unknown> = {};
-  let coordinatesForGeometry: TerritoryBoundaryCoordinates | null = null;
+  let coordinatesForGeoJson: TerritoryBoundaryCoordinates | null = null;
 
   if (typeof input.name === 'string') {
     const name = input.name.trim();
@@ -280,7 +274,7 @@ export async function updateTerritoryBoundary(input: {
   if (input.coordinates !== undefined) {
     const coordinates = normalizeCoordinates(input.coordinates);
     updateData.geojson = toGeoJsonPolygon(coordinates);
-    coordinatesForGeometry = coordinates;
+    coordinatesForGeoJson = coordinates;
   }
 
   if (input.isVisibleByDefault !== undefined) {
@@ -289,10 +283,9 @@ export async function updateTerritoryBoundary(input: {
 
   updateData.updatedByEmail = input.actorEmail?.trim().toLowerCase() || null;
 
-  if (coordinatesForGeometry) {
+  if (coordinatesForGeoJson) {
     const setClauses: Prisma.Sql[] = [
-      Prisma.sql`"geojson" = ${toGeoJsonString(coordinatesForGeometry)}::jsonb`,
-      Prisma.sql`"geometry" = ${geometryFromCoordinates(coordinatesForGeometry)}`,
+      Prisma.sql`"geojson" = ${toGeoJsonString(coordinatesForGeoJson)}::jsonb`,
       Prisma.sql`"updatedByEmail" = ${updateData.updatedByEmail as string | null}`,
       Prisma.sql`"updatedAt" = NOW()`,
     ];

@@ -1,39 +1,41 @@
-# Session: Issue #83 Remove Notion Auth Gate
+# Session: Issue #85 Territory Boundary Editing
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/83
+- https://github.com/brycejohnson1417/Picc-web-app/issues/85
 
 ## Scope
-- Remove the PICC Notion workspace membership check from app access.
-- Preserve the existing `@piccplatform.com` company email and allowlist gates.
-- Preserve active guest invite and operational invite access.
-- Update sign-in UI copy so it no longer tells team members they need a PICC Notion workspace account.
+- Restore territory boundary create/update persistence after the `Territory.geometry` column was removed.
+- Preserve shared boundary visibility through the existing signed-in territory read API.
+- Preserve admin-only mutation access for boundary create/update/delete.
+- Add regression coverage for the removed geometry-column path.
 
 ## Out Of Scope
-- No Clerk provider changes.
-- No Google-only sign-in changes.
-- No Notion CRM/archive integration changes.
-- No env/secrets, schema changes, production data writes, or production verification claims.
+- No map provider changes.
+- No schema migration, production data backfill, or production write operation.
+- No new territory map surface or drawing UX redesign.
+- No Clerk/auth provider changes.
 
 ## Owned Paths
-- `lib/auth/access-policy.ts`
-- `lib/auth/access-policy.test.ts`
-- `components/auth/google-only-sign-in-card.tsx`
+- `lib/server/territory-boundaries.ts`
+- `lib/server/territory-boundaries.test.ts`
+- `app/api/territory/boundaries/**`
+- `components/mobile/**territory**`
 - `SESSION.md`
 
 ## Open PR Overlap Check
-- Checked open PR #82. It owns docs only (`AGENTS.md`, `AI_HANDOFF.md`) and does not overlap this auth slice.
+- Checked open PR #82. It is docs-only project-boundary work and does not overlap this territory slice.
 
 ## Constraints
-- Keep Clerk Google-only sign-in.
-- Keep access restricted to allowed `@piccplatform.com` users or active invites.
-- Keep Notion integrations behind server modules for CRM/archive workflows, not app access.
+- Keep Google Maps as the only map provider.
+- Keep the current mobile-first PWA shell.
+- Keep business logic in server modules and UI components thin.
+- Keep mutations scoped by `orgId`.
 
 ## Validation Plan
-- Update auth policy tests first to prove allowed company emails no longer require Notion verification.
-- Run `npm test -- lib/auth/access-policy.test.ts`.
+- Add a failing Vitest test proving boundary create/update persistence does not reference the removed `geometry` column.
+- Run `npm test -- lib/server/territory-boundaries.test.ts`.
 - Run `npm run typecheck`.
 - Run `npm run lint`.
 - Run `npm test`.
 - Run `npm run build`.
-- Browser-check `/sign-in` copy when local Clerk configuration can render the sign-in card.
+- Start `npm run dev:local` and browser-check `/territory` with the real territory controls reachable.
