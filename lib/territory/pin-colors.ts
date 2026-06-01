@@ -31,14 +31,24 @@ const DISTINCT_REP_COLORS = [
 ];
 
 const FIXED_REP_COLORS: Record<string, string> = {
-  roxy: '#22c55e',
-  'bryce johnson': '#fde047',
-  ben: '#dc2626',
-  'benjamin rosenthal': '#dc2626',
-  donovan: '#f97316',
-  'donovan snyder': '#f97316',
-  eric: '#60a5fa',
-  'eric acosta': '#60a5fa',
+  roxy: '#dc2626',
+  'bryce johnson': '#60a5fa',
+  bryce: '#60a5fa',
+  ben: '#f97316',
+  'benjamin rosenthal': '#f97316',
+  donovan: '#7c3aed',
+  'donovan snyder': '#7c3aed',
+  eric: '#16a34a',
+  'eric acosta': '#16a34a',
+};
+
+const FIXED_REP_WORD_COLORS: Record<string, string> = {
+  roxy: '#dc2626',
+  bryce: '#60a5fa',
+  ben: '#f97316',
+  benjamin: '#f97316',
+  donovan: '#7c3aed',
+  eric: '#16a34a',
 };
 
 const FOLLOW_UP_NO_DATE_COLOR = '#0616b7';
@@ -56,12 +66,30 @@ function normalizeRepKey(label: string) {
   return normalizeRepLabel(label).toLowerCase();
 }
 
+function fixedRepColorForLabel(label: string) {
+  const key = normalizeRepKey(label);
+  const exact = FIXED_REP_COLORS[key];
+  if (exact) {
+    return exact;
+  }
+
+  const words = key.match(/[a-z0-9]+/g) ?? [];
+  for (const word of words) {
+    const wordColor = FIXED_REP_WORD_COLORS[word];
+    if (wordColor) {
+      return wordColor;
+    }
+  }
+
+  return null;
+}
+
 export function repColorForLabel(label: string) {
   const normalized = normalizeRepLabel(label);
   if (!normalized) {
     return '#64748b';
   }
-  const fixed = FIXED_REP_COLORS[normalizeRepKey(normalized)];
+  const fixed = fixedRepColorForLabel(normalized);
   if (fixed) {
     return fixed;
   }
@@ -82,7 +110,7 @@ export function createRepColorMap(labels: string[]) {
       map.set(label, '#64748b');
       return;
     }
-    const fixed = FIXED_REP_COLORS[normalizeRepKey(label)];
+    const fixed = fixedRepColorForLabel(label);
     if (fixed) {
       map.set(label, fixed);
       return;
