@@ -1,40 +1,39 @@
-# Session: Issue #79 Follow-Up Date Pin Heatmap
+# Session: Issue #83 Remove Notion Auth Gate
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/79
+- https://github.com/brycejohnson1417/Picc-web-app/issues/83
 
 ## Scope
-- Add a Follow Up Date option to the territory Pin Colors UI.
-- Color territory map pins by follow-up urgency using the provided blue-to-green-to-red heatmap direction.
-- Show days until follow-up inside map pins only in Follow Up Date mode.
-- Keep Preferred Partner bold pin outline in Follow Up Date mode while suppressing the `P` glyph.
+- Remove the PICC Notion workspace membership check from app access.
+- Preserve the existing `@piccplatform.com` company email and allowlist gates.
+- Preserve active guest invite and operational invite access.
+- Update sign-in UI copy so it no longer tells team members they need a PICC Notion workspace account.
 
 ## Out Of Scope
-- No Notion, Neon, Supabase, GHL, Nabis, Vercel, schema, auth, or production data writes.
-- No map provider changes.
-- No unrelated territory search, account-detail, Notion-link, or route-planning behavior changes.
+- No Clerk provider changes.
+- No Google-only sign-in changes.
+- No Notion CRM/archive integration changes.
+- No env/secrets, schema changes, production data writes, or production verification claims.
 
 ## Owned Paths
-- `lib/territory/pin-colors.ts`
-- `lib/territory/*.test.ts`
-- `components/mobile/store-filter-sheet.tsx`
-- `components/mobile/territory-mobile.tsx`
-- `components/territory/google-territory-map.tsx`
-- `app/api/territory/filter-presets/route.ts`
+- `lib/auth/access-policy.ts`
+- `lib/auth/access-policy.test.ts`
+- `components/auth/google-only-sign-in-card.tsx`
 - `SESSION.md`
 
 ## Open PR Overlap Check
-- Checked open PR #76. It owns broad `components/mobile/territory-*` search-suggestion paths and `SESSION.md`; this slice avoids search behavior.
-- Checked open PR #78. It owns the focused Notion card/link helper and `SESSION.md`; this slice avoids Notion-link behavior.
-- During rebase, `SESSION.md` conflicted with the landed issue #77 session note. This branch keeps the current issue #79 scope note.
+- Checked open PR #82. It owns docs only (`AGENTS.md`, `AI_HANDOFF.md`) and does not overlap this auth slice.
 
 ## Constraints
-- Production triage style: surgical, additive, one issue per PR.
-- Keep UI components thin; put follow-up date classification/color logic in `lib/territory/pin-colors.ts`.
-- The running browser UI is the source of truth for the feature.
+- Keep Clerk Google-only sign-in.
+- Keep access restricted to allowed `@piccplatform.com` users or active invites.
+- Keep Notion integrations behind server modules for CRM/archive workflows, not app access.
 
 ## Validation Plan
-- RED test first for follow-up date pin color and label classification.
-- Then implement the helper/UI wiring.
-- Run focused tests, typecheck, lint, full test suite, and build.
-- Browser-verify `/territory`: open filters, select Follow Up Date, apply, and confirm map pins show heatmap colors with day labels.
+- Update auth policy tests first to prove allowed company emails no longer require Notion verification.
+- Run `npm test -- lib/auth/access-policy.test.ts`.
+- Run `npm run typecheck`.
+- Run `npm run lint`.
+- Run `npm test`.
+- Run `npm run build`.
+- Browser-check `/sign-in` copy when local Clerk configuration can render the sign-in card.
