@@ -12,6 +12,7 @@ import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
 import { TerritoryFocusedCard } from '@/components/mobile/territory-focused-card';
 import { TerritoryListPane } from '@/components/mobile/territory-list-pane';
 import { TerritoryMapOverlayControls } from '@/components/mobile/territory-map-overlay-controls';
+import { TerritoryMyMapsExportSheet } from '@/components/mobile/territory-my-maps-export-sheet';
 import {
   TerritoryBoundaryEditor,
   TerritoryBoundarySheet,
@@ -22,6 +23,7 @@ import { StoreFilterSheet } from '@/components/mobile/store-filter-sheet';
 import { useTerritoryData } from '@/components/mobile/use-territory-data';
 import { useTerritoryOverlays } from '@/components/mobile/use-territory-overlays';
 import { MapRenderBoundary } from '@/components/mobile/map-render-boundary';
+import type { GoogleMyMapsViewportBounds } from '@/lib/territory/google-my-maps-export';
 import { createRepColorMap, type PinColorMode } from '@/lib/territory/pin-colors';
 import type { PreferredPartnerFilter } from '@/lib/territory/preferred-partner';
 import type { TerritoryStorePin } from '@/lib/territory/types';
@@ -121,6 +123,8 @@ export function TerritoryMobile() {
   const [locationRequestToken, setLocationRequestToken] = useState(0);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showRepLegend, setShowRepLegend] = useState(false);
+  const [showMyMapsExport, setShowMyMapsExport] = useState(false);
+  const [mapViewportBounds, setMapViewportBounds] = useState<GoogleMyMapsViewportBounds | null>(null);
   const [lassoSelection, setLassoSelection] = useState<TerritoryBoundaryEditorState | null>(null);
   const [lassoDrawingMode, setLassoDrawingMode] = useState(false);
   const [lassoSelectedIds, setLassoSelectedIds] = useState<string[]>([]);
@@ -706,6 +710,7 @@ export function TerritoryMobile() {
               onSelectionBoundaryChange={(coordinates) =>
                 setLassoSelection((current) => (current ? { ...current, coordinates } : current))
               }
+              onViewportBoundsChange={setMapViewportBounds}
             />
           </MapRenderBoundary>
 
@@ -755,6 +760,7 @@ export function TerritoryMobile() {
             onRefreshData={() => setRefreshNonce((value) => value + 1)}
             onToggleMapSearch={() => setShowMapSearch((current) => !current)}
             onOpenBoundarySheet={() => setShowBoundarySheet(true)}
+            onOpenMyMapsExport={() => setShowMyMapsExport(true)}
             showBoundaries={showBoundaries}
             onOpenFilters={openFiltersSheet}
             activeFiltersCount={activeFiltersCount}
@@ -859,6 +865,20 @@ export function TerritoryMobile() {
         onCreateMarker={startCreatingMarker}
         onEditMarker={startEditingMarker}
         onDeleteMarker={deleteMarker}
+      />
+      <TerritoryMyMapsExportSheet
+        open={showMyMapsExport}
+        onClose={() => setShowMyMapsExport(false)}
+        stores={mapStores}
+        boundaries={boundaries}
+        markers={markers}
+        showBoundaries={showBoundaries}
+        hiddenBoundaryIds={hiddenBoundaryIds}
+        showMarkers={showMarkers}
+        hiddenMarkerIds={hiddenMarkerIds}
+        viewportBounds={mapViewportBounds}
+        activeFiltersCount={activeFiltersCount}
+        showRouteOnly={showRouteOnly}
       />
       <TerritoryBoundaryEditor
         open={Boolean(boundaryEditor)}

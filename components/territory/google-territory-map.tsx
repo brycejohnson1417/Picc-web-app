@@ -5,6 +5,7 @@ import { AdvancedMarker, APIProvider, Map as GoogleMap, Marker, Pin, useMap } fr
 import { GoogleTerritoryBoundaries, type TerritoryBoundaryDraft } from '@/components/territory/google-territory-boundaries';
 import { GoogleTerritoryMarkers, GoogleTerritoryMarkersFallback } from '@/components/territory/google-territory-markers';
 import { pinColorForStore, pinGlyphColorForStore, pinGlyphForStore, type PinColorMode } from '@/lib/territory/pin-colors';
+import type { GoogleMyMapsViewportBounds } from '@/lib/territory/google-my-maps-export';
 import type { TerritoryBoundary, TerritoryMarker, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +35,7 @@ interface GoogleTerritoryMapProps {
   onSelectStore: (storeId: string | null) => void;
   onDraftBoundaryChange?: (coordinates: [number, number][]) => void;
   onSelectionBoundaryChange?: (coordinates: [number, number][]) => void;
+  onViewportBoundsChange?: (bounds: GoogleMyMapsViewportBounds | null) => void;
   className?: string;
   fitPadding?: number;
   maxFitZoom?: number;
@@ -301,6 +303,47 @@ function CurrentLocationController({
   return null;
 }
 
+function ViewportBoundsController({
+  onViewportBoundsChange,
+}: {
+  onViewportBoundsChange?: (bounds: GoogleMyMapsViewportBounds | null) => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || !onViewportBoundsChange || typeof google === 'undefined') {
+      return;
+    }
+
+    const emitBounds = () => {
+      const bounds = map.getBounds();
+      const northEast = bounds?.getNorthEast();
+      const southWest = bounds?.getSouthWest();
+      if (!northEast || !southWest) {
+        onViewportBoundsChange(null);
+        return;
+      }
+
+      onViewportBoundsChange({
+        north: northEast.lat(),
+        east: northEast.lng(),
+        south: southWest.lat(),
+        west: southWest.lng(),
+      });
+    };
+
+    emitBounds();
+    const listeners = [map.addListener('idle', emitBounds), map.addListener('bounds_changed', emitBounds)];
+    return () => {
+      for (const listener of listeners) {
+        listener.remove();
+      }
+    };
+  }, [map, onViewportBoundsChange]);
+
+  return null;
+}
+
 function markerScale({
   focused,
   highlighted,
@@ -369,6 +412,7 @@ export function GoogleTerritoryMap({
   onSelectStore,
   onDraftBoundaryChange,
   onSelectionBoundaryChange,
+  onViewportBoundsChange,
   className,
   fitPadding = 36,
   maxFitZoom = 12,
@@ -573,6 +617,7 @@ export function GoogleTerritoryMap({
             focusRequestToken={focusRequestToken}
           />
           <CurrentLocationController currentLocation={currentLocation} locationRequestToken={locationRequestToken} />
+          <ViewportBoundsController onViewportBoundsChange={onViewportBoundsChange} />
           <RouteLine routeCoordinates={routeCoordinates} />
           <GoogleTerritoryBoundaries
             boundaries={boundaries}
