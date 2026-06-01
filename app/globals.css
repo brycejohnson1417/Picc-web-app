@@ -9,6 +9,9 @@
   --primary: 201 52 18;
   --border: 201 202 208;
   --app-shell-max: 1120px;
+  --picc-motion-fast: 150ms;
+  --picc-motion-normal: 240ms;
+  --picc-motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .dark {
@@ -31,6 +34,68 @@ body {
   color: rgb(var(--foreground));
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+@keyframes picc-shell-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes picc-skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.picc-shell-enter {
+  animation: picc-shell-enter var(--picc-motion-normal) var(--picc-motion-ease) both;
+}
+
+.picc-soft-transition {
+  transition:
+    transform var(--picc-motion-normal) var(--picc-motion-ease),
+    opacity var(--picc-motion-normal) var(--picc-motion-ease),
+    box-shadow var(--picc-motion-normal) var(--picc-motion-ease),
+    border-color var(--picc-motion-fast) var(--picc-motion-ease),
+    background-color var(--picc-motion-fast) var(--picc-motion-ease),
+    color var(--picc-motion-fast) var(--picc-motion-ease);
+}
+
+.picc-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgb(225 226 231 / 60%) 0%,
+    rgb(248 249 252) 46%,
+    rgb(234 236 241 / 78%) 54%,
+    rgb(219 222 227) 100%
+  );
+  background-size: 200% 100%;
+  animation: picc-skeleton-shimmer 1.4s linear infinite;
+}
+
+.picc-stagger-enter {
+  animation:
+    picc-shell-enter var(--picc-motion-normal) var(--picc-motion-ease) var(--picc-shell-delay, 0ms) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picc-shell-enter,
+  .picc-stagger-enter,
+  .picc-soft-transition,
+  .picc-shimmer {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 ::-webkit-scrollbar {

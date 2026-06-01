@@ -109,6 +109,8 @@ export function TerritoryClient() {
 
   const totalDurationSeconds = optimizedRoute?.totalDurationSeconds ?? 0;
   const totalDistanceMeters = optimizedRoute?.totalDistanceMeters ?? 0;
+  const isInitialLoading = storesQuery.isLoading && !storesQuery.data;
+  const isRefreshing = storesQuery.isFetching && Boolean(storesQuery.data);
 
   function toggleListValue(current: string[], value: string) {
     return current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
@@ -218,17 +220,9 @@ export function TerritoryClient() {
     window.open(`https://www.google.com/maps/dir/?${params.toString()}`, '_blank', 'noopener,noreferrer');
   }
 
-  if (storesQuery.isLoading) {
+  if (storesQuery.isError && !storesQuery.data) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
-      </div>
-    );
-  }
-
-  if (storesQuery.isError) {
-    return (
-      <div className="mx-auto max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+      <div className="mx-auto mt-6 max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-red-700 picc-shell-enter">
         <div className="mb-2 flex items-center gap-2 font-medium">
           <AlertTriangle className="h-4 w-4" />
           Failed to load live territory data
@@ -241,8 +235,12 @@ export function TerritoryClient() {
     );
   }
 
+  if (isInitialLoading) {
+    return <TerritoryClientLoadingState />;
+  }
+
   return (
-    <div className="relative h-[calc(100dvh-64px)] w-full overflow-hidden bg-white dark:bg-slate-950">
+    <div className="relative h-[calc(100dvh-64px)] w-full overflow-hidden bg-white picc-shell-enter dark:bg-slate-950">
       <div className="relative h-full w-full">
         <div className="absolute left-2 right-2 top-2 z-[1000] md:left-4 md:right-4 md:top-4">
           <TerritoryFilterBar
@@ -296,6 +294,15 @@ export function TerritoryClient() {
             {storesQuery.isFetching ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
+
+        {isRefreshing ? (
+          <div className="absolute left-2 right-2 top-[5.6rem] z-[1000] flex justify-center md:left-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-[11px] font-medium text-slate-600 shadow">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Refreshing territory data
+            </div>
+          </div>
+        ) : null}
 
         <MapRenderBoundary>
           <GoogleTerritoryMap
@@ -392,6 +399,33 @@ export function TerritoryClient() {
           {storesQuery.data?.meta.syncing ? <p className="text-white/80">Refreshing live Notion data in background.</p> : null}
           {storesQuery.data?.meta.stale ? <p className="text-amber-300">Showing stale cache while Notion sync recovers.</p> : null}
           {storesQuery.data?.meta.syncError ? <p className="text-amber-300">{storesQuery.data.meta.syncError}</p> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TerritoryClientLoadingState() {
+  return (
+    <div className="relative h-[calc(100dvh-64px)] w-full overflow-hidden bg-slate-100 dark:bg-slate-950">
+      <div className="absolute inset-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm picc-shell-enter md:inset-4">
+        <div className="px-3 pb-2 pt-3 md:px-4">
+          <div className="flex animate-pulse items-start justify-between gap-3">
+            <div className="h-10 w-full max-w-[420px] rounded-lg bg-slate-100 picc-shimmer" />
+            <div className="h-10 w-16 rounded-lg bg-slate-100 picc-shimmer" />
+          </div>
+          <div className="mt-3 flex animate-pulse gap-2">
+            <div className="h-9 w-24 rounded-full bg-slate-100 picc-shimmer" />
+            <div className="h-9 w-24 rounded-full bg-slate-100 picc-shimmer" />
+            <div className="h-9 w-28 rounded-full bg-slate-100 picc-shimmer" />
+          </div>
+        </div>
+        <div className="grid h-[calc(100%-128px)] min-h-[420px] place-items-center bg-slate-100 p-2">
+          <div className="h-full w-full rounded-lg border border-slate-200 bg-slate-200 picc-shimmer" />
+          <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 text-sm text-slate-500">
+            <Loader2 className="h-7 w-7 animate-spin" />
+            <p>Loading territory map and live pins...</p>
+          </div>
         </div>
       </div>
     </div>

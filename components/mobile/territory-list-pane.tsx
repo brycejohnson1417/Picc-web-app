@@ -40,6 +40,8 @@ export function TerritoryListPane({
   repColorMap,
   onOpenStore,
 }: TerritoryListPaneProps) {
+  let rowIndex = 0;
+
   return (
     <div className="h-full overflow-y-auto px-3 pb-28 pt-2">
       {storesQueryError ? (
@@ -76,14 +78,17 @@ export function TerritoryListPane({
         >
           <div className="border-b border-[#c6c7cb] px-1 py-1.5 text-[26px] text-[#8a8d95]">{letter}</div>
           {list.map((store) => {
+            const staggerDelayMs = `${rowIndex * 20}ms`;
             const selected = routeSelectedIds.includes(store.id);
             const pinColor = pinColorForStore(store, pinColorMode, repColorMap);
+            rowIndex += 1;
             return (
               <button
                 key={store.id}
                 type="button"
                 onClick={() => onOpenStore(store.id)}
-                className="flex w-full items-center gap-2 border-b border-[#d0d1d4] px-1 py-2 text-left"
+                className="picc-stagger-enter picc-soft-transition flex w-full items-center gap-2 border-b border-[#d0d1d4] px-1 py-2 text-left hover:bg-[#f4f6f8] active:scale-[0.985] active:shadow-sm"
+                style={{ animationDelay: staggerDelayMs }}
               >
                 <span className="inline-block h-3.5 w-3.5 shrink-0 rounded-full" style={{ backgroundColor: pinColor }} />
                 <span

@@ -83,7 +83,7 @@ export function TerritoryMapOverlayControls({
             type="button"
             disabled={!canVisualizeRoute}
             className={cn(
-              'rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow',
+              'picc-soft-transition rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow transition shadow-sm hover:bg-white/95 active:scale-[0.985]',
               !canVisualizeRoute
                 ? 'cursor-not-allowed border-white/40 bg-white/65 text-[#80848d]'
                 : showRouteOnly
@@ -99,7 +99,7 @@ export function TerritoryMapOverlayControls({
               <button
                 type="button"
                 className={cn(
-                  'rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow',
+                  'picc-soft-transition rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow transition hover:bg-white/95 active:scale-[0.985]',
                   lassoDrawingMode ? 'border-[#2563eb] bg-[#2563eb] text-white' : 'border-white/70 bg-white/92 text-[#25313d]',
                 )}
                 onClick={onToggleLassoMode}
@@ -108,7 +108,7 @@ export function TerritoryMapOverlayControls({
               </button>
               <button
                 type="button"
-                className="rounded-full border border-[#2563eb] bg-white/92 px-3 py-1.5 text-[12px] font-semibold text-[#1d4ed8] shadow"
+                className="picc-soft-transition rounded-full border border-[#2563eb] bg-white/92 px-3 py-1.5 text-[12px] font-semibold text-[#1d4ed8] shadow hover:bg-white"
                 onClick={onFinishLasso}
               >
                 Finish Lasso
@@ -128,11 +128,11 @@ export function TerritoryMapOverlayControls({
                 placeholder="Search dispensaries on the map"
                 className="flex-1 bg-[#eef0f3]"
               />
-              <button
-                type="button"
-                onClick={onClearMapSearch}
-                className="rounded-xl border border-[#d0d3d9] bg-white px-3 py-2 text-[13px] font-medium text-[#4b4f57]"
-              >
+          <button
+            type="button"
+            onClick={onClearMapSearch}
+            className="picc-soft-transition rounded-xl border border-[#d0d3d9] bg-white px-3 py-2 text-[13px] font-medium text-[#4b4f57] hover:bg-[#f4f7fb] active:scale-[0.985]"
+          >
                 Clear
               </button>
             </div>
@@ -150,7 +150,7 @@ export function TerritoryMapOverlayControls({
                           aria-selected={selected}
                           onClick={() => onSelectSearchSuggestion(store.id)}
                           className={cn(
-                            'flex w-full items-center justify-between gap-3 border-b px-3 py-2.5 text-left last:border-b-0 active:bg-[#f3f5f8]',
+                            'picc-soft-transition flex w-full items-center justify-between gap-3 border-b px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f4f7fb] active:scale-[0.985]',
                             selected ? 'border-[#cfe2ff] bg-[#f4f8ff]' : 'border-[#eef0f3]',
                           )}
                         >
@@ -183,11 +183,13 @@ export function TerritoryMapOverlayControls({
 
       {showRouteOnly && hasRoadRouteGeometry ? (
         <div className={cn('absolute left-3 z-[1500] rounded-xl bg-black/70 px-2.5 py-1.5 text-[11px] text-white', focusedStoreVisible ? 'bottom-[108px]' : 'bottom-3')}>
-          {routeModeLabel ?? 'Driving'} route on roads
+          <span className="picc-shell-enter inline-flex items-center gap-1">
+            {routeModeLabel ?? 'Driving'} route on roads
+          </span>
         </div>
       ) : showRouteOnly ? (
         <div className={cn('absolute left-3 z-[1500] rounded-xl bg-black/70 px-2.5 py-1.5 text-[11px] text-white', focusedStoreVisible ? 'bottom-[108px]' : 'bottom-3')}>
-          Add 2+ stops and tap Optimize in Route view
+          <span className="picc-shell-enter inline-flex items-center gap-1">Add 2+ stops and tap Optimize in Route view</span>
         </div>
       ) : null}
 
@@ -195,17 +197,20 @@ export function TerritoryMapOverlayControls({
         <div className={cn('absolute left-3 z-[1500]', focusedStoreVisible ? 'bottom-[148px]' : 'bottom-12')}>
           <button
             type="button"
-            className="rounded-full bg-black/70 px-3 py-2 text-[12px] font-semibold text-white shadow"
+            className="picc-soft-transition rounded-full bg-black/70 px-3 py-2 text-[12px] font-semibold text-white shadow hover:bg-black/85 active:scale-[0.985]"
             onClick={onToggleRepLegend}
           >
             {showRepLegend ? 'Hide rep colors' : `Rep colors (${repLegend.length})`}
           </button>
           {showRepLegend ? (
-            <div className="mt-2 max-h-[40vh] max-w-[240px] overflow-y-auto rounded-xl bg-black/70 px-2.5 py-2 text-white">
+            <div className="mt-2 max-h-[40vh] max-w-[240px] overflow-y-auto rounded-xl bg-black/70 px-2.5 py-2 text-white picc-soft-transition picc-shell-enter">
               <p className="mb-1 text-[11px] uppercase tracking-wide text-white/70">Rep Colors</p>
               <div className="space-y-1">
                 {repLegend.map((entry) => (
-                  <div key={entry.label} className="flex items-center justify-between gap-3 text-[12px]">
+                  <div
+                    key={entry.label}
+                    className="picc-soft-transition flex items-center justify-between gap-3 rounded-md px-1 py-1 text-[12px] hover:bg-white/10 active:scale-[0.985]"
+                  >
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
                       <span className="truncate">{entry.label}</span>
@@ -224,7 +229,7 @@ export function TerritoryMapOverlayControls({
           type="button"
           aria-label="Center on your current location"
           title="Current location"
-          className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
+          className="picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]"
           onClick={onCenterCurrentLocation}
         >
           <Crosshair className="h-5 w-5 text-[#7f828a]" />
@@ -233,7 +238,7 @@ export function TerritoryMapOverlayControls({
           type="button"
           aria-label="Refresh territory data"
           title="Refresh territory data"
-          className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
+          className="picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]"
           onClick={onRefreshData}
         >
           <RefreshCw className="h-5 w-5 text-[#7f828a]" />
@@ -242,7 +247,10 @@ export function TerritoryMapOverlayControls({
           type="button"
           aria-label={lassoActive ? 'Clear lasso selection' : 'Start lasso selection'}
           title={lassoActive ? 'Clear lasso selection' : 'Lasso accounts'}
-          className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', lassoActive ? 'ring-2 ring-[#2563eb]' : '')}
+            className={cn(
+            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]',
+            lassoActive ? 'ring-2 ring-[#2563eb]' : '',
+          )}
           onClick={onToggleLassoMode}
         >
           <svg
@@ -265,7 +273,7 @@ export function TerritoryMapOverlayControls({
           type="button"
           aria-label="Open territory export options"
           title="Export"
-          className="grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow"
+          className="picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]"
           onClick={onOpenMyMapsExport}
         >
           <Download className="h-5 w-5 text-[#7f828a]" />
@@ -277,7 +285,10 @@ export function TerritoryMapOverlayControls({
           type="button"
           aria-label="Search dispensaries on the map"
           title="Search map"
-          className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showMapSearch || mapSearch.trim().length > 0 ? 'ring-2 ring-[#cd3814]' : '')}
+          className={cn(
+            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]',
+            showMapSearch || mapSearch.trim().length > 0 ? 'ring-2 ring-[#cd3814]' : '',
+          )}
           onClick={onToggleMapSearch}
         >
           <Search className={cn('h-5 w-5', showMapSearch || mapSearch.trim().length > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
@@ -286,7 +297,10 @@ export function TerritoryMapOverlayControls({
           type="button"
           aria-label="Open territory layers"
           title="Territory layers"
-          className={cn('grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', showBoundaries ? 'ring-2 ring-[#cd3814]' : '')}
+          className={cn(
+            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]',
+            showBoundaries ? 'ring-2 ring-[#cd3814]' : '',
+          )}
           onClick={onOpenBoundarySheet}
         >
           <Layers3 className={cn('h-5 w-5', showBoundaries ? 'text-[#cd3814]' : 'text-[#7f828a]')} />
@@ -295,7 +309,10 @@ export function TerritoryMapOverlayControls({
           type="button"
           aria-label="Open filters"
           title="Filters"
-          className={cn('relative grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow', activeFiltersCount > 0 ? 'ring-2 ring-[#cd3814]' : '')}
+          className={cn(
+            'picc-soft-transition relative grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]',
+            activeFiltersCount > 0 ? 'ring-2 ring-[#cd3814]' : '',
+          )}
           onClick={onOpenFilters}
         >
           <Filter className={cn('h-5 w-5', activeFiltersCount > 0 ? 'text-[#cd3814]' : 'text-[#7f828a]')} />

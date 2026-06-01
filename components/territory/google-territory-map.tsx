@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdvancedMarker, APIProvider, Map as GoogleMap, Marker, Pin, useMap } from '@vis.gl/react-google-maps';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { GoogleTerritoryBoundaries, type TerritoryBoundaryDraft } from '@/components/territory/google-territory-boundaries';
 import { GoogleTerritoryMarkers, GoogleTerritoryMarkersFallback } from '@/components/territory/google-territory-markers';
 import { pinColorForStore, pinGlyphColorForStore, pinGlyphForStore, type PinColorMode } from '@/lib/territory/pin-colors';
@@ -551,26 +552,49 @@ export function GoogleTerritoryMap({
 
   if (!apiKey && configLoading) {
     return (
-      <div className={cn('grid h-full w-full place-items-center rounded-xl border border-slate-300 bg-slate-100 p-4 text-sm text-slate-700', className)}>
-        Loading Google Maps configuration...
+      <div
+        className={cn(
+          'picc-shell-enter grid h-full w-full place-items-center rounded-xl border border-slate-300 bg-slate-100 text-sm text-slate-700',
+          className,
+        )}
+      >
+        <div className="rounded-lg bg-white/90 px-3 py-2 text-center">
+          <Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-500" />
+          <p className="mt-2">Loading Google Maps configuration...</p>
+        </div>
       </div>
     );
   }
 
   if (!apiKey) {
     return (
-      <div className={cn('grid h-full w-full place-items-center rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900', className)}>
-        Google Maps API key is not configured. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`.
-        {configError ? <span className="mt-2 block text-xs text-amber-800">{configError}</span> : null}
+      <div
+        className={cn(
+          'picc-shell-enter grid h-full w-full place-items-center rounded-xl border border-amber-300 bg-amber-50 text-sm text-amber-900',
+          className,
+        )}
+      >
+        <div className="mx-4 rounded-xl border border-amber-300 bg-white/85 p-4 text-left">
+          Google Maps API key is not configured. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`.
+          {configError ? <span className="mt-2 block text-xs text-amber-800">{configError}</span> : null}
+        </div>
       </div>
     );
   }
 
   if (mapLoadError) {
     return (
-      <div className={cn('grid h-full w-full place-items-center rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900', className)}>
-        <div>
-          <p>Google Maps failed to load.</p>
+      <div
+        className={cn(
+          'picc-shell-enter grid h-full w-full place-items-center rounded-xl border border-red-300 bg-red-50 text-sm text-red-900',
+          className,
+        )}
+      >
+        <div className="mx-4 rounded-xl border border-red-300 bg-white/85 p-4">
+          <div className="mb-1 inline-flex items-center gap-1.5 font-medium text-red-900">
+            <AlertTriangle className="h-4 w-4" />
+            Google Maps failed to load.
+          </div>
           <p className="mt-1 text-xs text-red-800">{mapLoadError}</p>
         </div>
       </div>

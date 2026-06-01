@@ -414,6 +414,8 @@ export function TerritoryMobile() {
   );
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
+  const isInitialLoading = storesQuery.isLoading && !storesQuery.data;
+  const isRefreshing = storesQuery.isFetching && Boolean(storesQuery.data);
   const activeFiltersCount = countActiveTerritoryFilters({
     selectedStatuses,
     selectedReps,
@@ -626,17 +628,34 @@ export function TerritoryMobile() {
     );
   }
 
-  if (storesQuery.isLoading && !storesQuery.data) {
+  if (isInitialLoading) {
     return (
-      <div className="flex min-h-[calc(100dvh-76px)] items-center justify-center bg-[#e6e6e9]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#5f636d]" />
+      <div className="relative flex min-h-[calc(100dvh-76px)] flex-col overflow-hidden bg-[#e6e6e9]">
+        <MobileHeader className="z-[2600]">
+          <div className="mx-auto flex w-full max-w-[560px]">
+            <div className="h-9 w-full rounded-full bg-white/95 picc-shimmer" />
+          </div>
+        </MobileHeader>
+        <div className="relative mt-2 flex-1 px-3 pb-3">
+          <div className="mb-2 h-11 rounded-2xl bg-[#e0e2e8] px-3 py-2">
+            <div className="h-3.5 w-24 rounded bg-[#f2f3f7]" />
+            <div className="mt-2 h-3.5 w-2/3 rounded bg-[#dce0e7]" />
+          </div>
+          <div className="relative h-full overflow-hidden rounded-2xl border border-[#cacdd4] bg-[#dbdde4]">
+            <div className="h-full w-full picc-shimmer" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 text-sm text-[#636873]">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading territory map...
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (storesQuery.isError && !storesQuery.data) {
     return (
-      <div className="min-h-[calc(100dvh-76px)] bg-[#e6e6e9] px-5 py-8">
+      <div className="min-h-[calc(100dvh-76px)] bg-[#e6e6e9] px-5 py-8 picc-shell-enter">
         <div className="rounded-xl border border-[#e0b4ab] bg-[#fbe8e4] p-4 text-[#8f2410]">
           <div className="mb-2 flex items-center gap-2 text-[18px] font-semibold">
             <AlertTriangle className="h-5 w-5" />
@@ -663,7 +682,7 @@ export function TerritoryMobile() {
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-[#e6e6e9]">
+    <div className="relative flex h-full min-h-0 flex-col bg-[#e6e6e9] picc-shell-enter">
       <MobileHeader className="z-[2600]">
         <div className="mx-auto flex w-full max-w-[560px] items-center gap-2">
           <SegmentedControl
@@ -677,6 +696,15 @@ export function TerritoryMobile() {
           />
         </div>
       </MobileHeader>
+
+      {isRefreshing ? (
+        <div className="pointer-events-none absolute left-3 right-3 top-[66px] z-[2500] px-1">
+          <div className="mx-auto flex max-w-[560px] items-center justify-center rounded-full border border-[#d4d7de] bg-white/95 px-3 py-1 text-[11px] font-medium text-[#5f6672] shadow">
+            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            Syncing territory data
+          </div>
+        </div>
+      ) : null}
 
       {view === 'map' ? (
         <div className="relative min-h-0 flex-1">
