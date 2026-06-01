@@ -1,49 +1,54 @@
-# Session: Issue #87 Local Territory Read-Model FK Warning
+# Session: Issue #106 Patch Next and Clerk Vulnerabilities
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/87
+- https://github.com/brycejohnson1417/Picc-web-app/issues/106
 
 ## Scope
-- Stop local territory sync/read-model writes from targeting a non-seeded production org while demo mode is active.
-- Preserve production territory org behavior when demo mode is disabled.
-- Add regression coverage for the local demo-mode org resolution path.
-- Browser-verify `/territory` against local Postgres without the `TerritoryStoreReadModel_orgId_fkey` warning.
+- Patch vulnerable production dependency versions for `next` and `@clerk/nextjs`.
+- Keep supporting Next packages on the matching safe `15.x` line.
+- Preserve the current Next 15 app architecture and Clerk Google-only auth model.
+- Add or run focused protected-route/auth verification after the dependency update.
+- Document the remaining audit surface after the direct production vulnerabilities are patched.
 
 ## Out Of Scope
+- No Next 16 migration.
+- No Clerk 7 migration.
+- No auth provider changes.
 - No production data writes.
 - No schema migration or backfill.
-- No territory map drawing UX changes.
-- No map provider changes.
-- No auth provider changes.
+- No UI redesign or route behavior changes beyond dependency compatibility fixes.
 
 ## Owned Paths
-- `lib/server/notion-territory.ts`
-- `lib/server/notion-territory.test.ts`
-- `lib/server/territory-read-model.ts`
-- `lib/server/territory-read-model.test.ts`
+- `package.json`
+- `package-lock.json`
 - `SESSION.md`
+- Auth or middleware regression test files only if dependency compatibility requires coverage changes.
 
 ## Open PR Overlap Check
-- Checked open PR #82. It is docs-only project-boundary work and does not overlap this territory runtime fix.
+- Checked open PR #82. It is docs-only project-boundary work and does not overlap this dependency patch.
 
 ## Current Evidence
-- Local seed creates `OrganizationWorkspace.id = org_picc_demo`.
-- Local `.env.local` has `DEMO_MODE=true` and `TERRITORY_ORG_ID=org_picc_prod`.
-- `territory-read-model.ts` and `notion-territory.ts` both preferred configured `TERRITORY_ORG_ID` before demo fallback when no explicit org ID was passed.
+- `npm audit --json` reports direct production vulnerabilities in `@clerk/nextjs` and `next`.
+- Issue #106 says the safe compatible Next patch target is `15.5.18`.
+- `npm view next@15 version`, `npm view @next/bundle-analyzer@15 version`, and `npm view eslint-config-next@15 version` confirm `15.5.18` exists on the Next 15 line.
+- `npm view @clerk/nextjs@6 version` confirms patched Clerk 6 releases exist after the vulnerable `<=6.39.2` range.
 
 ## Constraints
-- Keep Google Maps as the only map provider.
+- Keep working only in `/Users/brycejohnson/Code/PICC-Web-App`.
+- Keep Google Maps as the only supported map provider.
 - Keep the current mobile-first PWA shell.
-- Keep business logic in server modules and UI components thin.
-- Keep mutations scoped by `orgId`.
-- Do not rely on editing untracked local env files as the durable fix.
+- Keep Clerk as the auth provider and sign-in Google-only.
+- Do not silently bundle unrelated dependency upgrades.
 
 ## Validation Plan
-- Add failing Vitest tests proving demo-mode territory read-model writes and sync jobs use `DEMO_ORG_ID` even if `TERRITORY_ORG_ID` is set to the production org.
-- Run the focused regression test.
+- Run a focused dependency install for:
+  - `next@15.5.18`
+  - `eslint-config-next@15.5.18`
+  - `@next/bundle-analyzer@15.5.18`
+  - `@clerk/nextjs@6.39.5`
+- Rerun `npm audit --omit=dev --audit-level=moderate`.
 - Run `npm run typecheck`.
 - Run `npm run lint`.
 - Run `npm test`.
 - Run `npm run build`.
-- Run `npm run db:local:setup`.
-- Start `npm run dev:local` and browser-check `/territory` with no local FK warning in server logs.
+- Run a protected-route check against the local app after build/dev startup if the dependency update passes static validation.
