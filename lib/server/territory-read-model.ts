@@ -2,7 +2,7 @@ import 'server-only';
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
-import { AUTH_BYPASS_MODE, DEMO_ORG_ID } from '@/lib/config/runtime';
+import { AUTH_BYPASS_MODE, DEMO_MODE, DEMO_ORG_ID } from '@/lib/config/runtime';
 import {
   normalizeTerritoryOption,
   preferredPartnerLabel,
@@ -160,6 +160,9 @@ function orgIdOrDefault(orgId?: string) {
   const clean = orgId?.trim();
   if (clean) {
     return clean;
+  }
+  if (DEMO_MODE) {
+    return DEMO_ORG_ID;
   }
   if (CONFIGURED_ORG_ID) {
     return CONFIGURED_ORG_ID;

@@ -2,7 +2,7 @@ import 'server-only';
 
 import { prisma } from '@/lib/db/prisma';
 import { isExcludedInternalTransferRetailerName } from '@/lib/nabis/internal-transfers';
-import { AUTH_BYPASS_MODE, DEMO_ORG_ID } from '@/lib/config/runtime';
+import { AUTH_BYPASS_MODE, DEMO_MODE, DEMO_ORG_ID } from '@/lib/config/runtime';
 import {
   getSyncTtlMinutes,
   isSnapshotStale,
@@ -211,6 +211,9 @@ function requiredEnv(name: 'NOTION_API_KEY' | 'NOTION_MASTER_LIST_DATABASE_ID') 
 }
 
 function territoryOrgId() {
+  if (DEMO_MODE) {
+    return DEMO_ORG_ID;
+  }
   const configured = process.env.TERRITORY_ORG_ID?.trim();
   if (configured) {
     return configured;
