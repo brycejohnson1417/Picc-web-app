@@ -1,49 +1,58 @@
-# Session: Issue #87 Local Territory Read-Model FK Warning
+# Session: Issue #106 Patch Next and Clerk Vulnerabilities
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/87
+- https://github.com/brycejohnson1417/Picc-web-app/issues/106
 
 ## Scope
-- Stop local territory sync/read-model writes from targeting a non-seeded production org while demo mode is active.
-- Preserve production territory org behavior when demo mode is disabled.
-- Add regression coverage for the local demo-mode org resolution path.
-- Browser-verify `/territory` against local Postgres without the `TerritoryStoreReadModel_orgId_fkey` warning.
+- Patch vulnerable production dependency versions for `next` and `@clerk/nextjs`.
+- Keep supporting Next packages on the matching safe `15.x` line.
+- Preserve the current Next 15 app architecture and Clerk Google-only auth model.
+- Add or run focused protected-route/auth verification after the dependency update.
+- Document the remaining audit surface after the direct production vulnerabilities are patched.
 
 ## Out Of Scope
+- No Next 16 migration.
+- No Clerk 7 migration.
+- No auth provider changes.
 - No production data writes.
 - No schema migration or backfill.
-- No territory map drawing UX changes.
-- No map provider changes.
-- No auth provider changes.
+- No UI redesign or route behavior changes beyond dependency compatibility fixes.
 
 ## Owned Paths
-- `lib/server/notion-territory.ts`
-- `lib/server/notion-territory.test.ts`
-- `lib/server/territory-read-model.ts`
-- `lib/server/territory-read-model.test.ts`
+- `package.json`
+- `package-lock.json`
 - `SESSION.md`
+- Auth or middleware regression test files only if dependency compatibility requires coverage changes.
 
 ## Open PR Overlap Check
-- Checked open PR #82. It is docs-only project-boundary work and does not overlap this territory runtime fix.
+- Checked open PR #82. It is docs-only project-boundary work and does not overlap this dependency patch.
 
 ## Current Evidence
-- Local seed creates `OrganizationWorkspace.id = org_picc_demo`.
-- Local `.env.local` has `DEMO_MODE=true` and `TERRITORY_ORG_ID=org_picc_prod`.
-- `territory-read-model.ts` and `notion-territory.ts` both preferred configured `TERRITORY_ORG_ID` before demo fallback when no explicit org ID was passed.
+- `npm audit --json` reports direct production vulnerabilities in `@clerk/nextjs` and `next`.
+- Issue #106 says the safe compatible Next patch target is `15.5.18`.
+- `npm view next@15 version`, `npm view @next/bundle-analyzer@15 version`, and `npm view eslint-config-next@15 version` confirm `15.5.18` exists on the Next 15 line.
+- `npm view @clerk/nextjs@6 version` confirms patched Clerk 6 releases exist after the vulnerable `<=6.39.2` range.
+- `npm audit --omit=dev --audit-level=moderate --json` after the patch no longer reports Clerk vulnerabilities, Next middleware/proxy bypass advisories, or critical vulnerabilities.
+- The remaining production audit findings are outside this issue: Prisma/effect, lodash/defu/dompurify, and `xlsx`.
 
 ## Constraints
-- Keep Google Maps as the only map provider.
+- Keep working only in `/Users/brycejohnson/Code/PICC-Web-App`.
+- Keep Google Maps as the only supported map provider.
 - Keep the current mobile-first PWA shell.
-- Keep business logic in server modules and UI components thin.
-- Keep mutations scoped by `orgId`.
-- Do not rely on editing untracked local env files as the durable fix.
+- Keep Clerk as the auth provider and sign-in Google-only.
+- Do not silently bundle unrelated dependency upgrades.
 
 ## Validation Plan
-- Add failing Vitest tests proving demo-mode territory read-model writes and sync jobs use `DEMO_ORG_ID` even if `TERRITORY_ORG_ID` is set to the production org.
-- Run the focused regression test.
-- Run `npm run typecheck`.
-- Run `npm run lint`.
-- Run `npm test`.
-- Run `npm run build`.
-- Run `npm run db:local:setup`.
-- Start `npm run dev:local` and browser-check `/territory` with no local FK warning in server logs.
+- Completed a focused dependency install for:
+  - `next@15.5.18`
+  - `eslint-config-next@15.5.18`
+  - `@next/bundle-analyzer@15.5.18`
+  - `@clerk/nextjs@6.39.5`
+- Added a narrow npm override for `next`'s nested `postcss` dependency to `8.5.15` because Next `15.5.18` still pins audited `postcss@8.4.31`.
+- `npm audit --omit=dev --audit-level=moderate --json`: exits `1` with `0` critical findings and `7` remaining production findings outside this issue.
+- `npm run typecheck`: exits `0`.
+- `npm run lint`: exits `0`.
+- `npm test`: exits `0`; `17` test files and `82` tests passed.
+- `npm run build`: exits `0` with Next `15.5.18`.
+- Local browser check at `http://127.0.0.1:3010/territory`: status `200`, rendered the PICC territory Google map in demo mode.
+- Protected API fail-closed check at `http://127.0.0.1:3011/api/accounts` with `DEMO_MODE=false` and no Clerk keys: returned `503` and `{"error":"Auth environment not configured for production."}`.
