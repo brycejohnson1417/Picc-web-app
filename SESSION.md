@@ -32,6 +32,8 @@
 - Issue #106 says the safe compatible Next patch target is `15.5.18`.
 - `npm view next@15 version`, `npm view @next/bundle-analyzer@15 version`, and `npm view eslint-config-next@15 version` confirm `15.5.18` exists on the Next 15 line.
 - `npm view @clerk/nextjs@6 version` confirms patched Clerk 6 releases exist after the vulnerable `<=6.39.2` range.
+- `npm audit --omit=dev --audit-level=moderate --json` after the patch no longer reports Clerk vulnerabilities, Next middleware/proxy bypass advisories, or critical vulnerabilities.
+- The remaining production audit findings are outside this issue: Prisma/effect, lodash/defu/dompurify, and `xlsx`.
 
 ## Constraints
 - Keep working only in `/Users/brycejohnson/Code/PICC-Web-App`.
@@ -41,14 +43,16 @@
 - Do not silently bundle unrelated dependency upgrades.
 
 ## Validation Plan
-- Run a focused dependency install for:
+- Completed a focused dependency install for:
   - `next@15.5.18`
   - `eslint-config-next@15.5.18`
   - `@next/bundle-analyzer@15.5.18`
   - `@clerk/nextjs@6.39.5`
-- Rerun `npm audit --omit=dev --audit-level=moderate`.
-- Run `npm run typecheck`.
-- Run `npm run lint`.
-- Run `npm test`.
-- Run `npm run build`.
-- Run a protected-route check against the local app after build/dev startup if the dependency update passes static validation.
+- Added a narrow npm override for `next`'s nested `postcss` dependency to `8.5.15` because Next `15.5.18` still pins audited `postcss@8.4.31`.
+- `npm audit --omit=dev --audit-level=moderate --json`: exits `1` with `0` critical findings and `7` remaining production findings outside this issue.
+- `npm run typecheck`: exits `0`.
+- `npm run lint`: exits `0`.
+- `npm test`: exits `0`; `17` test files and `82` tests passed.
+- `npm run build`: exits `0` with Next `15.5.18`.
+- Local browser check at `http://127.0.0.1:3010/territory`: status `200`, rendered the PICC territory Google map in demo mode.
+- Protected API fail-closed check at `http://127.0.0.1:3011/api/accounts` with `DEMO_MODE=false` and no Clerk keys: returned `503` and `{"error":"Auth environment not configured for production."}`.

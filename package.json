@@ -36,7 +36,7 @@
     "sync:odoo": "tsx services/odoo-sync/src/index.ts"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.0.0",
+    "@clerk/nextjs": "^6.39.5",
     "@hookform/resolvers": "^4.1.0",
     "@prisma/client": "^6.3.0",
     "@radix-ui/react-avatar": "^1.1.2",
@@ -66,7 +66,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.475.0",
-    "next": "^15.1.6",
+    "next": "^15.5.18",
     "next-themes": "^0.4.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -81,13 +81,13 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@lhci/cli": "^0.15.1",
-    "@next/bundle-analyzer": "^15.5.0",
+    "@next/bundle-analyzer": "^15.5.18",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.13.0",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "eslint": "^9.19.0",
-    "eslint-config-next": "^15.5.12",
+    "eslint-config-next": "^15.5.18",
     "eslint-plugin-react": "^7.37.5",
     "postcss": "^8.5.1",
     "prisma": "^6.3.0",
@@ -95,6 +95,11 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^4.1.0"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.15"
+    }
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
