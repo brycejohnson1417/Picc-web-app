@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { followUpPinPresentation, pinColorForStore, pinGlyphForStore } from '@/lib/territory/pin-colors';
+import { createRepColorMap, followUpPinPresentation, pinColorForStore, pinGlyphForStore, repColorForLabel } from '@/lib/territory/pin-colors';
 import type { TerritoryStorePin } from '@/lib/territory/types';
 
 function buildStore(overrides: Partial<TerritoryStorePin> = {}): TerritoryStorePin {
@@ -85,5 +85,24 @@ describe('territory pin colors', () => {
 
     expect(pinGlyphForStore(store, 'status', referenceDate)).toBe('P');
     expect(pinGlyphForStore(store, 'follow-up-date', referenceDate)).toBe('0');
+  });
+
+  it('uses the fixed PICC territory colors for known rep labels', () => {
+    expect(repColorForLabel('Roxy')).toBe('#dc2626');
+    expect(repColorForLabel('roxy')).toBe('#dc2626');
+    expect(repColorForLabel('Bryce')).toBe('#60a5fa');
+    expect(repColorForLabel('Bryce Johnson')).toBe('#60a5fa');
+    expect(repColorForLabel('Donovan Snyder')).toBe('#7c3aed');
+    expect(repColorForLabel('Ben')).toBe('#f97316');
+    expect(repColorForLabel('Benjamin Rosenthal')).toBe('#f97316');
+    expect(repColorForLabel('Eric Acosta')).toBe('#16a34a');
+  });
+
+  it('keeps fixed rep colors when labels include extra Notion context', () => {
+    const colorMap = createRepColorMap(['Bryce Johnson - PICC', 'Donovan Snyder', 'Roxy']);
+    const store = buildStore({ repNames: ['Bryce Johnson - PICC'] });
+
+    expect(colorMap.get('Bryce Johnson - PICC')).toBe('#60a5fa');
+    expect(pinColorForStore(store, 'rep', colorMap, referenceDate)).toBe('#60a5fa');
   });
 });
