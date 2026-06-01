@@ -3,7 +3,6 @@ import 'server-only';
 import { isEmailAllowed, parseEmailAllowlist } from '@/lib/auth/email-allowlist';
 import { getActiveGuestInviteByEmail } from '@/lib/auth/guest-invites';
 import { getActiveOperationalInviteByEmail } from '@/lib/auth/operational-invites';
-import { hasNotionWorkspaceUser } from '@/lib/server/notion-workspace-users';
 
 const REQUIRED_EMAIL_DOMAIN = 'piccplatform.com';
 const DEFAULT_ALLOWED_EMAILS = `@${REQUIRED_EMAIL_DOMAIN}`;
@@ -75,24 +74,6 @@ export async function evaluateUserAccess(email: string | null | undefined): Prom
       ok: false,
       status: 403,
       error: 'Your account is not allowlisted for this workspace.',
-    };
-  }
-
-  try {
-    const hasNotionAccount = await hasNotionWorkspaceUser(normalizedEmail);
-    if (!hasNotionAccount) {
-      return {
-        ok: false,
-        status: 403,
-        error: 'Your @piccplatform.com email must also be a Notion workspace account.',
-      };
-    }
-  } catch (error) {
-    console.error('Failed to verify Notion workspace membership:', error);
-    return {
-      ok: false,
-      status: 503,
-      error: 'Notion workspace verification is currently unavailable.',
     };
   }
 

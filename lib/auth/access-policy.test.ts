@@ -75,21 +75,10 @@ describe('access policy', () => {
     });
   });
 
-  it('rejects allowlisted company emails that are missing from the notion workspace', async () => {
+  it('allows allowlisted company emails without requiring a notion workspace user', async () => {
     process.env.TERRITORY_ALLOWED_EMAILS = '*';
     mockedGetActiveGuestInviteByEmail.mockResolvedValue(null);
     mockedHasNotionWorkspaceUser.mockResolvedValue(false);
-
-    await expect(evaluateUserAccess('rep@piccplatform.com')).resolves.toMatchObject({
-      ok: false,
-      status: 403,
-    });
-  });
-
-  it('allows allowlisted company emails that also exist in notion', async () => {
-    process.env.TERRITORY_ALLOWED_EMAILS = '*';
-    mockedGetActiveGuestInviteByEmail.mockResolvedValue(null);
-    mockedHasNotionWorkspaceUser.mockResolvedValue(true);
 
     await expect(evaluateUserAccess('rep@piccplatform.com')).resolves.toMatchObject({
       ok: true,
@@ -97,6 +86,21 @@ describe('access policy', () => {
       accessType: 'workspace',
       email: 'rep@piccplatform.com',
     });
+    expect(mockedHasNotionWorkspaceUser).not.toHaveBeenCalled();
+  });
+
+  it('does not block allowlisted company emails when notion verification is unavailable', async () => {
+    process.env.TERRITORY_ALLOWED_EMAILS = '*';
+    mockedGetActiveGuestInviteByEmail.mockResolvedValue(null);
+    mockedHasNotionWorkspaceUser.mockRejectedValue(new Error('Notion unavailable'));
+
+    await expect(evaluateUserAccess('rep@piccplatform.com')).resolves.toMatchObject({
+      ok: true,
+      status: 200,
+      accessType: 'workspace',
+      email: 'rep@piccplatform.com',
+    });
+    expect(mockedHasNotionWorkspaceUser).not.toHaveBeenCalled();
   });
 
   it('allows operational invites before company-email checks', async () => {
