@@ -91,7 +91,7 @@ body {
 
 @media (min-width: 768px) {
   :root {
-    --picc-bottom-nav-clearance: 96px;
+    --picc-bottom-nav-clearance: 80px;
   }
 }
 

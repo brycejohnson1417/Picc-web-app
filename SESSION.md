@@ -1,44 +1,38 @@
-# Session: Issue #130 Bottom Nav Sheet Overlap
+# Session: Issue #132 Tighten Footer Clearance
 
 ## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/130
+- https://github.com/brycejohnson1417/Picc-web-app/issues/132
 
 ## Scope
-- Fix the mobile account detail sheet so its bottom actions stay visible and tappable above the primary footer navigation.
-- Apply the bottom-safe layout contract to adjacent mobile bottom surfaces where the same collision can occur.
-- Preserve the existing mobile-first PWA shell and account detail behavior.
+- Tighten the account detail action bar spacing above the primary footer.
+- Keep the action bar and check-in/contact sheets above the footer with only a small visual gap.
+- Preserve the shared bottom-safe spacing contract added for issue #130.
 
 ## Out Of Scope
 - No check-in persistence or backend behavior changes.
 - No map provider, route planning, auth, RBAC, schema, or external integration changes.
 - No production data writes.
-- No broad redesign beyond the footer collision fix.
+- No broad redesign.
 
 ## Owned Paths
-- `components/mobile/account-detail-sheet.tsx`
-- `components/mobile/route-mobile.tsx`
-- `components/mobile/territory-focused-card.tsx`
-- `components/layout/app-shell.tsx`
+- `app/globals.css`
 - `SESSION.md`
 
 ## Open PR Overlap Check
 - Checked open PR #82 before starting. It touches `AGENTS.md` and `AI_HANDOFF.md` only, so it does not overlap this slice.
 
 ## Current Evidence
-- User screenshot shows account detail actions such as Check-in hidden behind the primary bottom navigation on the territory map.
-- `components/mobile/account-detail-sheet.tsx` renders a sheet action bar at the bottom while the global shell footer remains fixed at the bottom.
-- `DESIGN-SYSTEM.md` states bottom navigation consumes the lower safe area and fixed action bars must sit above it.
+- User screenshot shows the account detail action bar is no longer hidden, but the bar floats too high above the primary footer on the desktop-width shell.
+- Issue #130 browser proof showed a 24px gap above the footer; this follow-up should reduce that to a tighter intentional gap while preserving no-overlap.
 
 ## Constraints
 - Work only in `/Users/brycejohnson/Code/PICC-Web-App`.
 - Keep the change surgical and frontend-only.
-- Keep Google Maps as the only territory map provider.
-- Use browser-visible validation for the territory account-detail flow.
+- Use browser geometry proof for the territory account-detail flow.
 
 ## Validation Plan
-- Red proof: reproduce the overlap through the running frontend with screenshot or DOM geometry before the layout fix when possible.
-- Green proof: verify account detail actions render above the primary footer and remain clickable.
-- Check at least one adjacent bottom surface for the same collision class.
+- Browser proof: `/territory -> List -> account -> Account Details -> Check-in`.
+- Verify action bar and check-in modal do not overlap footer and have a tighter gap.
 - Run `npm run typecheck`.
 - Run `npm run lint`.
 - Run `npm test`.
