@@ -9,6 +9,7 @@ import { useAppAccess } from '@/components/auth/app-access-provider';
 import { RoleSwitcher } from '@/components/layout/role-switcher';
 import { WorkspacePanel, WorkspacePanelHeader } from '@/components/layout/workspace-page';
 import { AdminOpsPanel } from '@/components/settings/admin-ops-panel';
+import { NabisExceptionWorkflow } from '@/components/settings/nabis-exception-workflow';
 import { NabisSyncAdminPanel } from '@/components/settings/nabis-sync-admin-panel';
 import { WorkerSupplyPanel } from '@/components/settings/worker-supply-panel';
 import { GoogleUsageBudgetCard } from '@/components/territory/google-usage-budget-card';
@@ -122,7 +123,6 @@ function formatTimestamp(value: string | null | undefined, fallback: string) {
 
 export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
-  const { signOut } = useClerk();
   const appAccess = useAppAccess();
   const canViewTeamActivity = appAccess.role === 'ADMIN' || appAccess.role === 'OPS_TEAM';
   const canViewAdminControls = appAccess.role === 'ADMIN' || appAccess.role === 'OPS_TEAM' || appAccess.role === 'FINANCE';
@@ -188,6 +188,11 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
         },
         ...(canViewAdminControls
           ? [
+              {
+                id: 'nabis-exceptions',
+                label: 'Nabis Exceptions',
+                description: 'Microbar sample additions and order corrections anchored to cached orders.',
+              },
               {
                 id: 'nabis-sync',
                 label: 'Nabis Sync',
@@ -643,18 +648,7 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
                 >
                   Support
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="justify-start"
-                  onClick={() => {
-                    signOut({ redirectUrl: '/sign-in' }).catch(() => {
-                      toast.error('Sign out failed. Please try again.');
-                    });
-                  }}
-                >
-                  Sign Out
-                </Button>
+                <SettingsSignOutButton />
               </div>
             </div>
           </div>
@@ -1023,6 +1017,12 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
       </section>
 
       {canViewAdminControls ? (
+        <section id="nabis-exceptions" className="scroll-mt-28">
+          <NabisExceptionWorkflow />
+        </section>
+      ) : null}
+
+      {canViewAdminControls ? (
         <section id="nabis-sync" className="scroll-mt-28">
           <NabisSyncAdminPanel />
         </section>
@@ -1034,5 +1034,38 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
         </section>
       ) : null}
     </div>
+  );
+}
+
+function SettingsSignOutButton() {
+  const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+  if (!hasClerk) {
+    return (
+      <Button type="button" variant="outline" className="justify-start" disabled>
+        Sign Out
+      </Button>
+    );
+  }
+
+  return <ClerkSettingsSignOutButton />;
+}
+
+function ClerkSettingsSignOutButton() {
+  const { signOut } = useClerk();
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="justify-start"
+      onClick={() => {
+        signOut({ redirectUrl: '/sign-in' }).catch(() => {
+          toast.error('Sign out failed. Please try again.');
+        });
+      }}
+    >
+      Sign Out
+    </Button>
   );
 }
