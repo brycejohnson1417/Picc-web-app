@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
-import { BarChart3, CalendarDays, House, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
+import { BarChart3, House, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AppAccessProvider, type AppAccessState } from '@/components/auth/app-access-provider';
 import { InteractionTracker } from '@/components/layout/interaction-tracker';
@@ -33,14 +33,6 @@ const defaultTabs: NavTab[] = [
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
 ];
 
-const brandAmbassadorTabs: NavTab[] = [
-  { href: '/home', label: 'Home', icon: House },
-  { href: '/vendor-days?view=today', matchHref: '/vendor-days', label: 'Vendor Days', icon: CalendarDays },
-  { href: '/territory', label: 'Map', icon: MapPinned },
-  { href: '/accounts', label: 'Accounts', icon: UserRound },
-  { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
-];
-
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -61,7 +53,7 @@ export function AppShell({
   const routePlan = useRoutePlan();
   const [commandMounted, setCommandMounted] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const tabs = access.role === 'BRAND_AMBASSADOR' ? brandAmbassadorTabs : defaultTabs;
+  const tabs = defaultTabs;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

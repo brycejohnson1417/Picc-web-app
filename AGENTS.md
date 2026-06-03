@@ -21,7 +21,7 @@ This repository is the canonical source of truth for the live PICC app.
 - Sign-in is Google-only.
 - Access is restricted to `@piccplatform.com` users.
 - Check-ins are comment-first, not meeting-note-first.
-- Vendor day calendar data should come from the Dispensary Master List `Vendor Day` properties first.
+- Territory Vendor Day Status and store-detail history should come from the Dispensary Master List / Notion-derived account data. Vendor Day dispatch and scheduling surfaces are retired.
 
 ## Do Not Use
 
@@ -29,12 +29,13 @@ This repository is the canonical source of truth for the live PICC app.
 - Do not use `picc-command-center.vercel.app`.
 - Do not use `picc-dispensary-crm.vercel.app`.
 - Do not revive deleted workflow surfaces unless there is an explicit product decision to do so.
+- Do not revive retired Vendor Day dispatch/scheduling, Worker/Brand Ambassador coordination, Payroll, GHL/Bizly, Directus/Odoo, Redis, native app, or mobile sync worker surfaces unless there is an explicit product decision to do so.
 - Do not treat stale planning docs or old commit history as more authoritative than the current `main` branch.
 
 ## Before Making Changes
 
-1. Read [`README.md`](/Users/brycejohnson/Documents/New project/Picc-web-app/README.md).
-2. Read [`AI_HANDOFF.md`](/Users/brycejohnson/Documents/New project/Picc-web-app/AI_HANDOFF.md).
+1. Read [`README.md`](/Users/brycejohnson/Code/PICC-Web-App/README.md).
+2. Read [`AI_HANDOFF.md`](/Users/brycejohnson/Code/PICC-Web-App/AI_HANDOFF.md).
 3. Verify the live app behavior at:
    - `https://piccnewyork.org/sign-in`
    - `https://piccnewyork.org/territory`
@@ -42,10 +43,8 @@ This repository is the canonical source of truth for the live PICC app.
 
 ## Validation
 
-- Run `npm run typecheck`
-- Run `npm run lint`
-- Run `npm test`
-- Run `npm run build`
+- Run `npm run verify`
+- Run `npm run test:e2e` when browser surfaces changed
 - Prefer additive fixes against current behavior rather than architecture rewrites
 
 ## Anti-Slop Delivery Contract

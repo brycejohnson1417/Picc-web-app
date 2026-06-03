@@ -12,6 +12,12 @@ concurrency:
 jobs:
   web-checks:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/picc_crm_local?schema=public
+      DEMO_MODE: 'true'
+      DEMO_ORG_ID: org_picc_demo
+      DEMO_USER_ID: demo_user
+      TERRITORY_ORG_ID: org_picc_demo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,10 +25,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm run build
+      - run: npm run verify
 
   migration-check:
     runs-on: ubuntu-latest
@@ -56,15 +59,3 @@ jobs:
       - run: echo 'CREATE EXTENSION IF NOT EXISTS postgis;' | npx prisma db execute --schema prisma/schema.prisma --stdin
       - run: npx prisma db push --skip-generate
       - run: npx prisma generate
-
-  native-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Validate native scaffold
-        run: |
-          test -f apps/native/package.json
-          test -f apps/native/App.tsx

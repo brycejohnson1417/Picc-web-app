@@ -6,7 +6,7 @@ import { Providers } from '@/components/layout/providers';
 export const metadata: Metadata = {
   applicationName: 'PICC New York',
   title: 'PICC New York',
-  description: 'Internal PICC platform for vendor days, dispatch, proof, payroll, accounts, and ROI.',
+  description: 'Internal PICC platform for accounts, territory planning, routing, and sync health.',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,

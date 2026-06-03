@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { currentUser } from '@clerk/nextjs/server';
-import { Role, VendorDayOfferStatus, VendorDayRequestStatus } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { FollowUpActionBoard, type HomeFollowUpItem } from '@/components/home/follow-up-action-board';
 import { HotLeadsBoard, type HomeHotLeadItem } from '@/components/home/hot-leads-board';
 import { PreferredPartnerRepChart } from '@/components/home/preferred-partner-rep-chart';
 import { WorkspaceHero, WorkspacePage, WorkspaceSection } from '@/components/layout/workspace-page';
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
+import { AUTH_BYPASS_MODE } from '@/lib/config/runtime';
 import { prisma } from '@/lib/db/prisma';
 import { getCalendarSyncHealth } from '@/lib/server/calendar-sync-health';
 import { getNabisSyncFreshness } from '@/lib/server/nabis-sync';
@@ -51,17 +52,10 @@ type HomeSupportLink = {
 };
 
 function buildSupportLinks(role: Role): HomeSupportLink[] {
-  if (role === Role.BRAND_AMBASSADOR) {
-    return [
-      { href: '/vendor-days?view=offers', label: 'Open Offers' },
-      { href: '/vendor-days?view=history', label: 'View History' },
-    ];
-  }
-
   if (role === Role.ADMIN || role === Role.OPS_TEAM || role === Role.FINANCE) {
     return [
       { href: '/dashboard', label: 'Open Dashboard' },
-      { href: '/reports', label: 'Review Reports' },
+      { href: '/settings', label: 'Open Settings' },
     ];
   }
 
@@ -73,7 +67,7 @@ function buildSupportLinks(role: Role): HomeSupportLink[] {
 
 export default async function HomePage() {
   const { orgId, userId } = await requireWorkspaceContext();
-  const [membership, freshness, monthlyOrderCount, viewerWorkerProfile, viewer] = await Promise.all([
+  const [membership, freshness, monthlyOrderCount, viewer] = await Promise.all([
     prisma.membership.findUnique({
       where: {
         orgId_clerkUserId: {
@@ -94,14 +88,7 @@ export default async function HomePage() {
         },
       },
     }),
-    prisma.workerProfile.findFirst({
-      where: {
-        orgId,
-        OR: [{ clerkUserId: userId }],
-      },
-      select: { id: true, displayName: true },
-    }),
-    currentUser(),
+    AUTH_BYPASS_MODE ? Promise.resolve(null) : currentUser(),
   ]);
 
   const role = membership?.role ?? Role.SALES_REP;
@@ -111,132 +98,25 @@ export default async function HomePage() {
   );
   const viewerHasAdminOverride = role === Role.ADMIN && viewerEmail === 'bryce@piccplatform.com';
 
-  const [calendarHealth, ambassadorOffers, ambassadorAssignments, requestSnapshot] = await Promise.all([
+  const [calendarHealth] = await Promise.all([
     showCalendarHealth ? getCalendarSyncHealth(orgId) : Promise.resolve(null),
-    role === Role.BRAND_AMBASSADOR && viewerWorkerProfile?.id
-      ? prisma.vendorDayOffer.findMany({
-          where: {
-            orgId,
-            workerProfileId: viewerWorkerProfile.id,
-            status: VendorDayOfferStatus.OPEN,
-          },
-          include: {
-            request: {
-              include: {
-                account: {
-                  select: { id: true, name: true, city: true, state: true },
-                },
-              },
-            },
-          },
-          orderBy: { expiresAt: 'asc' },
-          take: 3,
-        })
-      : Promise.resolve([]),
-    role === Role.BRAND_AMBASSADOR && viewerWorkerProfile?.id
-      ? prisma.vendorDayAssignment.findMany({
-          where: {
-            orgId,
-            workerProfileId: viewerWorkerProfile.id,
-            status: {
-              in: ['ASSIGNED', 'CHECKED_IN', 'EXCEPTION', 'DISPUTED'],
-            },
-          },
-          include: {
-            request: {
-              include: {
-                account: {
-                  select: { id: true, name: true, city: true, state: true },
-                },
-              },
-            },
-            execution: {
-              select: {
-                checkInAt: true,
-                checkOutAt: true,
-                pendingArtifactSync: true,
-                pennyBundleStatus: true,
-              },
-            },
-          },
-          orderBy: { scheduledStart: 'asc' },
-          take: 3,
-        })
-      : Promise.resolve([]),
-    role !== Role.BRAND_AMBASSADOR
-      ? prisma.vendorDayRequest.groupBy({
-          by: ['status'],
-          where: {
-            orgId,
-            status: {
-              in: [
-                VendorDayRequestStatus.AWAITING_REP_APPROVAL,
-                VendorDayRequestStatus.READY_FOR_DISPATCH,
-                VendorDayRequestStatus.OFFER_PENDING,
-                VendorDayRequestStatus.EXCEPTION,
-              ],
-            },
-          },
-          _count: { _all: true },
-        })
-      : Promise.resolve([]),
   ]);
 
-  const requestCounts = new Map(requestSnapshot.map((entry) => [entry.status, entry._count._all]));
-  const isAmbassador = role === Role.BRAND_AMBASSADOR;
   const supportLinks = buildSupportLinks(role);
 
-  const primaryAction: HomeAction = isAmbassador
-    ? ambassadorAssignments[0]
+  const primaryAction: HomeAction = role === Role.ADMIN || role === Role.OPS_TEAM || role === Role.FINANCE
       ? {
-          title: 'Open your next assignment',
-          description: `${ambassadorAssignments[0].request?.account.name ?? 'Vendor day'} is scheduled for ${new Intl.DateTimeFormat('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-          }).format(new Date(ambassadorAssignments[0].scheduledStart))}.`,
-          href: '/vendor-days?view=today',
-          label: 'Open Today',
-        }
-      : ambassadorOffers[0]
-        ? {
-            title: 'Review your next offer',
-            description: `${ambassadorOffers[0].request.account.name} is waiting on acceptance and expires ${new Date(ambassadorOffers[0].expiresAt).toLocaleString()}.`,
-            href: '/vendor-days?view=offers',
-            label: 'View Offers',
-          }
-        : {
-            title: 'Nothing is assigned right now',
-            description: 'Check offers and today for anything newly dispatched to you.',
-            href: '/vendor-days?view=offers',
-            label: 'Check Offers',
-          }
-    : role === Role.ADMIN || role === Role.OPS_TEAM || role === Role.FINANCE
-      ? {
-          title: 'Work the queue first',
-          description: `${requestCounts.get(VendorDayRequestStatus.AWAITING_REP_APPROVAL) ?? 0} awaiting approval, ${requestCounts.get(VendorDayRequestStatus.READY_FOR_DISPATCH) ?? 0} ready to dispatch.`,
-          href: '/vendor-days?view=queue',
-          label: 'Open Queue',
+          title: 'Open the dashboard',
+          description: 'Start with Nabis sync health, account coverage, and sales signals.',
+          href: '/dashboard',
+          label: 'Open Dashboard',
         }
       : {
-          title: 'Start with the vendor-day queue',
-          description: `${requestCounts.get(VendorDayRequestStatus.AWAITING_REP_APPROVAL) ?? 0} approvals and ${requestCounts.get(VendorDayRequestStatus.READY_FOR_DISPATCH) ?? 0} dispatch-ready items need attention.`,
-          href: '/vendor-days?view=queue',
-          label: 'Open Queue',
+          title: 'Work active accounts',
+          description: 'Start with assigned accounts, route planning, and the follow-ups that need attention.',
+          href: '/accounts',
+          label: 'Open Accounts',
         };
-
-  const heroMetrics = isAmbassador
-    ? [
-        { label: 'Open Offers', value: ambassadorOffers.length },
-        { label: 'Live Assignments', value: ambassadorAssignments.length },
-        { label: 'Pending Sync Items', value: ambassadorAssignments.filter((assignment) => assignment.execution?.pendingArtifactSync).length },
-      ]
-    : [
-        { label: 'Awaiting Approval', value: requestCounts.get(VendorDayRequestStatus.AWAITING_REP_APPROVAL) ?? 0 },
-        { label: 'Ready To Dispatch', value: requestCounts.get(VendorDayRequestStatus.READY_FOR_DISPATCH) ?? 0 },
-        { label: 'Orders This Month', value: monthlyOrderCount },
-      ];
 
   const freshnessTiles = [
     {
@@ -259,11 +139,9 @@ export default async function HomePage() {
     });
   }
 
-  const territoryResponse = !isAmbassador
-    ? await loadTerritoryStores({
-        preferredPartnerFilter: 'all',
-      })
-    : null;
+  const territoryResponse = await loadTerritoryStores({
+    preferredPartnerFilter: 'all',
+  }).catch(() => null);
 
   const preferredPartnerSummary = territoryResponse
     ? preferredPartnerRepBreakdown(territoryResponse.stores)
@@ -386,16 +264,18 @@ export default async function HomePage() {
     ];
   }
 
+  const heroMetrics = [
+    { label: 'Orders This Month', value: monthlyOrderCount },
+    { label: 'Follow-Ups', value: followUpItems.length },
+    { label: 'Hot Leads', value: hotLeadItems.length },
+  ];
+
   return (
     <WorkspacePage>
       <WorkspaceHero
         eyebrow="Internal Platform"
-        title={isAmbassador ? 'One obvious next step for the field.' : 'One place to run the internal platform.'}
-        description={
-          isAmbassador
-            ? 'Offers, today, check-in, checkout, uploads, pay, and history are surfaced before anything else so ambassadors can work without hunting through the app.'
-            : 'The app reads local sync data first, keeps CRM identity tied to Licensed Location ID, and surfaces the queue you need before anything else.'
-        }
+        title="One place to run the internal platform."
+        description="The app reads local sync data first, keeps CRM identity tied to Licensed Location ID, and keeps account work, route planning, and sync health visible."
         actions={
           <>
             <Link

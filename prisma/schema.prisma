@@ -105,6 +105,12 @@ enum AccountIdentityType {
   ALIAS
 }
 
+// RETIRED CLUSTER, DO NOT EXTEND:
+// Vendor Day dispatch/scheduling, Worker/Brand Ambassador coordination, Payroll,
+// and NotificationPreference are dormant in this cleanup wave. They remain in
+// schema only to avoid a destructive production migration. Drop them together
+// later in one explicit approval-lane migration after read-only production
+// counts/export. Territory vendorDayStatus metadata is separate and still live.
 enum VendorDayRequestSource {
   STORE_REQUESTED
   REP_REQUESTED
@@ -851,6 +857,7 @@ model OverdueSnapshot {
   @@index([orgId, accountId])
 }
 
+// RETIRED CLUSTER, DO NOT EXTEND. See enum comment above for migration policy.
 model VendorDayEvent {
   id             String                        @id @default(cuid())
   orgId          String
