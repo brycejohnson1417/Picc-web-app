@@ -70,6 +70,9 @@ describe('Notion CRM retailer mirroring', () => {
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(() => jsonResponse({ results: [] }))
+      .mockImplementationOnce(() => jsonResponse({ results: [] }))
+      .mockImplementationOnce(() => jsonResponse({ results: [] }))
+      .mockImplementationOnce(() => jsonResponse({ results: [] }))
       .mockImplementationOnce((url: string, init: RequestInit) => {
         expect(url).toBe('https://api.notion.com/v1/pages');
         expect(init.method).toBe('POST');
@@ -85,6 +88,38 @@ describe('Notion CRM retailer mirroring', () => {
       updated: false,
       skippedExisting: false,
     });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('blocks creation when a matching license already exists under a different retailer id', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => jsonResponse({ results: [] }))
+      .mockImplementationOnce(() => jsonResponse({ results: [{ id: 'license-conflict-page-id' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await ensureDispensaryCrmPageFromRetailer({
+      ...retailerInput(),
+      nabisRetailerId: null,
+    });
+
+    expect(result).toEqual({
+      pageId: 'license-conflict-page-id',
+      created: false,
+      updated: false,
+      skippedExisting: false,
+      reviewRequired: true,
+      reviewReason: 'license_conflict',
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+      filter: {
+        property: 'License Number',
+        rich_text: {
+          equals: 'OCM-CAURD-24-000001-D1',
+        },
+      },
+    });
   });
 });

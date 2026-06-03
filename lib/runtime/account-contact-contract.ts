@@ -1,7 +1,7 @@
 import type { ContactTableRow } from '@/components/crm/contacts-table';
 import type { TerritoryStoresResponse } from '@/lib/territory/types';
 
-export type RuntimeDataSource = 'notion-territory' | 'notion-contacts' | 'postgres-read-model' | 'ghl';
+export type RuntimeDataSource = 'notion-territory' | 'notion-contacts' | 'postgres-read-model';
 
 export type RuntimeFreshnessState = 'fresh' | 'stale' | 'syncing' | 'error' | 'unknown';
 

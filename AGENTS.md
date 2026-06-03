@@ -72,7 +72,8 @@ During implementation:
 - Keep UI features fully usable from the browser.
 - Do not silently mix refactors with bug fixes.
 - Put business logic in server/domain modules and keep UI components thin.
-- Keep Notion, Nabis, GHL, Neon, Supabase, Vercel, and other external systems behind explicit boundaries.
+- Keep Notion, Nabis, Neon, Supabase, Vercel, and other external systems behind explicit boundaries.
+- GHL / Bizly is retired for this repo. Do not add new GHL / Bizly sync, webhook, settings, status, or seeded demo surfaces unless a new explicit product decision reverses that retirement.
 - Use `parallel:ok` only when owned path globs do not overlap active PRs.
 - Use `parallel:blocked` when another issue must land first.
 - Use `parallel:exclusive` for protocol, CI, branch protection, schema, sync architecture, production data, or other shared-resource work.

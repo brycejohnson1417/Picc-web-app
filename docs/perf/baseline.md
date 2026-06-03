@@ -18,7 +18,7 @@ Scope: account/contact runtime contract and sync freshness visibility.
 - Account and contact screens were reading different truth layers.
 - Territory account data already had useful freshness metadata, but the mobile accounts UI did not surface it.
 - Contact cache freshness existed in storage but was discarded by `loadLiveNotionContacts()`.
-- No single account/contact payload existed for future GHL/Notion identity work.
+- No single account/contact payload existed for future Notion/Nabis identity work.
 - Local browser Lighthouse numbers were not collected in this environment because the local database/bootstrap path is still being handled separately.
 
 ## Route Timing Targets For Follow-Up

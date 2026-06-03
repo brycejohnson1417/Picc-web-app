@@ -435,17 +435,6 @@ async function main() {
     },
   });
 
-  await prisma.integrationConnection.create({
-    data: {
-      orgId: org.id,
-      provider: 'GHL',
-      name: 'Go High Level Connector',
-      config: { mode: 'mock-conversation-phase' },
-      enabled: true,
-      status: 'IDLE',
-    },
-  });
-
   const nabisConnection = await prisma.integrationConnection.create({
     data: {
       orgId: org.id,
