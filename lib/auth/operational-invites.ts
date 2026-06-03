@@ -43,7 +43,7 @@ export async function createOrRefreshOperationalInvite(input: {
       },
     },
     update: {
-      role: input.role ?? Role.BRAND_AMBASSADOR,
+      role: input.role ?? Role.SALES_REP,
       invitedByClerkUserId: input.invitedByClerkUserId,
       invitedByEmail: input.invitedByEmail?.trim().toLowerCase() ?? null,
       note: input.note?.trim() || null,
@@ -55,7 +55,7 @@ export async function createOrRefreshOperationalInvite(input: {
     create: {
       orgId: input.orgId,
       email: normalizedEmail,
-      role: input.role ?? Role.BRAND_AMBASSADOR,
+      role: input.role ?? Role.SALES_REP,
       invitedByClerkUserId: input.invitedByClerkUserId,
       invitedByEmail: input.invitedByEmail?.trim().toLowerCase() ?? null,
       note: input.note?.trim() || null,

@@ -6,7 +6,7 @@ import { AUTH_BYPASS_MODE } from '@/lib/config/runtime';
 
 export const metadata: Metadata = {
   title: 'PICC New York',
-  description: 'Internal PICC operating system for accounts, routing, vendor days, dispatch, payroll, and field execution.',
+  description: 'Internal PICC operating system for accounts, routing, territory work, sync health, and field execution.',
 };
 
 export default async function Page() {

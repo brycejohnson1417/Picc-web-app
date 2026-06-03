@@ -10,7 +10,6 @@ import { RoleSwitcher } from '@/components/layout/role-switcher';
 import { WorkspacePanel, WorkspacePanelHeader } from '@/components/layout/workspace-page';
 import { AdminOpsPanel } from '@/components/settings/admin-ops-panel';
 import { NabisSyncAdminPanel } from '@/components/settings/nabis-sync-admin-panel';
-import { WorkerSupplyPanel } from '@/components/settings/worker-supply-panel';
 import { GoogleUsageBudgetCard } from '@/components/territory/google-usage-budget-card';
 import { Button, Input, Textarea } from '@/components/ui';
 import { RoleDisplayNames } from '@/lib/types/rbac';
@@ -122,8 +121,8 @@ function formatTimestamp(value: string | null | undefined, fallback: string) {
 
 export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
-  const { signOut } = useClerk();
   const appAccess = useAppAccess();
+  const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
   const canViewTeamActivity = appAccess.role === 'ADMIN' || appAccess.role === 'OPS_TEAM';
   const canViewAdminControls = appAccess.role === 'ADMIN' || appAccess.role === 'OPS_TEAM' || appAccess.role === 'FINANCE';
   const [teamActivity, setTeamActivity] = useState<TeamActivityResponse | null>(null);
@@ -142,7 +141,7 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteNote, setInviteNote] = useState('');
   const [operationalInviteEmail, setOperationalInviteEmail] = useState('');
-  const [operationalInviteRole, setOperationalInviteRole] = useState<OperationalInviteRecord['role']>('BRAND_AMBASSADOR');
+  const [operationalInviteRole, setOperationalInviteRole] = useState<OperationalInviteRecord['role']>('SALES_REP');
   const [operationalInviteNote, setOperationalInviteNote] = useState('');
   const [submittingInvite, setSubmittingInvite] = useState(false);
   const [submittingOperationalInvite, setSubmittingOperationalInvite] = useState(false);
@@ -181,11 +180,6 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
               },
             ]
           : []),
-        {
-          id: 'supply-system',
-          label: 'Supply System',
-          description: 'Worker profile, supply details, availability, calendar sync, and notifications.',
-        },
         ...(canViewAdminControls
           ? [
               {
@@ -486,7 +480,7 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
       const invite = payload?.invite as OperationalInviteRecord;
       setOperationalInvites((current) => [invite, ...current.filter((entry) => entry.id !== invite.id)]);
       setOperationalInviteEmail('');
-      setOperationalInviteRole('BRAND_AMBASSADOR');
+      setOperationalInviteRole('SALES_REP');
       setOperationalInviteNote('');
       try {
         await navigator.clipboard.writeText(invite.inviteLink);
@@ -643,18 +637,7 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
                 >
                   Support
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="justify-start"
-                  onClick={() => {
-                    signOut({ redirectUrl: '/sign-in' }).catch(() => {
-                      toast.error('Sign out failed. Please try again.');
-                    });
-                  }}
-                >
-                  Sign Out
-                </Button>
+                {hasClerk ? <ClerkSettingsSignOutButton /> : <DemoSettingsSignOutButton />}
               </div>
             </div>
           </div>
@@ -881,7 +864,7 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
                   </div>
                   <div className="flex-1">
                     <p className="text-[16px] font-semibold text-[#1d1f23]">Operational Access</p>
-                    <p className="mt-1 text-[14px] text-[#666b75]">Invite BAs, reps, ops, or finance users into the real internal app roles.</p>
+                    <p className="mt-1 text-[14px] text-[#666b75]">Invite reps, ops, or finance users into the active internal app roles.</p>
                   </div>
                 </div>
 
@@ -890,7 +873,7 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
                     type="email"
                     value={operationalInviteEmail}
                     onChange={(event) => setOperationalInviteEmail(event.target.value)}
-                    placeholder="ba@example.com"
+                    placeholder="rep@example.com"
                     className="h-11 border-[#c6c8d0] text-[15px] text-[#1d1f23]"
                   />
                   <select
@@ -898,7 +881,6 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
                     onChange={(event) => setOperationalInviteRole(event.target.value as OperationalInviteRecord['role'])}
                     className="h-11 w-full rounded-lg border border-[#c6c8d0] bg-white px-3 text-[15px] text-[#1d1f23]"
                   >
-                    <option value="BRAND_AMBASSADOR">Brand Ambassador</option>
                     <option value="SALES_REP">Sales Rep</option>
                     <option value="OPS_TEAM">Ops Team</option>
                     <option value="FINANCE">Finance</option>
@@ -1018,10 +1000,6 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
         </section>
       ) : null}
 
-      <section id="supply-system" className="scroll-mt-28">
-        <WorkerSupplyPanel embedded />
-      </section>
-
       {canViewAdminControls ? (
         <section id="nabis-sync" className="scroll-mt-28">
           <NabisSyncAdminPanel />
@@ -1034,5 +1012,32 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
         </section>
       ) : null}
     </div>
+  );
+}
+
+function DemoSettingsSignOutButton() {
+  return (
+    <Button type="button" variant="outline" className="justify-start" disabled>
+      Sign Out
+    </Button>
+  );
+}
+
+function ClerkSettingsSignOutButton() {
+  const { signOut } = useClerk();
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="justify-start"
+      onClick={() => {
+        signOut({ redirectUrl: '/sign-in' }).catch(() => {
+          toast.error('Sign out failed. Please try again.');
+        });
+      }}
+    >
+      Sign Out
+    </Button>
   );
 }

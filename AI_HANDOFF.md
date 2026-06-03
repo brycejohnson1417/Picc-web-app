@@ -1,80 +1,59 @@
 # PICC App AI Handoff
 
-Use this file as the canonical handoff context for any other AI working on this app.
+Use this file as canonical handoff context for agents working on this app.
 
 ## Canonical Project
 
 - Local repo path: `/Users/brycejohnson/Code/PICC-Web-App`
 - GitHub repo: `https://github.com/brycejohnson1417/Picc-web-app.git`
 - Canonical branch: `main`
-- Current canonical snapshot commit: `cdbe07389dce9465666def8099335bc6b523c8c2`
-
-## Canonical Deployment
-
 - Production domain: `https://piccnewyork.org`
-- Main production app path to verify: `https://piccnewyork.org/territory`
-- Vercel project name: `picc-push`
-- Vercel project ID: `prj_zKro1cfUOP9D2MTh0ZahYDREcRUA`
-- Vercel org/team ID: `team_mVKQE1eiQa5fIKVC4YJI6Wkd`
+- Primary route to verify: `https://piccnewyork.org/territory`
+- Vercel project: `picc-push`
 
-## Do Not Use These As Canonical
+## Do Not Use
 
-- Do not use `picc-command-center.vercel.app`
-- Do not use `picc-dispensary-crm.vercel.app`
-- Do not use old local repos like `Picc-web-app-fix-accounts`
-- Do not use any legacy Vite/root app surface if it appears in old history
+- `/Users/brycejohnson/clawd/projects/picc-web-app`
+- `/Users/brycejohnson/Documents/New project/Picc-web-app`
+- `picc-command-center.vercel.app`
+- `picc-dispensary-crm.vercel.app`
+- Old Vite, native, Directus, Odoo, Redis, or worker stubs from repo history
 
-## Product / UX Direction
+## Current Product Boundary
 
-- This is the real live app, not a rebuild project.
-- The app is mobile-first and PWA-oriented, but it must work smoothly on desktop with the same overall UI model.
-- Google Maps is the canonical map provider going forward.
-- The live map is Google-only. There is no supported dual-provider architecture.
-- There are no canonical `MapCanvas`, layer-mode, heatmap, hex, or `/api/territory/layers` map surfaces to extend.
-- Do not regress back to MapLibre / Carto / older map stacks.
-- Calendar is the vendor-day and follow-up planning surface.
-- Territory map remains the main live map and account-detail workflow surface.
+- This is the live PICC field-sales app, not a rebuild.
+- Keep the mobile-first PWA shell.
+- Keep Google Maps as the only supported map provider.
+- Keep Clerk Google-only auth.
+- Keep Notion as the active territory/account source.
+- Keep Nabis cached retailer/order intelligence.
 
-## Auth / Identity
+## Retired Product Boundary
 
-- Canonical auth provider: Clerk
-- Sign-in method: Google only
-- Allowed users must be `@piccplatform.com`
-- Production auth domain is on the custom domain flow, not `*.vercel.app`
-- Notion writes are still integration-token writes, but visible attribution uses the signed-in app user label
+Do not revive these without a new explicit product decision:
 
-## Notion / Data Rules
+- Vendor Day dispatch/scheduling routes, public request flow, workspace, cron lifecycle, and reporting
+- Worker/Brand Ambassador coordination and supply settings
+- Payroll API/reporting
+- GHL/Bizly
+- Native app, Directus/Odoo service stubs, Redis, mobile sync worker
 
-- Notion is still a key system of record for the dispensary master list.
-- Vendor day calendar data should come from the `Vendor Day` properties on the Dispensary Master List first.
-- The older standalone vendor day source should only be treated as fallback, not primary.
-- Check-ins are comment-first, not meeting-note-first.
+Retained exception: territory Vendor Day Status remains active. Preserve the `/territory` Vendor Day Status filter, Notion-derived `vendorDayStatus` read/modeling, account detail display, and store-detail Vendor Day summary/history.
 
-## Current Architecture Constraints
+## Required Workflow
 
-- Keep working in the Next.js app under this repo only.
-- Do not reintroduce separate old desktop and mobile apps.
-- Do not reintroduce legacy routes, duplicate repos, or stale deployments.
-- Prefer additive changes against the current production baseline.
+Use issue-first work, feature branches, draft PRs before meaningful edits, and the local anti-slop protocol in `/Users/brycejohnson/Code/AGENTS.md`.
 
-## High-Risk Regression Areas
+## Validation
 
-- Auth / Clerk config
-- Map provider selection
-- Territory mobile vs desktop shell divergence
-- Vendor day source selection
-- Legacy repo / old deployment confusion
+Run:
 
-## Recommended Validation After Changes
+```bash
+npm run verify
+```
 
-1. Verify `https://piccnewyork.org/sign-in`
-2. Verify `https://piccnewyork.org/territory`
-3. Verify `https://piccnewyork.org/calendar`
-4. Run:
-   - `npm run typecheck`
-   - `npm run lint`
-   - `npm run build`
+For browser-surface changes, also run:
 
-## Short Prompt To Give Another AI
-
-Work only in `/Users/brycejohnson/Code/PICC-Web-App`, which is the canonical repo for the live PICC app. Use `main` in `https://github.com/brycejohnson1417/Picc-web-app.git`. The canonical production deployment is `https://piccnewyork.org`, backed by the Vercel project `picc-push` (`prj_zKro1cfUOP9D2MTh0ZahYDREcRUA`). Do not use legacy repos, old Vercel projects, old map providers, or rebuild a separate app surface. Keep Google Maps, the mobile-first PWA shell, Clerk Google-only auth, comment-first check-ins, and Dispensary Master List vendor-day properties as the current baseline.
+```bash
+npm run test:e2e
+```

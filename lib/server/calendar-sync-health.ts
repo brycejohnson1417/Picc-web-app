@@ -2,7 +2,6 @@ import 'server-only';
 
 import { CalendarConnectionStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
-import { calendarConnectionMode } from '@/lib/server/worker-supply';
 
 export type CalendarSyncMode = 'healthy' | 'stale' | 'manual-only';
 
@@ -50,6 +49,33 @@ function warningForLag(syncLagSeconds: number | null, status: CalendarConnection
     return 'Latest calendar sync ended in error.';
   }
   return null;
+}
+
+function calendarConnectionMode(
+  connections: Array<{
+    status: CalendarConnectionStatus;
+    lastSuccessfulSyncAt: Date | null;
+    lastAttemptAt: Date | null;
+  }>,
+): CalendarSyncMode {
+  if (connections.length === 0) return 'manual-only';
+
+  const hasHealthyConnection = connections.some((connection) => {
+    if (connection.status !== CalendarConnectionStatus.ACTIVE && connection.status !== CalendarConnectionStatus.STALE) {
+      return false;
+    }
+    const latestSync = connection.lastSuccessfulSyncAt ?? connection.lastAttemptAt;
+    if (!latestSync) return false;
+    return secondsSince(latestSync) !== null && secondsSince(latestSync)! < 24 * 60 * 60;
+  });
+
+  if (hasHealthyConnection) return 'healthy';
+
+  const hasPotentiallyRecoverableConnection = connections.some(
+    (connection) => connection.status === CalendarConnectionStatus.ACTIVE || connection.status === CalendarConnectionStatus.STALE || connection.status === CalendarConnectionStatus.ERROR,
+  );
+
+  return hasPotentiallyRecoverableConnection ? 'stale' : 'manual-only';
 }
 
 export async function getCalendarSyncHealth(orgId: string): Promise<CalendarSyncHealth> {

@@ -1,22 +1,26 @@
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/138
-Branch: codex/138-ghl-bizly-deprecation
+# Current Session
 
-Scope:
-- Deprecate active GHL/Bizly repo references now that those systems are no longer in use.
-- Harden Notion CRM retailer mirroring so likely duplicate creates are blocked for review.
-- Keep the current Nabis/Notion account identity path as the active integration surface.
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/141
+PR: https://github.com/brycejohnson1417/Picc-web-app/pull/142
+Branch: `codex/141-non-destructive-cleanup`
 
-Out of scope:
-- Production Prisma enum removal or schema migration.
-- Broad Nabis field update/backfill from the current retailer export.
-- Existing Nabis exception workflow work in PR #135.
+## Scope
 
-Validation plan:
-- RED: add a Notion CRM mirror test proving same-license conflicts block creates.
-- GREEN: implement duplicate guard queries for license, Nabis retailer ID, and exact name/city/zip.
-- Run `npm test -- lib/server/notion-crm-sync.test.ts`.
-- Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` before completion.
+- Non-destructive cleanup of retired Worker/Payroll/Vendor Day dispatch app surfaces.
+- Remove phantom native/service/worker/Redis/Directus/Odoo/Lighthouse infra.
+- Add `verify`, worktree setup, agent dev DB/port setup, and Playwright smoke coverage.
+- Update governance/docs so future agents use `/Users/brycejohnson/Code/PICC-Web-App`.
 
-Open PR overlap checked:
-- #135 `codex/134-nabis-exceptions`: unrelated Nabis exception UI work; no owned path overlap for this slice.
-- #82 `codex/81-project-boundary-docs`: docs-only boundary PR; keep this docs cleanup narrow.
+## Out Of Scope
+
+- No production schema drops.
+- No production data writes/backfills.
+- No monorepo conversion.
+- No removal of territory Vendor Day Status, `/territory` Vendor Day Status filter, account detail status/history, or `loadStoreVendorDaySummary`.
+
+## Validation Plan
+
+- `npm run verify`
+- `npm run test:e2e`
+- Confirm `/home` has no `/vendor-days` links or retired dispatch cards.
+- Confirm `/territory` still exposes Vendor Day Status filtering.

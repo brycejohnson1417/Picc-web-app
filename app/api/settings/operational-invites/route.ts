@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 const createInviteSchema = z.object({
   email: z.string().trim().email(),
-  role: z.nativeEnum(Role).default(Role.BRAND_AMBASSADOR),
+  role: z.nativeEnum(Role).default(Role.SALES_REP),
   note: z.string().trim().max(500).optional().nullable(),
 });
 

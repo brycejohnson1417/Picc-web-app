@@ -19,56 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: picc-redis
-    restart: unless-stopped
-    ports:
-      - '6379:6379'
-    command: ['redis-server', '--appendonly', 'yes']
-    volumes:
-      - redis_data:/data
-
-  directus:
-    image: directus/directus:11.8.0
-    container_name: picc-directus
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - '8055:8055'
-    environment:
-      SECRET: replace-with-strong-secret
-      KEY: replace-with-strong-key
-      DB_CLIENT: pg
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: picc_crm
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      ADMIN_EMAIL: admin@picc.local
-      ADMIN_PASSWORD: change-me
-      CORS_ENABLED: 'true'
-      CORS_ORIGIN: 'http://localhost:3000,http://localhost:19006'
-
-  odoo:
-    image: odoo:17.0
-    container_name: picc-odoo
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - '8069:8069'
-    environment:
-      HOST: postgres
-      PORT: 5432
-      USER: postgres
-      PASSWORD: postgres
-    volumes:
-      - odoo_data:/var/lib/odoo
-
   web:
     image: node:22-alpine
     container_name: picc-web
@@ -77,17 +27,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     ports:
       - '3000:3000'
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/picc_crm?schema=public
-      REDIS_URL: redis://redis:6379
     volumes:
       - ./:/app
 
 volumes:
   postgres_data:
-  redis_data:
-  odoo_data:

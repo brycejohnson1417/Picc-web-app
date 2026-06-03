@@ -2,57 +2,34 @@
 
 ## Pre-Deployment
 
-- [ ] All environment variables configured in Vercel dashboard:
-  - [ ] `NOTION_API_KEY`
-  - [ ] `GEMINI_API_KEY`
-- [ ] Notion integration created and databases shared with integration
-- [ ] Gemini API enabled in Google Cloud console
-- [ ] Repository pushed to GitHub
-- [ ] All dependencies listed in package.json
+- [ ] PR links its GitHub issue and is on a feature branch.
+- [ ] `npm run verify` passes.
+- [ ] `npm run test:e2e` passes when browser surfaces changed.
+- [ ] `npx prisma validate` passes.
+- [ ] No retired Vendor Day dispatch, Worker, Payroll, GHL/Bizly, Directus/Odoo, Redis, native, or worker-stub surfaces were reintroduced.
+- [ ] No production schema/data mutation is bundled unless the PR is approval-lane and explicitly approved.
 
 ## Vercel Setup
 
-- [ ] Project linked to Vercel
-- [ ] Environment variables added to production environment
-- [ ] Build command set to: `npm run build`
-- [ ] Output directory set to: `dist`
-- [ ] No build errors in deployment logs
+- [ ] Production project is `picc-push`.
+- [ ] Production domain is `https://piccnewyork.org`.
+- [ ] Build command is `npm run build`.
+- [ ] Output directory uses the Vercel Next.js default, not `dist`.
+- [ ] Required production env vars are configured in Vercel without printing secrets in PRs or logs.
 
-## Post-Deployment
+## Post-Deployment Smoke
 
-- [ ] Navigate to deployment URL
-- [ ] Dashboard loads without errors
-- [ ] Notion Wiki section works
-  - [ ] Click "Verify Server Connection" in Settings
-  - [ ] Database selection appears
-  - [ ] Select a database and save
-- [ ] AI Copilot responds to messages
-- [ ] Proposal Builder loads
-- [ ] No 404 errors on route navigation
-- [ ] Mock data shows when APIs unavailable
-- [ ] Export functionality works (PDF, Excel, CSV)
+- [ ] `https://piccnewyork.org/sign-in` loads.
+- [ ] `https://piccnewyork.org/home` loads.
+- [ ] `https://piccnewyork.org/territory` loads and keeps the Vendor Day Status filter.
+- [ ] `https://piccnewyork.org/accounts` loads.
+- [ ] `https://piccnewyork.org/route` loads.
+- [ ] `https://piccnewyork.org/dashboard` loads.
+- [ ] `https://piccnewyork.org/settings` loads.
+- [ ] Retired routes such as `/vendor-days`, `/request-vendor-day`, and retired API routes are absent or 404.
 
-## Monitoring
+## Production Safety
 
-- [ ] Check Vercel Analytics dashboard
-- [ ] Monitor function logs for errors
-- [ ] Set up alerts for failed deployments
-- [ ] Review error logs weekly
-
-## Production Best Practices
-
-- [ ] Enable HTTPS (default on Vercel)
-- [ ] Set up custom domain (optional)
-- [ ] Configure CI/CD for auto-deployment on pushes
-- [ ] Set up branch protection rules on GitHub
-- [ ] Document any custom environment variables for team
-- [ ] Create runbook for common issues
-
-## Security Review
-
-- [ ] API keys not exposed in code
-- [ ] .env files in .gitignore
-- [ ] Only Vercel can access sensitive credentials
-- [ ] CORS configured if needed
-- [ ] Rate limiting considered for public endpoints
-- [ ] Input validation on all API endpoints
+- [ ] Production facts are verified through read-only checks only.
+- [ ] Temporary production env files are deleted after verification.
+- [ ] No secrets, tokens, connection strings, or full sensitive values are pasted into issues, PRs, or chat.
