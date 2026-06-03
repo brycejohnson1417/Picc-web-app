@@ -1007,7 +1007,6 @@ function sourceLabel(source: RuntimeFreshness['source'] | undefined) {
   if (source === 'postgres-read-model') return 'Postgres read model';
   if (source === 'notion-territory') return 'Notion territory cache';
   if (source === 'notion-contacts') return 'Notion contacts cache';
-  if (source === 'ghl') return 'GoHighLevel';
   return 'Account detail API';
 }
 

@@ -70,6 +70,9 @@ describe('Notion CRM retailer mirroring', () => {
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(() => jsonResponse({ results: [] }))
+      .mockImplementationOnce(() => jsonResponse({ results: [] }))
+      .mockImplementationOnce(() => jsonResponse({ results: [] }))
+      .mockImplementationOnce(() => jsonResponse({ results: [] }))
       .mockImplementationOnce((url: string, init: RequestInit) => {
         expect(url).toBe('https://api.notion.com/v1/pages');
         expect(init.method).toBe('POST');
@@ -85,7 +88,7 @@ describe('Notion CRM retailer mirroring', () => {
       updated: false,
       skippedExisting: false,
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it('blocks creation when a matching license already exists under a different retailer id', async () => {
@@ -95,7 +98,10 @@ describe('Notion CRM retailer mirroring', () => {
       .mockImplementationOnce(() => jsonResponse({ results: [{ id: 'license-conflict-page-id' }] }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await ensureDispensaryCrmPageFromRetailer(retailerInput());
+    const result = await ensureDispensaryCrmPageFromRetailer({
+      ...retailerInput(),
+      nabisRetailerId: null,
+    });
 
     expect(result).toEqual({
       pageId: 'license-conflict-page-id',

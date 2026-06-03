@@ -13,6 +13,8 @@ type NotionQueryResponse = {
   results?: NotionPage[];
 };
 
+type CrmReviewReason = 'nabis_retailer_id_conflict' | 'license_conflict' | 'name_location_conflict';
+
 interface CrmRetailerSyncInput {
   licensedLocationId: string;
   nabisRetailerId?: string | null;
@@ -27,6 +29,15 @@ interface CrmRetailerSyncInput {
   hasOrders: boolean;
   notionPageId?: string | null;
 }
+
+type CrmRetailerSyncResult = {
+  pageId: string;
+  created: boolean;
+  updated: false;
+  skippedExisting: boolean;
+  reviewRequired?: boolean;
+  reviewReason?: CrmReviewReason;
+};
 
 function requiredEnv(name: 'NOTION_API_KEY' | 'NOTION_MASTER_LIST_DATABASE_ID') {
   const value = process.env[name]?.trim();
@@ -89,21 +100,97 @@ async function notionRequest<T>(path: string, init?: RequestInit, attempt = 0): 
   return payload as T;
 }
 
-async function findMasterListPageByLicensedLocationId(licensedLocationId: string) {
+async function queryMasterList(filter: Record<string, unknown>) {
   const payload = await notionRequest<NotionQueryResponse>(`/databases/${requiredEnv('NOTION_MASTER_LIST_DATABASE_ID')}/query`, {
     method: 'POST',
     body: JSON.stringify({
       page_size: 5,
-      filter: {
-        property: 'Licensed Location ID',
-        rich_text: {
-          equals: licensedLocationId,
-        },
-      },
+      filter,
     }),
   });
 
   return payload.results?.[0] ?? null;
+}
+
+async function findMasterListPageByRichText(property: string, value: string | null | undefined) {
+  const text = compactText(value);
+  if (!text) {
+    return null;
+  }
+
+  return queryMasterList({
+    property,
+    rich_text: {
+      equals: text,
+    },
+  });
+}
+
+async function findMasterListPageByLicensedLocationId(licensedLocationId: string) {
+  return findMasterListPageByRichText('Licensed Location ID', licensedLocationId);
+}
+
+async function findPotentialDuplicateForReview(input: CrmRetailerSyncInput) {
+  const nabisRetailerMatch = await findMasterListPageByRichText('Nabis Retailer ID', input.nabisRetailerId);
+  if (nabisRetailerMatch) {
+    return {
+      page: nabisRetailerMatch,
+      reason: 'nabis_retailer_id_conflict' as const,
+    };
+  }
+
+  const licenseMatch = await findMasterListPageByRichText('License Number', input.licenseNumber);
+  if (licenseMatch) {
+    return {
+      page: licenseMatch,
+      reason: 'license_conflict' as const,
+    };
+  }
+
+  const name = compactText(input.name);
+  const city = compactText(input.city);
+  const zipcode = compactText(input.zipcode);
+  if (!name || (!city && !zipcode)) {
+    return null;
+  }
+
+  const andFilters: Record<string, unknown>[] = [
+    {
+      property: 'Dispensary Name',
+      title: {
+        equals: name,
+      },
+    },
+  ];
+
+  if (city) {
+    andFilters.push({
+      property: 'City',
+      rich_text: {
+        equals: city,
+      },
+    });
+  }
+
+  if (zipcode) {
+    andFilters.push({
+      property: 'Zipcode',
+      rich_text: {
+        equals: zipcode,
+      },
+    });
+  }
+
+  const nameLocationMatch = await queryMasterList({
+    and: andFilters,
+  });
+
+  return nameLocationMatch
+    ? {
+        page: nameLocationMatch,
+        reason: 'name_location_conflict' as const,
+      }
+    : null;
 }
 
 function buildRetailerProperties(input: CrmRetailerSyncInput, options?: { includeAccountStatus?: boolean }) {
@@ -138,7 +225,7 @@ function buildRetailerProperties(input: CrmRetailerSyncInput, options?: { includ
   return properties;
 }
 
-export async function ensureDispensaryCrmPageFromRetailer(input: CrmRetailerSyncInput) {
+export async function ensureDispensaryCrmPageFromRetailer(input: CrmRetailerSyncInput): Promise<CrmRetailerSyncResult> {
   const existing =
     (input.notionPageId
       ? ({
@@ -147,6 +234,18 @@ export async function ensureDispensaryCrmPageFromRetailer(input: CrmRetailerSync
       : null) ?? (await findMasterListPageByLicensedLocationId(input.licensedLocationId));
 
   if (!existing) {
+    const potentialDuplicate = await findPotentialDuplicateForReview(input);
+    if (potentialDuplicate) {
+      return {
+        pageId: potentialDuplicate.page.id,
+        created: false,
+        updated: false,
+        skippedExisting: false,
+        reviewRequired: true,
+        reviewReason: potentialDuplicate.reason,
+      };
+    }
+
     const created = await notionRequest<NotionPage>('/pages', {
       method: 'POST',
       body: JSON.stringify({
