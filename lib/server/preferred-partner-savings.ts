@@ -235,12 +235,71 @@ function rowDate(row: NabisRawOrderRow) {
   return parseDate(readString(row, ['createdTimestamp', 'createdDate', 'deliveryDate', 'paidAt']));
 }
 
+function orderIdentityKeys(row: NabisRawOrderRow) {
+  return ['order', 'orderNumber', 'externalOrderId', 'id']
+    .map((field) => normalizeIdentifier(readString(row, [field])))
+    .filter((value, index, values): value is string => Boolean(value && values.indexOf(value) === index));
+}
+
+function mergeCachedAndLiveOrderRows(cachedRows: NabisRawOrderRow[], liveRows: NabisRawOrderRow[]) {
+  if (cachedRows.length === 0) {
+    return liveRows;
+  }
+  if (liveRows.length === 0) {
+    return cachedRows;
+  }
+
+  const cachedOrderKeys = new Set<string>();
+  for (const row of cachedRows) {
+    for (const key of orderIdentityKeys(row)) {
+      cachedOrderKeys.add(key);
+    }
+  }
+
+  const liveGroups = new Map<string, { keys: Set<string>; rows: NabisRawOrderRow[] }>();
+  liveRows.forEach((row, index) => {
+    const keys = orderIdentityKeys(row);
+    const groupKey = keys.find((key) => liveGroups.has(key)) ?? keys[0] ?? `__missing_order_key_${index}`;
+    const group = liveGroups.get(groupKey) ?? { keys: new Set<string>(), rows: [] };
+    for (const key of keys) {
+      group.keys.add(key);
+    }
+    group.rows.push(row);
+    liveGroups.set(groupKey, group);
+    for (const key of keys) {
+      liveGroups.set(key, group);
+    }
+  });
+
+  const merged = [...cachedRows];
+  const appendedGroups = new Set<{ keys: Set<string>; rows: NabisRawOrderRow[] }>();
+  for (const group of liveGroups.values()) {
+    if (appendedGroups.has(group)) {
+      continue;
+    }
+    appendedGroups.add(group);
+    if ([...group.keys].some((key) => cachedOrderKeys.has(key))) {
+      continue;
+    }
+    merged.push(...group.rows);
+    for (const key of group.keys) {
+      cachedOrderKeys.add(key);
+    }
+  }
+
+  return merged;
+}
+
 function dateKey(date: Date | null) {
   return date ? date.toISOString().slice(0, 10) : null;
 }
 
 function currentYear() {
   return new Date().getFullYear();
+}
+
+function shouldRefreshLiveRowsForYear(year: number) {
+  return year >= currentYear();
 }
 
 function resolveSavingsYears(input: { year?: number | null; historical?: boolean | null }) {
@@ -892,12 +951,16 @@ export async function getPreferredPartnerSavings(input: {
     try {
       const cachedOrders = await loadCachedOrdersForAccount(context, year);
       const cachedRows = cachedNabisOrdersToPreferredPartnerRows(cachedOrders);
-      const rows =
-        cachedRows.length > 0
-          ? cachedRows
-          : cachedOrders.length > 0
-            ? await loadNabisRowsFromCachedOrderHeaders(cachedOrders)
-            : await loadNabisRowsForAccount(context, year);
+      let rows =
+        cachedRows.length > 0 ? cachedRows : cachedOrders.length > 0 ? await loadNabisRowsFromCachedOrderHeaders(cachedOrders) : [];
+
+      if (shouldRefreshLiveRowsForYear(year)) {
+        const liveRows = await loadNabisRowsForAccount(context, year);
+        rows = rows.length > 0 ? mergeCachedAndLiveOrderRows(rows, liveRows) : liveRows;
+      } else if (rows.length === 0) {
+        rows = await loadNabisRowsForAccount(context, year);
+      }
+
       const yearOrders = calculatePreferredPartnerOrdersFromRows(rows);
       orders.push(...yearOrders);
       if (rows.length > 0 && yearOrders.length === 0) {
