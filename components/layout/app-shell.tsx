@@ -118,13 +118,13 @@ export function AppShell({
               </details>
             </div>
           </header>
-          <main className={cn('min-h-0 flex-1', isTerritoryRoute ? 'overflow-hidden pb-0' : 'overflow-y-auto pb-[84px]')}>
+          <main className={cn('min-h-0 flex-1', isTerritoryRoute ? 'overflow-hidden pb-0' : 'overflow-y-auto pb-[var(--picc-bottom-nav-height)]')}>
             {children}
           </main>
         </div>
 
         <nav className="fixed bottom-0 left-0 right-0 z-[4000] text-white" aria-label="Primary navigation">
-          <div className="mx-auto grid h-[84px] max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#243041] bg-[linear-gradient(180deg,#1f2631_0%,#171d26_100%)] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5 md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]">
+          <div className="mx-auto grid h-[var(--picc-bottom-nav-height)] max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#243041] bg-[linear-gradient(180deg,#1f2631_0%,#171d26_100%)] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5 md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]">
             {tabs.map((item) => {
               const active = isActive(pathname, item.matchHref ?? item.href);
               const Icon = item.icon;

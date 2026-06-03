@@ -566,7 +566,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-[132px]">
+        <div className="flex-1 overflow-y-auto pb-[calc(132px+var(--picc-bottom-nav-clearance))]">
           <div className="border-y border-[#c6c7cb] bg-[#e6e6e9] px-5 py-4">
             <h2 className="text-[24px] font-semibold leading-tight text-[#111217]">{activeStore.name}</h2>
             <div className="mt-3 flex flex-wrap gap-3">
@@ -835,7 +835,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
 
         {contactActionTarget ? (
           <div className="fixed inset-0 z-[5210] bg-black/40" onClick={() => setContactActionTarget(null)}>
-            <div className="absolute inset-x-0 bottom-0 mx-auto max-w-[720px] rounded-t-2xl bg-[#f8f8fb] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4" onClick={(event) => event.stopPropagation()}>
+            <div className="absolute inset-x-0 bottom-[var(--picc-bottom-nav-clearance)] mx-auto max-h-[calc(100dvh-var(--picc-bottom-nav-clearance)-24px)] max-w-[720px] overflow-y-auto rounded-t-2xl bg-[#f8f8fb] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4" onClick={(event) => event.stopPropagation()}>
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-[20px] font-semibold text-[#1d1f23]">Contact {contactActionTarget.name}</h3>
@@ -889,7 +889,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
 
         {checkInModalOpen && appAccess.canEdit ? (
           <div className="fixed inset-0 z-[5200] bg-black/40" onClick={() => !checkingIn && setCheckInModalOpen(false)}>
-            <div className="absolute inset-x-0 bottom-0 mx-auto max-w-[720px] rounded-t-2xl bg-[#f8f8fb] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4" onClick={(event) => event.stopPropagation()}>
+            <div className="absolute inset-x-0 bottom-[var(--picc-bottom-nav-clearance)] mx-auto max-h-[calc(100dvh-var(--picc-bottom-nav-clearance)-24px)] max-w-[720px] overflow-y-auto rounded-t-2xl bg-[#f8f8fb] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4" onClick={(event) => event.stopPropagation()}>
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-[20px] font-semibold text-[#1d1f23]">Create Check-in</h3>
@@ -978,7 +978,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           </div>
         ) : null}
 
-        <div className="absolute inset-x-0 bottom-0 z-[5100]">
+        <div className="absolute inset-x-0 bottom-[var(--picc-bottom-nav-clearance)] z-[5100]">
           <div className={cn('mx-auto grid max-w-[720px] border-t border-[#c6c7cb] bg-[#f2f2f5] py-2 pb-[max(8px,env(safe-area-inset-bottom))] text-[#5a96e8]', appAccess.canEdit ? 'grid-cols-4' : 'grid-cols-3')}>
             <ActionButton label={routeSelected ? 'remove' : 'add to...'} onClick={() => onAddToRoute(activeStore.id)} icon={<MapPinned className="h-5 w-5" />} />
             {appAccess.canEdit ? <ActionButton label={checkingIn ? 'saving...' : 'check-in'} onClick={() => openCheckInModal()} icon={<PencilLine className="h-5 w-5" />} disabled={checkingIn} /> : null}
