@@ -101,9 +101,10 @@ export function AccountsMobile() {
   }, [allStores, headsetConnectionFilter, pppStatusFilter, preferredPartnerFilter, repFilter, scope, statusFilter]);
 
   const allStoreById = useMemo(() => new Map(allStores.map((store) => [store.id, store])), [allStores]);
+  const routeStoreId = searchParams.get('storeId');
+  const activeDetailStoreId = detailStoreId ?? routeStoreId;
 
   useEffect(() => {
-    const routeStoreId = searchParams.get('storeId');
     if (!routeStoreId) return;
 
     setScope('all');
@@ -117,7 +118,7 @@ export function AccountsMobile() {
       toast.error('Selected route account was not found in accounts list.');
       unresolvedRouteStoreIdRef.current = routeStoreId;
     }
-  }, [allStoreById, allStores.length, searchParams]);
+  }, [allStoreById, allStores.length, routeStoreId]);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, TerritoryStorePin[]>();
@@ -376,7 +377,7 @@ export function AccountsMobile() {
       ) : null}
 
       <AccountDetailSheet
-        store={detailStoreId ? allStoreById.get(detailStoreId) ?? null : null}
+        store={activeDetailStoreId ? allStoreById.get(activeDetailStoreId) ?? null : null}
         accountFreshness={accountFreshness}
         onClose={() => {
           setDetailStoreId(null);
@@ -385,7 +386,7 @@ export function AccountsMobile() {
           }
         }}
         onAddToRoute={(id) => routePlan.toggleStop(id)}
-        routeSelected={detailStoreId ? routePlan.selectedStopIds.includes(detailStoreId) : false}
+        routeSelected={activeDetailStoreId ? routePlan.selectedStopIds.includes(activeDetailStoreId) : false}
       />
     </div>
   );

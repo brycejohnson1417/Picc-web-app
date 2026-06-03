@@ -97,7 +97,7 @@ export function HotLeadsBoard({
         {sortedItems.map((item) => (
           <Link
             key={item.id}
-            href={`/accounts/${encodeURIComponent(item.id)}`}
+            href={`/accounts?storeId=${encodeURIComponent(item.id)}`}
             className="block rounded-[18px] border border-[#dce2eb] bg-white p-4 transition hover:border-[#9db8f7] hover:bg-[#f6faff]"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">

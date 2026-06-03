@@ -66,7 +66,7 @@ export function AccountsTable({ rows }: { rows: AccountTableRow[] }) {
       columns={columns}
       data={rows}
       searchPlaceholder="Search dispensary or license..."
-      getRowHref={(row) => `/accounts/${row.id}`}
+      getRowHref={(row) => `/accounts?storeId=${encodeURIComponent(row.id)}`}
       rowAriaLabel={(row) => `Open account ${row.name}`}
       mobileCardRenderer={(row) => (
         <>
