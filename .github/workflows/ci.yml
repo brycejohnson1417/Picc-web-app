@@ -12,6 +12,12 @@ concurrency:
 jobs:
   web-checks:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/picc_crm_local?schema=public
+      DEMO_MODE: 'true'
+      DEMO_ORG_ID: org_picc_demo
+      DEMO_USER_ID: demo_user
+      TERRITORY_ORG_ID: org_picc_demo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
