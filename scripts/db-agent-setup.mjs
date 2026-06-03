@@ -23,8 +23,8 @@ function run(command, args, options = {}) {
 }
 
 const localEnv = loadEnvFile(resolve(process.cwd(), '.env.local'));
-const databaseUrl = process.env.DATABASE_URL || localEnv.DATABASE_URL;
-const dbName = process.env.PICC_AGENT_DB_NAME || localEnv.PICC_AGENT_DB_NAME;
+const databaseUrl = localEnv.DATABASE_URL || process.env.DATABASE_URL;
+const dbName = localEnv.PICC_AGENT_DB_NAME || process.env.PICC_AGENT_DB_NAME;
 
 if (!databaseUrl || !dbName) {
   console.error('Run npm run worktree:setup first so .env.local has DATABASE_URL and PICC_AGENT_DB_NAME.');
