@@ -9,6 +9,8 @@
   --primary: 201 52 18;
   --border: 201 202 208;
   --app-shell-max: 1120px;
+  --picc-bottom-nav-height: 84px;
+  --picc-bottom-nav-clearance: 92px;
   --picc-motion-fast: 150ms;
   --picc-motion-normal: 240ms;
   --picc-motion-ease: cubic-bezier(0.2, 0, 0, 1);
@@ -85,6 +87,12 @@ body {
 .picc-stagger-enter {
   animation:
     picc-shell-enter var(--picc-motion-normal) var(--picc-motion-ease) var(--picc-shell-delay, 0ms) both;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --picc-bottom-nav-clearance: 96px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

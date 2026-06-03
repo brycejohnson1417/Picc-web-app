@@ -339,7 +339,7 @@ export function RouteMobile() {
       )}
 
       {tab === 'current' && selectedStops.length > 0 ? (
-        <div className="fixed bottom-[92px] left-0 right-0 z-[2600]">
+        <div className="fixed bottom-[var(--picc-bottom-nav-clearance)] left-0 right-0 z-[2600]">
           <div className="mx-auto grid max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#c4c5cc] bg-[#f3f3f6] py-2 text-[#5a95e7]">
             <button onClick={launchGo} className="mx-2 rounded-3xl bg-[#3ac128] px-2 py-2 text-[20px] font-bold text-white">
               GO
