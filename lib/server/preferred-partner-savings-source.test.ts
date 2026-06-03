@@ -40,6 +40,7 @@ const mockedPrisma = prisma as unknown as {
 const mockedFetchNabisJson = vi.mocked(fetchNabisJson);
 const mockedResolveAccountIdentity = vi.mocked(resolveAccountIdentity);
 const mockedLoadTerritoryStoreDetail = vi.mocked(loadTerritoryStoreDetail);
+const testYear = new Date().getFullYear();
 
 describe('Preferred Partner savings source selection', () => {
   beforeEach(() => {
@@ -47,6 +48,7 @@ describe('Preferred Partner savings source selection', () => {
 
     mockedResolveAccountIdentity.mockResolvedValue({
       accountId: 'account-1',
+      orgId: 'org-1',
       notionPageId: 'notion-page-1',
     });
     mockedLoadTerritoryStoreDetail.mockResolvedValue({
@@ -56,7 +58,7 @@ describe('Preferred Partner savings source selection', () => {
       },
       crm: {},
       contacts: [],
-    } as Awaited<ReturnType<typeof loadTerritoryStoreDetail>>);
+    } as unknown as Awaited<ReturnType<typeof loadTerritoryStoreDetail>>);
     mockedPrisma.account.findUnique.mockResolvedValue({
       id: 'account-1',
       name: 'Stale Cache Dispensary',
@@ -68,11 +70,11 @@ describe('Preferred Partner savings source selection', () => {
       {
         externalOrderId: 'cached-order-1',
         orderNumber: 'NY-OLD',
-        orderCreatedDate: new Date('2026-01-10T15:00:00.000Z'),
+        orderCreatedDate: new Date(`${testYear}-01-10T15:00:00.000Z`),
         deliveryDate: null,
         orderTotal: 56.5,
         status: 'DELIVERED',
-        createdAt: new Date('2026-01-10T16:00:00.000Z'),
+        createdAt: new Date(`${testYear}-01-10T16:00:00.000Z`),
         lines: [
           {
             productName: 'Ichi-Roll Single 1g',
@@ -91,7 +93,7 @@ describe('Preferred Partner savings source selection', () => {
         {
           id: 'cached-order-1',
           order: 'NY-OLD',
-          createdTimestamp: '2026-01-10T15:00:00.000Z',
+          createdTimestamp: `${testYear}-01-10T15:00:00.000Z`,
           orderTotal: 56.5,
           status: 'DELIVERED',
           retailerId: 'retailer-1',
@@ -105,7 +107,7 @@ describe('Preferred Partner savings source selection', () => {
         {
           id: 'live-order-today',
           order: 'NY-TODAY',
-          createdTimestamp: '2026-06-03T15:00:00.000Z',
+          createdTimestamp: `${testYear}-06-03T15:00:00.000Z`,
           orderTotal: 95,
           status: 'DELIVERED',
           retailerId: 'retailer-1',
@@ -125,7 +127,7 @@ describe('Preferred Partner savings source selection', () => {
     const result = await getPreferredPartnerSavings({
       orgId: 'org-1',
       accountIdOrPageId: 'account-1',
-      year: 2026,
+      year: testYear,
     });
 
     expect(mockedFetchNabisJson).toHaveBeenCalledWith('/v2/ny/order', {
