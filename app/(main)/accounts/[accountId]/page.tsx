@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { AccountHero } from '@/components/crm/account-hero';
+import { MicrobarSampleEmailPanel } from '@/components/crm/microbar-sample-email-panel';
 import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-panel';
 import { PreferredPartnerProposalPanel } from '@/components/crm/preferred-partner-proposal-panel';
 import { PreferredPartnerSavingsPanel } from '@/components/crm/preferred-partner-savings-panel';
@@ -8,6 +9,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@/compo
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { resolveAccountIdentity } from '@/lib/server/account-identity';
 import { loadTerritoryStoreDetail } from '@/lib/server/notion-territory';
+import { prisma } from '@/lib/db/prisma';
 import { number } from '@/lib/utils';
 
 function toActiveStatus(status: string): 'ACTIVE' | 'INACTIVE' {
@@ -38,6 +40,25 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   const store = detail.store;
   const savingsYear = new Date().getFullYear();
   const notionUrl = `https://www.notion.so/${store.notionPageId.replace(/-/g, '')}`;
+  const microbarOrders = resolved.accountId
+    ? await prisma.nabisOrder.findMany({
+        where: {
+          orgId,
+          accountId: resolved.accountId,
+          isInternalTransfer: false,
+        },
+        select: {
+          orderNumber: true,
+          externalOrderId: true,
+          orderCreatedDate: true,
+          deliveryDate: true,
+          status: true,
+          orderTotal: true,
+        },
+        orderBy: [{ orderCreatedDate: 'desc' }, { deliveryDate: 'desc' }, { createdAt: 'desc' }],
+        take: 6,
+      })
+    : [];
 
   return (
     <div className="space-y-6">
@@ -164,6 +185,20 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </a>
           </Button>
         </div>
+        <MicrobarSampleEmailPanel
+          storeName={store.name}
+          orders={
+            microbarOrders.length > 0
+              ? microbarOrders.map((order) => ({
+                  orderNumber: order.orderNumber ?? order.externalOrderId,
+                  createdDate: order.orderCreatedDate?.toISOString() ?? null,
+                  deliveryDate: order.deliveryDate?.toISOString() ?? null,
+                  status: order.status,
+                  total: order.orderTotal ? Number(order.orderTotal) : null,
+                }))
+              : detail.analytics.orders
+          }
+        />
         <PreferredPartnerProposalPanel accountId={accountId} />
         <PreferredPartnerSavingsPanel accountId={accountId} year={savingsYear} />
         <MockOrderProposalPanel accountId={accountId} />

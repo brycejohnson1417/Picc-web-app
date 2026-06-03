@@ -9,7 +9,6 @@ import { useAppAccess } from '@/components/auth/app-access-provider';
 import { RoleSwitcher } from '@/components/layout/role-switcher';
 import { WorkspacePanel, WorkspacePanelHeader } from '@/components/layout/workspace-page';
 import { AdminOpsPanel } from '@/components/settings/admin-ops-panel';
-import { NabisExceptionWorkflow } from '@/components/settings/nabis-exception-workflow';
 import { NabisSyncAdminPanel } from '@/components/settings/nabis-sync-admin-panel';
 import { WorkerSupplyPanel } from '@/components/settings/worker-supply-panel';
 import { GoogleUsageBudgetCard } from '@/components/territory/google-usage-budget-card';
@@ -188,11 +187,6 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
         },
         ...(canViewAdminControls
           ? [
-              {
-                id: 'nabis-exceptions',
-                label: 'Nabis Exceptions',
-                description: 'Microbar sample additions and order corrections anchored to cached orders.',
-              },
               {
                 id: 'nabis-sync',
                 label: 'Nabis Sync',
@@ -1015,12 +1009,6 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
       <section id="supply-system" className="scroll-mt-28">
         <WorkerSupplyPanel embedded />
       </section>
-
-      {canViewAdminControls ? (
-        <section id="nabis-exceptions" className="scroll-mt-28">
-          <NabisExceptionWorkflow />
-        </section>
-      ) : null}
 
       {canViewAdminControls ? (
         <section id="nabis-sync" className="scroll-mt-28">

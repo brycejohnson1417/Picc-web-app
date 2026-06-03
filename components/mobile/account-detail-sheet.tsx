@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle2, Clock3, Copy, Mail, MapPinned, MessageSquare
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAppAccess } from '@/components/auth/app-access-provider';
+import { MicrobarSampleEmailPanel } from '@/components/crm/microbar-sample-email-panel';
 import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-panel';
 import { PreferredPartnerProposalPanel } from '@/components/crm/preferred-partner-proposal-panel';
 import { PreferredPartnerSavingsPanel } from '@/components/crm/preferred-partner-savings-panel';
@@ -747,6 +748,10 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           {tab === 'ai' ? (
             <div className="border-b border-[#c6c7cb] px-5 py-5">
               <div className="space-y-4">
+                <MicrobarSampleEmailPanel
+                  storeName={activeStore.name}
+                  orders={orderHistory}
+                />
                 <PreferredPartnerProposalPanel accountId={aiAccountId} />
                 <PreferredPartnerSavingsPanel accountId={aiAccountId} year={savingsYear} />
                 <MockOrderProposalPanel accountId={aiAccountId} />
