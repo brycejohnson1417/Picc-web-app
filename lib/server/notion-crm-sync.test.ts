@@ -87,4 +87,33 @@ describe('Notion CRM retailer mirroring', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('blocks creation when a matching license already exists under a different retailer id', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => jsonResponse({ results: [] }))
+      .mockImplementationOnce(() => jsonResponse({ results: [{ id: 'license-conflict-page-id' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await ensureDispensaryCrmPageFromRetailer(retailerInput());
+
+    expect(result).toEqual({
+      pageId: 'license-conflict-page-id',
+      created: false,
+      updated: false,
+      skippedExisting: false,
+      reviewRequired: true,
+      reviewReason: 'license_conflict',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+      filter: {
+        property: 'License Number',
+        rich_text: {
+          equals: 'OCM-CAURD-24-000001-D1',
+        },
+      },
+    });
+  });
 });

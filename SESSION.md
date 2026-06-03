@@ -1,43 +1,22 @@
-# Session: Issue #136 PPP Savings Stale Cache
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/138
+Branch: codex/138-ghl-bizly-deprecation
 
-## Issue
-- https://github.com/brycejohnson1417/Picc-web-app/issues/136
+Scope:
+- Deprecate active GHL/Bizly repo references now that those systems are no longer in use.
+- Harden Notion CRM retailer mirroring so likely duplicate creates are blocked for review.
+- Keep the current Nabis/Notion account identity path as the active integration surface.
 
-## Scope
-- Fix the PPP savings calculator so current-year calculations include newer live Nabis orders when older cached order lines already exist.
-- Keep cached order lines as the preferred source for already-cached orders.
-- De-dupe overlapping cached and live order rows by order identity.
+Out of scope:
+- Production Prisma enum removal or schema migration.
+- Broad Nabis field update/backfill from the current retailer export.
+- Existing Nabis exception workflow work in PR #135.
 
-## Out Of Scope
-- No production data writes or backfills.
-- No schema migration.
-- No Nabis sync cadence or lease changes.
-- No pricing-table changes.
-- No customer-specific details in public GitHub surfaces.
+Validation plan:
+- RED: add a Notion CRM mirror test proving same-license conflicts block creates.
+- GREEN: implement duplicate guard queries for license, Nabis retailer ID, and exact name/city/zip.
+- Run `npm test -- lib/server/notion-crm-sync.test.ts`.
+- Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` before completion.
 
-## Owned Paths
-- `lib/server/preferred-partner-savings.ts`
-- `lib/server/preferred-partner-savings*.test.ts`
-- `SESSION.md`
-
-## Open PR Overlap Check
-- Checked open PR #135 before starting. It owns Nabis exception workflow paths and does not overlap this slice.
-- Checked open PR #82 before starting. It is docs-only project-boundary work and does not overlap this slice.
-
-## Current Evidence
-- The calculator currently uses cached rows for a year whenever any cached rows exist.
-- That cache-first branch prevents the current-year calculation from checking live Nabis for newer orders that have not been synced yet.
-
-## Constraints
-- Work only in `/Users/brycejohnson/Code/PICC-Web-App` via the issue branch worktree.
-- Keep Nabis access behind server modules.
-- Keep the existing account detail PPP savings panel as the user-facing UI.
-
-## Validation Plan
-- RED test: current-year cached rows do not suppress newer live Nabis order rows.
-- Targeted Vitest for PPP savings source selection and existing savings math.
-- Run `npm run typecheck`.
-- Run `npm run lint`.
-- Run `npm test`.
-- Run `npm run build`.
-- Browser proof for the existing account detail PPP savings panel after the server fix.
+Open PR overlap checked:
+- #135 `codex/134-nabis-exceptions`: unrelated Nabis exception UI work; no owned path overlap for this slice.
+- #82 `codex/81-project-boundary-docs`: docs-only boundary PR; keep this docs cleanup narrow.
