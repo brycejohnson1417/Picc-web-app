@@ -50,11 +50,11 @@ export function MicrobarSampleEmailPanel({ storeName, orders }: { storeName: str
   }
 
   return (
-    <div className="rounded-2xl border border-[#d6dae2] bg-white px-4 py-4 shadow-[0_12px_26px_rgba(24,33,45,0.08)]">
+    <div className="rounded-xl border border-[#d6dae2] bg-white px-4 py-4 shadow-[0_12px_26px_rgba(24,33,45,0.08)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[13px] font-semibold uppercase tracking-wide text-[#6a7583]">Microbar Nabis Samples</p>
-          <h3 className="mt-1 text-[18px] font-semibold text-[#1d1f23]">Draft sample-add email from latest order</h3>
+          <p className="text-[13px] font-semibold uppercase tracking-wide text-[#6a7583]">AI Email Action</p>
+          <h3 className="mt-1 text-[18px] font-semibold text-[#1d1f23]">Microbar Samples Requested Email</h3>
           <p className="mt-1 text-[14px] leading-5 text-[#5c6674]">
             Uses the newest cached Nabis order for this account and opens a ready-to-send email to helpny@nabis.com.
           </p>

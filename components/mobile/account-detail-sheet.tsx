@@ -748,6 +748,10 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           {tab === 'ai' ? (
             <div className="border-b border-[#c6c7cb] px-5 py-5">
               <div className="space-y-4">
+                <div>
+                  <p className="text-[14px] font-semibold uppercase tracking-wide text-[#8c9098]">AI Actions</p>
+                  <p className="mt-1 text-[15px] text-[#5c6674]">Draft account-specific emails and proposals from the linked CRM and Nabis data.</p>
+                </div>
                 <MicrobarSampleEmailPanel
                   storeName={activeStore.name}
                   orders={orderHistory}

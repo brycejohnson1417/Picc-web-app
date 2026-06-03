@@ -177,13 +177,22 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         </Card>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-4" aria-labelledby="account-ai-actions-heading">
         <div>
           <Button asChild variant="outline">
             <a href={notionUrl} target="_blank" rel="noreferrer">
               Open Full Record in Notion
             </a>
           </Button>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">AI Actions</p>
+          <h2 id="account-ai-actions-heading" className="mt-1 text-xl font-semibold text-slate-950">
+            Account Email And Proposal Drafts
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Generate account-specific outbound drafts from linked CRM and Nabis order history.
+          </p>
         </div>
         <MicrobarSampleEmailPanel
           storeName={store.name}
