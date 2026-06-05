@@ -393,7 +393,7 @@ async function main() {
       provider: 'GOOGLE_SHEETS',
       name: 'Nabis Master Sheet',
       config: {
-        workbookPath: '/Users/brycejohnson/Downloads/Nabis Notion Master Sheet.xlsx',
+        workbookPath: process.env.NABIS_MASTER_SHEET_PATH || '/path/to/local/nabis-export.xlsx',
         requiredTabs: [
           'orders',
           'details',
