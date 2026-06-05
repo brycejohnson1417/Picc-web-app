@@ -7,7 +7,22 @@ export async function GET() {
   const ctx = await guard(['ADMIN', 'OPS_TEAM', 'FINANCE']);
   if ('error' in ctx) return ctx.error;
 
-  const path = process.env.NABIS_MASTER_SHEET_PATH || '/Users/brycejohnson/Downloads/Nabis Notion Master Sheet.xlsx';
+  const path = process.env.NABIS_MASTER_SHEET_PATH?.trim();
+
+  if (!path) {
+    return NextResponse.json({
+      path: null,
+      fallback: true,
+      warning: 'NABIS_MASTER_SHEET_PATH is not configured. Returning mapped schema only.',
+      tabs: [],
+      requiredCoverage: REQUIRED_NABIS_TABS.map((tab) => ({
+        tab,
+        present: false,
+        mapping: NABIS_SCHEMA_MAPPING[tab as keyof typeof NABIS_SCHEMA_MAPPING] || null,
+      })),
+      sample: [],
+    });
+  }
 
   try {
     const data = inspectNabisWorkbook(path);
