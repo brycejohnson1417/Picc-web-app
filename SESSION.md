@@ -1,19 +1,21 @@
-# Session: Micro Bar wholesale landing upgrade
+# Session: Micro Bar buyer-facing copy and CTA correction
 
 ## Issue
 
-- GitHub issue: https://github.com/brycejohnson1417/Picc-web-app/issues/151
+- GitHub issue: https://github.com/brycejohnson1417/Picc-web-app/issues/153
 
 ## Branch
 
-- `codex/microbar-growth-landing`
+- `codex/microbar-buyer-copy`
 
 ## Scope
 
-- Upgrade the public `/microbar` landing page on the PICC app.
-- Use assets from `/Users/brycejohnson/Downloads/MICRO BAR™`.
-- Rework the page for educated dispensary buyers and wholesale conversion.
-- Keep CTAs usable directly in the browser.
+- Revise `/microbar` copy for educated New York dispensary buyers.
+- Replace invented product one-liners with real Micro Bar product descriptions from supplied brand/menu materials.
+- Remove on-page ordering language and keep buyer CTAs focused on:
+  - live Micro Bar Nabis marketplace profile
+  - direct Bryce email contact
+- Preserve the current visual direction and Micro Bar brand assets.
 
 ## Domain Constraint
 
@@ -23,6 +25,7 @@
 
 ## Out Of Scope
 
+- On-page cart, checkout, order builder, or marketplace ordering flow.
 - Authenticated PICC app shell changes.
 - Territory, account, calendar, Nabis, Notion, Supabase, Clerk, or production data changes.
 - Backend writes, schema migrations, DNS edits, or redirect configuration changes.
@@ -31,7 +34,6 @@
 ## Owned Paths
 
 - `app/microbar/**`
-- `public/brand/microbar/**`
 - `SESSION.md`
 
 ## Active PR Overlap Check
@@ -43,9 +45,9 @@
 
 - Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`.
 - Use Browser for rendered validation.
-- Verify `/microbar` loads publicly, is nonblank, has no framework overlay, has healthy console output, and responds to product/filter/CTA interactions.
+- Verify `/microbar` loads publicly, is nonblank, has no framework overlay, and responds to product/filter/CTA interactions.
 - Capture desktop and mobile screenshots.
 
 ## TDD Note
 
-This is a static public marketing redesign using existing Next.js patterns and supplied brand assets. A RED unit test is not practical for visual layout; browser validation is the primary behavior proof.
+This is a static public marketing-copy and CTA correction using existing Next.js patterns and supplied product descriptions. A RED unit test is not practical for visual copy/layout; browser validation is the primary behavior proof.

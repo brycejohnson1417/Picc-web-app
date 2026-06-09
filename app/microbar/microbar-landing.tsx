@@ -4,15 +4,12 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
-  ArrowRight,
   BatteryCharging,
   Check,
-  ChevronRight,
-  Download,
   ExternalLink,
   Mail,
   Package,
-  ShoppingBag,
+  Phone,
   Sparkles,
   Zap,
 } from 'lucide-react';
@@ -23,8 +20,7 @@ type Product = {
   name: string;
   type: StrainType;
   line: 'Quickstrike' | 'Mainline';
-  note: string;
-  buyerAngle: string;
+  description: string;
   image: string;
   color: string;
 };
@@ -34,8 +30,8 @@ const products: Product[] = [
     name: 'Rocket Popz',
     type: 'Indica',
     line: 'Quickstrike',
-    note: 'Cherry, lime, and blue raspberry nostalgia with summer display energy.',
-    buyerAngle: 'Limited-run hook for impulse buyers and budtender favorites.',
+    description:
+      'Back for Summer 25. This delightful treat brings the nostalgia of classic popsicles to your taste buds with a refreshing blend of cherry, lime, and blue raspberry flavors. Each puff offers a sweet, tangy burst that cools you down on even the hottest summer days.',
     image: '/brand/microbar/rocket-popz.webp',
     color: '#10b7ff',
   },
@@ -43,8 +39,8 @@ const products: Product[] = [
     name: 'Blackberry Slush',
     type: 'Sativa',
     line: 'Quickstrike',
-    note: 'Ripe blackberry sweetness with a tart frozen-drink finish.',
-    buyerAngle: 'Fast read on shelf: dark fruit, bright color, easy recommendation.',
+    description:
+      'A new Quickstrike from Micro Bar with an irresistible combination of sweetness and subtle tartness. The luscious taste of ripe blackberries washes over your palate, with an initial burst of sweetness balanced by a hint of tartness.',
     image: '/brand/microbar/blackberry-slush.webp',
     color: '#3342ff',
   },
@@ -52,8 +48,8 @@ const products: Product[] = [
     name: 'Golden Dragon Fruit',
     type: 'Hybrid',
     line: 'Mainline',
-    note: 'Golden dragon fruit with tropical fruit depth and bold yellow packaging.',
-    buyerAngle: 'High-visibility hero SKU for customers who shop by flavor first.',
+    description:
+      'A twist on the popular Year of the Dragon Fruit Quickstrike, brought into the Mainline collection. This blend of sweet and tangy golden dragon fruit, complemented by succulent fruits, delivers an exciting and bold taste experience.',
     image: '/brand/microbar/golden-dragon-fruit.webp',
     color: '#ffe000',
   },
@@ -61,8 +57,8 @@ const products: Product[] = [
     name: 'Peach Driver',
     type: 'Hybrid',
     line: 'Mainline',
-    note: 'Juicy peach profile that lands cleanly with mainstream vape buyers.',
-    buyerAngle: 'A low-friction hybrid for first-time Micro Bar placements.',
+    description:
+      'Whether it is cobbler for dessert or iced tea in the heat, Peach Driver offers unmistakable peach flavor. This hybrid has the taste of a fuzzy, succulent peach and an energizing effect suited for social activities and exploring outdoors.',
     image: '/brand/microbar/peach-driver.webp',
     color: '#ff9f31',
   },
@@ -70,8 +66,8 @@ const products: Product[] = [
     name: 'Strawberry Mochi',
     type: 'Hybrid',
     line: 'Mainline',
-    note: 'Sweet strawberry with a creamy dessert finish.',
-    buyerAngle: 'Dessert strain that merchandises well beside fruit-forward vapes.',
+    description:
+      'A balance of sweet, berry, and creamy. Each puff delivers the juicy taste of ripe strawberries, followed by a smooth, velvety mochi finish. Crafted for a satisfying dessert-inspired blend that is refreshing yet indulgent.',
     image: '/brand/microbar/strawberry-mochi.webp',
     color: '#ff9ac7',
   },
@@ -79,8 +75,8 @@ const products: Product[] = [
     name: 'Pink Lychee',
     type: 'Hybrid',
     line: 'Mainline',
-    note: 'Soft lychee sweetness with premium pink shelf appeal.',
-    buyerAngle: 'A distinctive flavor name buyers remember after one pass.',
+    description:
+      'An exotic blend of sweetness and tropical paradise. Pink Lychee offers a sense of steadiness, made for shoppers with a sweet tooth and the need to stay grounded.',
     image: '/brand/microbar/pink-lychee.webp',
     color: '#ff7ab8',
   },
@@ -88,8 +84,8 @@ const products: Product[] = [
     name: 'Lemon Diesel',
     type: 'Sativa',
     line: 'Mainline',
-    note: 'Sharp citrus with a diesel edge for classic sativa shoppers.',
-    buyerAngle: 'Bridges flavor buyers and strain-name traditionalists.',
+    description:
+      'This mouth-puckering sativa has clear notes of sharp juicy citrus. Lemon Diesel leaves a deeply relaxed feel and a lemon-like daze.',
     image: '/brand/microbar/lemon-diesel.webp',
     color: '#bdf500',
   },
@@ -97,8 +93,8 @@ const products: Product[] = [
     name: 'Melon Bar',
     type: 'Sativa',
     line: 'Quickstrike',
-    note: 'Ripe melon sweetness with a clean, bright finish.',
-    buyerAngle: 'Fresh, friendly flavor profile for daytime vape cases.',
+    description:
+      'A creamy, fruity concoction that embodies the refreshing sweetness of ripe melon, leaving a smooth, velvety finish. Bright, juicy, and indulgent, this limited edition is built around a well-balanced melon flavor.',
     image: '/brand/microbar/melon-bar.webp',
     color: '#9ce600',
   },
@@ -106,8 +102,8 @@ const products: Product[] = [
     name: 'Zhirley Temple',
     type: 'Hybrid',
     line: 'Quickstrike',
-    note: 'Grenadine, lemon-lime soda, and maraschino cherry.',
-    buyerAngle: 'Conversation-starting limited edition with nostalgic pull.',
+    description:
+      'A blend of sweet and tangy lemon-lime soda, hints of grenadine, and maraschino cherry. The flavor is designed to transport shoppers to a classic soda fountain.',
     image: '/brand/microbar/zhirley-temple.webp',
     color: '#d71920',
   },
@@ -115,8 +111,8 @@ const products: Product[] = [
     name: 'Strawberry Fields',
     type: 'Indica',
     line: 'Mainline',
-    note: 'Classic red berry profile with approachable indica positioning.',
-    buyerAngle: 'A simple anchor SKU when buyers want fruit plus nighttime use.',
+    description:
+      'A classic red berry profile: fresh, sweet, and perfectly tart. Strawberry Fields is a heavy indica that relaxes, recenters, and recalls warm summer days with juicy berries.',
     image: '/brand/microbar/strawberry-fields.webp',
     color: '#ff6c9d',
   },
@@ -124,8 +120,8 @@ const products: Product[] = [
     name: 'Blueberry Kush',
     type: 'Indica',
     line: 'Mainline',
-    note: 'Blueberry-forward indica with recognizable Kush language.',
-    buyerAngle: 'Familiar strain cue for experienced shoppers.',
+    description:
+      'A heavy indica with a flavor profile somewhere between delicate blueberries. Blueberry Kush is a familiar strain lane for shoppers looking for a fruit-forward indica.',
     image: '/brand/microbar/blueberry-kush.webp',
     color: '#2831e8',
   },
@@ -133,24 +129,25 @@ const products: Product[] = [
 
 const filters: Array<'All' | StrainType> = ['All', 'Sativa', 'Hybrid', 'Indica'];
 
-const orderSubject = encodeURIComponent('Micro Bar NY wholesale order');
-const orderBody = encodeURIComponent(
+const nabisMenuHref = 'https://retailer.nabis.com/public/brands/5907f171-2675-4fa7-8848-bc0250d9cf37?inStock=true&preview=true';
+const contactEmail = 'bryce@piccplatform.com';
+const contactPhone: string | null = null;
+const contactSubject = encodeURIComponent('Micro Bar NY menu question');
+const contactBody = encodeURIComponent(
   [
-    'Hi PICC,',
+    'Hi Bryce,',
     '',
-    'I am interested in Micro Bar for our dispensary.',
+    'I was looking at the Micro Bar NY page and had a question.',
     '',
     'Dispensary / buyer:',
     'License or location:',
-    'Preferred delivery window:',
-    'Products of interest:',
-    'Estimated opening order:',
+    'Question:',
     '',
-    'Please send current availability, wholesale ordering details, and preferred partner terms.',
+    'Please send current availability or point me to the right item on Nabis.',
   ].join('\n'),
 );
 
-const orderHref = `mailto:microbar@phatpanda.com?cc=bryce@piccplatform.com&subject=${orderSubject}&body=${orderBody}`;
+const contactHref = `mailto:${contactEmail}?subject=${contactSubject}&body=${contactBody}`;
 
 export function MicrobarLanding() {
   const [selectedType, setSelectedType] = useState<(typeof filters)[number]>('All');
@@ -184,11 +181,13 @@ export function MicrobarLanding() {
               Lineup
             </a>
             <a
-              href={orderHref}
+              href={nabisMenuHref}
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 font-black text-[#14131d] shadow-lg shadow-black/20 transition hover:-translate-y-0.5 hover:bg-[#fff3f7]"
             >
-              <Mail className="h-4 w-4" aria-hidden="true" />
-              Get terms
+              Live menu
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </a>
           </nav>
         </header>
@@ -204,11 +203,11 @@ export function MicrobarLanding() {
               className="mb-5 h-auto w-36 sm:mb-7 sm:w-56"
             />
             <h1 className="text-4xl font-black leading-[0.94] sm:text-6xl lg:text-7xl">
-              The vape line NY buyers can merchandise in one pass.
+              Micro Bar is live for New York retail buyers.
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-white/78 sm:mt-6 sm:text-lg sm:leading-8">
-              Micro Bar is now available through PICC in New York with a tight opening assortment, buyer-friendly case economics,
-              and color-coded SKUs that make budtender recommendations easy.
+              Micro Bar is now distributed by PICC in New York. Review the live Nabis menu for current in-stock items, then email
+              Bryce for availability questions, buyer fit, or help placing the right items into your next replenishment plan.
             </p>
             <div className="mt-6 grid grid-cols-3 gap-2 sm:mt-8 sm:gap-3">
               {[
@@ -226,18 +225,20 @@ export function MicrobarLanding() {
             </div>
             <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row">
               <a
-                href={orderHref}
+                href={nabisMenuHref}
+                target="_blank"
+                rel="noreferrer"
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#ff2456] px-6 py-3 text-sm font-black text-white shadow-xl shadow-[#ff2456]/30 transition hover:-translate-y-0.5 hover:bg-[#ff3e69]"
               >
-                Request wholesale terms
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                View live Nabis menu
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </a>
               <a
-                href="#lineup"
+                href={contactHref}
                 className="inline-flex items-center justify-center gap-2 rounded-full border border-white/18 bg-white/8 px-6 py-3 text-sm font-black text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/14"
               >
-                Build an opening set
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                Email Bryce
+                <Mail className="h-4 w-4" aria-hidden="true" />
               </a>
             </div>
           </div>
@@ -264,18 +265,20 @@ export function MicrobarLanding() {
                     className="aspect-square h-auto w-full object-contain"
                   />
                   <div className="mt-3 text-2xl font-black text-[#12111b]">Rocket Popz</div>
-                  <p className="mt-1 text-sm leading-5 text-slate-600">A recognizable limited flavor that gives buyers a reason to test the line now.</p>
+                  <p className="mt-1 text-sm leading-5 text-slate-600">
+                    Cherry, lime, and blue raspberry nostalgia in a limited summer Quickstrike profile.
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="rounded-2xl border border-white/15 bg-[#14131d]/88 p-4 text-white shadow-xl backdrop-blur">
-                    <ShoppingBag className="h-5 w-5 text-[#72e8ff]" aria-hidden="true" />
-                    <div className="mt-4 text-2xl font-black">$600</div>
-                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-white/56">PPP minimum</div>
+                    <ExternalLink className="h-5 w-5 text-[#72e8ff]" aria-hidden="true" />
+                    <div className="mt-4 text-2xl font-black">Live</div>
+                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-white/56">Nabis menu</div>
                   </div>
                   <div className="rounded-2xl border border-white/15 bg-[#14131d]/88 p-4 text-white shadow-xl backdrop-blur">
-                    <Package className="h-5 w-5 text-[#ffd84c]" aria-hidden="true" />
-                    <div className="mt-4 text-2xl font-black">30</div>
-                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-white/56">3-case open</div>
+                    <Mail className="h-5 w-5 text-[#ffd84c]" aria-hidden="true" />
+                    <div className="mt-4 text-2xl font-black">PICC</div>
+                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-white/56">buyer contact</div>
                   </div>
                 </div>
               </div>
@@ -287,25 +290,27 @@ export function MicrobarLanding() {
       <section id="buyer-case" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:py-24">
         <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
           <div>
-            <h2 className="text-3xl font-black tracking-tight sm:text-5xl">Why a dispensary buyer says yes.</h2>
+            <h2 className="text-3xl font-black tracking-tight sm:text-5xl">The quick buyer read.</h2>
             <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
-              Educated buyers do not need another disposable pitch. They need clean economics, clear merchandising, and a line their
-              team can explain without a training day.
+              Use this page as the fast overview before checking the live Nabis profile. The lineup is flavor-forward, easy to
+              segment by effect lane, and simple for retail teams to explain at the counter.
             </p>
             <a
-              href={orderHref}
+              href={nabisMenuHref}
+              target="_blank"
+              rel="noreferrer"
               className="mt-7 inline-flex items-center gap-2 rounded-full bg-[#11131a] px-5 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-[#262936]"
             >
-              Ask for opening availability
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              Check the live Nabis menu
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </a>
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
             {[
-              ['Margin story', '$20 PPP unit gives retailers a clean preferred partner conversation without burying the price sheet.'],
-              ['Shelf velocity', 'Flavor names, device colors, and limited Quickstrike drops are built for fast customer reads.'],
-              ['Low-friction open', '10-unit case packs and a $600 minimum let stores test the line without a bloated category bet.'],
+              ['Price read', '$25 standard unit and $20 PPP unit details are clear before you open the marketplace profile.'],
+              ['Shelf read', 'Flavor names, device colors, and limited Quickstrike drops give budtenders an easy recommendation path.'],
+              ['Pack detail', '10-unit case packs make it straightforward to compare the assortment against your current vape shelf.'],
             ].map(([title, body]) => (
               <div key={title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <Sparkles className="h-5 w-5 text-[#ff2456]" aria-hidden="true" />
@@ -321,10 +326,10 @@ export function MicrobarLanding() {
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
             <div>
-              <h2 className="text-3xl font-black tracking-tight sm:text-5xl">Build the opening set by effect lane.</h2>
+              <h2 className="text-3xl font-black tracking-tight sm:text-5xl">Browse the NY product details by effect lane.</h2>
               <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
-                Filter the NY assortment, pick the hero SKUs for your first order, and send PICC the exact buyer context from the
-                CTA. No spreadsheet archaeology required.
+                Filter the assortment and compare Micro Bar&apos;s real product descriptions. For live inventory and final item details,
+                use the Nabis marketplace profile.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end" role="tablist" aria-label="Filter Micro Bar products by effect lane">
@@ -372,11 +377,8 @@ export function MicrobarLanding() {
                       <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{product.line}</span>
                     </div>
                     <h3 className="mt-3 text-xl font-black leading-tight text-slate-950">{product.name}</h3>
-                    <p className="mt-2 text-sm leading-5 text-slate-600">{product.note}</p>
+                    <p className="mt-2 text-sm leading-5 text-slate-600">{product.description}</p>
                   </div>
-                </div>
-                <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold leading-5 text-slate-700">
-                  {product.buyerAngle}
                 </div>
               </button>
             ))}
@@ -395,7 +397,7 @@ export function MicrobarLanding() {
                   />
                 </div>
                 <div>
-                  <div className="text-xs font-black uppercase tracking-[0.16em] text-white/50">Selected opening SKU</div>
+                  <div className="text-xs font-black uppercase tracking-[0.16em] text-white/50">Selected product detail</div>
                   <div className="mt-1 text-2xl font-black">{selectedProduct.name}</div>
                   <div className="mt-1 text-sm text-white/62">
                     Showing {selectedCount} {selectedType === 'All' ? 'total' : selectedType.toLowerCase()} SKUs.
@@ -403,11 +405,13 @@ export function MicrobarLanding() {
                 </div>
               </div>
               <a
-                href={orderHref}
+                href={nabisMenuHref}
+                target="_blank"
+                rel="noreferrer"
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#ff2456] px-5 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-[#ff3e69]"
               >
-                Send this order context
-                <Mail className="h-4 w-4" aria-hidden="true" />
+                View live Nabis menu
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </a>
             </div>
           </div>
@@ -456,9 +460,10 @@ export function MicrobarLanding() {
                 height={1000}
                 className="mx-auto h-52 w-full object-contain"
               />
-              <h3 className="mt-4 text-2xl font-black">DUAL gives buyers a trade-up lane.</h3>
+              <h3 className="mt-4 text-2xl font-black">DUAL Peach Driver / Watermelon Mimosa.</h3>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Two 0.5g tanks, switchable strains, and blend behavior create a premium conversation beyond single-flavor disposables.
+                Peach Driver delivers a smooth, juicy punch of ripe peaches, while Watermelon Mimosa brings crisp, bubbly watermelon
+                sweetness with a hint of citrus sparkle. Use each flavor on its own or mix them together.
               </p>
             </div>
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -469,9 +474,10 @@ export function MicrobarLanding() {
                 height={1000}
                 className="mx-auto h-44 w-full object-contain"
               />
-              <h3 className="mt-4 text-2xl font-black">Liquid Gold protects premium shelf space.</h3>
+              <h3 className="mt-4 text-2xl font-black">Liquid Gold Live Resin.</h3>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Live Resin positioning gives experienced buyers a reason to place Micro Bar above commodity vape rows.
+                A premium Micro Bar format for buyers who want a live resin shelf option alongside the core flavor assortment.
+                Confirm active NY availability on the Nabis profile.
               </p>
             </div>
           </div>
@@ -481,9 +487,10 @@ export function MicrobarLanding() {
       <section id="pricing" className="bg-white py-16 lg:py-24">
         <div className="mx-auto grid max-w-7xl gap-8 px-5 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
           <div>
-            <h2 className="text-3xl font-black tracking-tight sm:text-5xl">The opening order math is intentionally boring.</h2>
+            <h2 className="text-3xl font-black tracking-tight sm:text-5xl">Pricing and pack details stay simple.</h2>
             <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
-              Boring is good for a wholesale buyer. The shelf story is colorful; the economics are simple enough to approve fast.
+              The shelf story is colorful; the buyer math is easy to scan. Use Nabis for live menu status and current in-stock
+              assortment.
             </p>
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               {[
@@ -499,8 +506,8 @@ export function MicrobarLanding() {
               ))}
             </div>
             <p className="mt-4 text-sm leading-6 text-slate-500">
-              $600 minimum applies for Preferred Partners when shipped with PICC orders. Current availability is confirmed through
-              PICC before order submission.
+              $600 minimum applies for Preferred Partners when shipped with PICC replenishment. Current menu availability is
+              maintained on the Micro Bar Nabis marketplace profile.
             </p>
           </div>
 
@@ -520,37 +527,37 @@ export function MicrobarLanding() {
         <div className="mx-auto flex max-w-7xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <Image src="/brand/microbar/logo-white.webp" alt="Micro Bar" width={900} height={320} className="mb-5 h-auto w-36" />
-            <h2 className="text-3xl font-black tracking-tight">Want the current NY availability list?</h2>
+            <h2 className="text-3xl font-black tracking-tight">Questions about Micro Bar in NY?</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/68">
-              Send PICC your dispensary, delivery window, and opening-order target. We will respond with live availability,
-              preferred partner terms, and the cleanest first order for your shelf.
+              Check the live Nabis menu for in-stock items. If you want help deciding what fits your shelf, email Bryce directly.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row md:flex-col lg:flex-row">
             <a
-              href={orderHref}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-black text-[#11131a] transition hover:-translate-y-0.5 hover:bg-[#fff3f7]"
-            >
-              Request wholesale terms
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </a>
-            <a
-              href="/brand/microbar/ppp-menu.webp"
-              download
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white/8 px-6 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-white/14"
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Price sheet
-            </a>
-            <a
-              href="https://microbar.com"
+              href={nabisMenuHref}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white/8 px-6 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-white/14"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-black text-[#11131a] transition hover:-translate-y-0.5 hover:bg-[#fff3f7]"
             >
-              Microbar.com
+              View live Nabis menu
               <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </a>
+            <a
+              href={contactHref}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white/8 px-6 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-white/14"
+            >
+              Email Bryce
+              <Mail className="h-4 w-4" aria-hidden="true" />
+            </a>
+            {contactPhone ? (
+              <a
+                href={`tel:${contactPhone}`}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white/8 px-6 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 hover:bg-white/14"
+              >
+                Call Bryce
+                <Phone className="h-4 w-4" aria-hidden="true" />
+              </a>
+            ) : null}
           </div>
         </div>
       </section>
