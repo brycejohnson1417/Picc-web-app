@@ -1,26 +1,44 @@
-# Current Session
+# Session: Microbar NY landing page
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/141
-PR: https://github.com/brycejohnson1417/Picc-web-app/pull/142
-Branch: `codex/141-non-destructive-cleanup`
+## Issue
+
+- GitHub issue: https://github.com/brycejohnson1417/Picc-web-app/issues/149
+
+## Branch
+
+- `codex/microbar-landing`
 
 ## Scope
 
-- Non-destructive cleanup of retired Worker/Payroll/Vendor Day dispatch app surfaces.
-- Remove phantom native/service/worker/Redis/Directus/Odoo/Lighthouse infra.
-- Add `verify`, worktree setup, agent dev DB/port setup, and Playwright smoke coverage.
-- Update governance/docs so future agents use `/Users/brycejohnson/Code/PICC-Web-App`.
+- Add a public `/microbar` landing page for Microbar now distributed by PICC in NY.
+- Use supplied Microbar PDF graphics as real static assets.
+- Surface browser-usable retailer CTAs.
+- Keep implementation additive and public-safe.
 
 ## Out Of Scope
 
-- No production schema drops.
-- No production data writes/backfills.
-- No monorepo conversion.
-- No removal of territory Vendor Day Status, `/territory` Vendor Day Status filter, account detail status/history, or `loadStoreVendorDaySummary`.
+- Authenticated PICC app shell changes.
+- Territory, account, calendar, Nabis, Notion, Supabase, Clerk, or production data changes.
+- Backend writes, schema migrations, or private PICC operating intelligence.
+
+## Owned Paths
+
+- `app/microbar/**`
+- `public/brand/microbar/**`
+- `SESSION.md`
+
+## Active PR Overlap Check
+
+- Checked open PRs #144, #135, and #82.
+- No overlapping owned path globs found.
 
 ## Validation Plan
 
-- `npm run verify`
-- `npm run test:e2e`
-- Confirm `/home` has no `/vendor-days` links or retired dispatch cards.
-- Confirm `/territory` still exposes Vendor Day Status filtering.
+- Use static checks: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`.
+- Use the Browser plugin first for rendered validation.
+- Verify `/microbar` loads publicly, is nonblank, has no framework overlay, has healthy console output, and responds to CTAs.
+- Capture desktop and mobile screenshots.
+
+## TDD Note
+
+This is a static public marketing route using existing Next.js patterns and real supplied assets. A RED unit test is not practical for the visual layout; browser validation is the primary behavior proof.
