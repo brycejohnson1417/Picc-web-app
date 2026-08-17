@@ -6,10 +6,17 @@ function request(path: string, method = 'GET') {
   return new Request(`http://localhost${path}`, { method });
 }
 
-function baseMocks(input?: { contacts?: Array<{ id?: string; name?: string; email: string }>; messages?: Array<Record<string, string>> }) {
+function baseMocks(input?: {
+  contacts?: Array<{ id?: string; name?: string; email: string }>;
+  messages?: Array<Record<string, string>>;
+  gmailAccessUnavailable?: boolean;
+  gmailStatusUnavailable?: boolean;
+}) {
   const prisma = {
     gmailConnection: {
-      findUnique: vi.fn().mockResolvedValue({ id: 'gmail-1', mailboxEmail: 'rep@picc.co', status: 'SUCCESS', lastSyncedAt: null, lastError: null }),
+      findUnique: input?.gmailStatusUnavailable
+        ? vi.fn().mockRejectedValue(Object.assign(new Error('private database detail'), { code: 'P2021' }))
+        : vi.fn().mockResolvedValue({ id: 'gmail-1', mailboxEmail: 'rep@picc.co', status: 'SUCCESS', lastSyncedAt: null, lastError: null }),
       update: vi.fn().mockResolvedValue({}),
       deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
@@ -27,10 +34,21 @@ function baseMocks(input?: { contacts?: Array<{ id?: string; name?: string; emai
   vi.doMock('@/lib/server/account-contact-runtime', () => ({
     loadAccountContactRuntime: vi.fn().mockResolvedValue({ contacts: input?.contacts ?? [{ id: contactId, name: 'Mara Vega', email: 'mara@example.com' }] }),
   }));
-  vi.doMock('@/lib/server/gmail-connection', () => ({
-    GmailNotConnectedError: class GmailNotConnectedError extends Error {},
-    getGmailAccess: vi.fn().mockResolvedValue({ accessToken: 'access', connection: { id: 'gmail-1', mailboxEmail: 'rep@picc.co' } }),
-  }));
+  vi.doMock('@/lib/server/gmail-connection', () => {
+    class GmailNotConnectedError extends Error {}
+    class GmailIntegrationUnavailableError extends Error {}
+    return {
+      GMAIL_SETUP_UNAVAILABLE_MESSAGE: 'Gmail setup is temporarily unavailable. Ask an administrator to finish setup, then try again.',
+      GmailNotConnectedError,
+      GmailIntegrationUnavailableError,
+      getGmailConnectionStatus: input?.gmailStatusUnavailable
+        ? vi.fn().mockRejectedValue(new GmailIntegrationUnavailableError('private database detail'))
+        : vi.fn().mockResolvedValue({ id: 'gmail-1', mailboxEmail: 'rep@picc.co', status: 'SUCCESS', lastSyncedAt: null, lastError: null }),
+      getGmailAccess: input?.gmailAccessUnavailable
+        ? vi.fn().mockRejectedValue(new GmailIntegrationUnavailableError('private database detail'))
+        : vi.fn().mockResolvedValue({ accessToken: 'access', connection: { id: 'gmail-1', mailboxEmail: 'rep@picc.co' } }),
+    };
+  });
   vi.doMock('@/lib/server/gmail-provider', () => ({
     gmailConfigurationStatus: vi.fn(() => ({ configured: true, redirectUri: 'https://app.example/callback' })),
     listGmailMessages: vi.fn().mockResolvedValue(input?.messages ?? [{ id: 'message-1', threadId: 'thread-1', from: 'Mara <mara@example.com>', to: 'rep@picc.co', subject: 'Placement', snippet: '', occurredAt: '2026-08-14T10:00:00.000Z', externalUrl: 'https://mail.google.com/thread-1' }]),
@@ -46,12 +64,26 @@ describe('Gmail routes', () => {
     const prisma = baseMocks();
     const route = await import('@/app/api/integrations/gmail/route');
     const loaded = await route.GET();
+    const loadedPayload = await loaded?.json();
     const disconnected = await route.DELETE();
 
     expect(loaded?.status).toBe(200);
+    expect(loadedPayload.connection).toEqual(expect.objectContaining({ mailboxEmail: 'rep@picc.co' }));
     expect(disconnected?.status).toBe(200);
-    expect(prisma.gmailConnection.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { orgId_clerkUserId: { orgId: 'org-1', clerkUserId: 'user-1' } } }));
     expect(prisma.gmailConnection.deleteMany).toHaveBeenCalledWith({ where: { orgId: 'org-1', clerkUserId: 'user-1' } });
+  });
+
+  it('returns an actionable setup state when Gmail status storage is unavailable', async () => {
+    baseMocks({ gmailStatusUnavailable: true });
+    const route = await import('@/app/api/integrations/gmail/route');
+    const response = await route.GET();
+    const payload = await response?.json();
+
+    expect(response?.status).toBe(503);
+    expect(payload).toEqual({
+      error: 'Gmail setup is temporarily unavailable. Ask an administrator to finish setup, then try again.',
+    });
+    expect(JSON.stringify(payload)).not.toContain('database');
   });
 
   it('indexes exact-contact Gmail activity under the current user and tenant', async () => {
@@ -82,5 +114,20 @@ describe('Gmail routes', () => {
 
     expect(response?.status).toBe(200);
     expect(payload.suggestions).toEqual([expect.objectContaining({ email: 'new@example.com', name: 'New Buyer' })]);
+  });
+
+  it('does not expose database internals when the Gmail schema is unavailable', async () => {
+    baseMocks({ gmailAccessUnavailable: true });
+
+    const { GET } = await import('@/app/api/integrations/gmail/suggestions/route');
+    const response = await GET();
+    const payload = await response?.json();
+
+    expect(response?.status).toBe(503);
+    expect(payload).toEqual({
+      error: 'Gmail setup is temporarily unavailable. Ask an administrator to finish setup, then try again.',
+    });
+    expect(JSON.stringify(payload)).not.toContain('prisma');
+    expect(JSON.stringify(payload)).not.toContain('GmailConnection');
   });
 });

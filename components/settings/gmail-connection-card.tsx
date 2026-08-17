@@ -59,6 +59,23 @@ export function GmailConnectionCard() {
     }
   }
 
+  if (!status && error) {
+    return (
+      <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[#c93412] shadow-sm"><Mail className="h-5 w-5" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Gmail needs attention</p>
+            <p className="mt-1 text-sm leading-6">{error}</p>
+            <button type="button" onClick={() => void load()} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 text-sm font-semibold">
+              <RefreshCw className="h-4 w-4" /> Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!status) return <div className="grid min-h-32 place-items-center rounded-2xl border border-[#d6dae2] bg-[#f7f9fc]"><Loader2 className="h-5 w-5 animate-spin text-[#6a7583]" /></div>;
 
   return (
