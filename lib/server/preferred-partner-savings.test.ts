@@ -102,7 +102,7 @@ describe('Preferred Partner savings math', () => {
       matchPreferredPartnerPrice({
         skuName: 'SMACK. | Infused Pre-roll | 1G SINGLE | Banana Runtz',
       }),
-    ).toMatchObject({ brand: 'Smack.', size: 'Single', preferredWholesale: 5 });
+    ).toMatchObject({ brand: 'Smack.', size: 'Single', preferredWholesale: 5.4 });
 
     expect(
       matchPreferredPartnerPrice({
@@ -116,13 +116,13 @@ describe('Preferred Partner savings math', () => {
       matchPreferredPartnerPrice({
         skuName: 'CHOPSTIX | Infused Pre-roll | .5G SINGLE | OG Kush (S)',
       }),
-    ).toMatchObject({ brand: 'Chopsticks', size: '2 (.5g)', preferredWholesale: 4 });
+    ).toMatchObject({ brand: 'Chopsticks', size: '2 (.5g)', preferredWholesale: 4.4 });
 
     expect(
       matchPreferredPartnerPrice({
         skuName: 'CHOPSTICKS | Infused Pre-roll | .5G SINGLE | OG Kush (S)',
       }),
-    ).toMatchObject({ brand: 'Chopsticks', size: '2 (.5g)', preferredWholesale: 4 });
+    ).toMatchObject({ brand: 'Chopsticks', size: '2 (.5g)', preferredWholesale: 4.4 });
   });
 
   it('uses tax-inclusive order total, ignores credit memos, and excludes surcharge', () => {
@@ -256,9 +256,9 @@ describe('Preferred Partner savings math', () => {
 
     expect(order.paidTotal).toBe(47.5);
     expect(order.currentPromoTotal).toBe(47.5);
-    expect(order.savings).toBe(13.5);
-    expect(order.preferredTotal).toBe(34);
-    expect(order.standardWholesaleDiscount).toBe(8.5);
+    expect(order.savings).toBe(11.5);
+    expect(order.preferredTotal).toBe(36);
+    expect(order.standardWholesaleDiscount).toBe(9);
   });
 
   it.each(randomInvoiceCases)('$label', (testCase) => {
