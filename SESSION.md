@@ -1,43 +1,10 @@
-# Session: Daily Briefing Cron Middleware Fix
+# Pricing catalog correction
 
-## Linked work
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/185
+Branch: codex/185-refresh-pricing
 
-- GitHub issue: intentionally skipped by explicit user direction after the public issue safety gate blocked incident-detail disclosure.
-- Branch: `codex/daily-briefing-middleware`
-- Production evidence: GitHub Actions run #36 exited with curl code 22; Vercel runtime logs returned `404` from edge middleware for `/api/cron/daily-briefing`.
-
-## Scope
-
-- Allow `/api/cron/daily-briefing` through the existing machine-to-machine cron middleware boundary.
-- Preserve the route's fail-closed `CRON_SECRET` bearer authorization.
-- Add focused regression coverage that fails on current `main` and passes with the fix.
-
-## Out of scope
-
-- Clerk provider, user-role, browser-session, or interactive sign-in changes.
-- Secret values, Vercel environment changes, SendGrid configuration, or production data writes.
-- Briefing ranking, timing, recipients, email content, schema, or database migrations.
-- Changes to `/Users/brycejohnson/Code/map-app`.
-
-## Constraints and architecture check
-
-- Surgical route-classification change in the existing middleware; no new auth abstraction.
-- The middleware may bypass Clerk only for the exact cron route. The route handler remains responsible for bearer-secret authorization.
-- Authentication-boundary change is approval-lane work and must not merge without the required PR approval comment and user reply.
-- Owned paths: `middleware.ts`, focused middleware test, `SESSION.md`.
-- Open PRs checked: #166, #144, #135, and #82. None owns middleware or daily-briefing cron paths.
-
-## Validation plan
-
-- RED: prove `/api/cron/daily-briefing` is currently passed to Clerk protection instead of reaching the route.
-- GREEN: add the exact route to the existing cron exemption and rerun the focused test.
-- Re-run cron authorization tests to confirm missing and incorrect secrets still fail closed.
-- Run `npm run verify`.
-- After an approved merge/deploy, verify a production scheduler invocation before claiming the incident resolved.
-
-## Current state
-
-- RED: the focused middleware regression observed `auth.protect()` called once for `/api/cron/daily-briefing` on the pre-fix implementation.
-- GREEN: the daily-briefing path now shares the existing exact cron-route exemption; focused middleware and cron-secret coverage pass (2 files, 5 tests).
-- `npm run verify`: passed lint, typecheck, 47 Vitest files / 203 tests, Prisma validation, and the production build.
-- Production remains unchanged pending approval-lane merge and deployment verification.
+Scope: refresh three superseded catalog entries and regression-test the shared pricing/comparison consumers.
+Owned paths: lib/preferred-partner/pricing.ts, lib/preferred-partner/pricing.test.ts, lib/server/preferred-partner-savings.test.ts, lib/server/preferred-partner-proposal.test.ts, SESSION.md.
+Out of scope: order/payment mutations, external-system writes, schema/auth, account-specific policies, redesign.
+Architecture: retain shared domain catalog; existing browser comparison/proposal flows consume its results.
+Validation: RED regression before catalog edit, focused tests, npm run verify, authenticated browser check when available.
