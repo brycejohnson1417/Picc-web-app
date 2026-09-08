@@ -88,7 +88,7 @@ describe('calculatePreferredPartnerProposalDraft', () => {
           skuInventoryClass: 'PRE_ROLL',
           skuInventoryCategory: 'SINGLE',
           skuCasePackSize: 10,
-          skuPricePerUnit: '3.40',
+          skuPricePerUnit: '3.60',
           warehouseCounts: [{ warehouseId: 'warehouse-a', available: 220, updatedAt: '2026-04-22T10:00:00.000Z' }],
         },
         {
@@ -113,12 +113,12 @@ describe('calculatePreferredPartnerProposalDraft', () => {
     expect(draft.lines.find((line) => line.sourceKind === 'demand')).toMatchObject({
       sourceKind: 'demand',
       quantity: 170,
-      unitPrice: 3.4,
+      unitPrice: 3.6,
     });
     expect(draft.breakdownRows).toHaveLength(2);
-    expect(draft.summary.currentPromoTotal).toBe(803);
+    expect(draft.summary.currentPromoTotal).toBe(837);
     expect(draft.summary.creditMemo).toBe(25);
-    expect(draft.summary.totalBalanceDue).toBe(778);
+    expect(draft.summary.totalBalanceDue).toBe(812);
     expect(draft.inputSummary.unmatchedRowCount).toBe(0);
   });
 
