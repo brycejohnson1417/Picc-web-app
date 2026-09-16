@@ -1,3 +1,5 @@
+import { orderRouteStops, splitRouteLegs, ROUTE_ORIGIN_ID } from '@/lib/territory/route-planning';
+import { geocodeAddress } from '@/lib/server/google-geocode';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
@@ -10,16 +12,18 @@ const GOOGLE_ROUTES_BASE = 'https://routes.googleapis.com/directions/v2:computeR
 const EARTH_RADIUS_METERS = 6_371_000;
 
 const stopSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().min(1).refine(id => id !== ROUTE_ORIGIN_ID),
   name: z.string().min(1),
-  lat: z.number().finite(),
-  lng: z.number().finite(),
+  lat: z.number().finite().min(-90).max(90),
+  lng: z.number().finite().min(-180).max(180),
 });
 
 const requestSchema = z.object({
   mode: z.enum(['car', 'bike', 'transit']),
   optimize: z.boolean().default(true),
-  stops: z.array(stopSchema).min(2).max(25),
+  stops: z.array(stopSchema).min(1).max(50).refine(stops => new Set(stops.map(s => s.id)).size === stops.length, 'Store IDs must be unique'),
+  origin: stopSchema.omit({ id: true }).optional(),
+  originAddress: z.string().trim().min(3).max(300).optional(),
 });
 
 type TerritoryStop = z.infer<typeof stopSchema>;
@@ -239,7 +243,7 @@ async function computeGoogleRoute(input: {
           },
         })),
         travelMode,
-        routingPreference,
+        ...(input.mode === 'car' ? { routingPreference } : {}),
         optimizeWaypointOrder: billedOptimizeSku,
         polylineQuality: 'HIGH_QUALITY',
         languageCode: 'en-US',
@@ -280,6 +284,10 @@ async function computeGoogleRoute(input: {
   if (Array.isArray(route.optimizedIntermediateWaypointIndex) && route.optimizedIntermediateWaypointIndex.length === intermediates.length) {
     const reorderedIntermediates = route.optimizedIntermediateWaypointIndex.map((index) => intermediates[index]).filter(Boolean);
     orderedStops = [origin, ...reorderedIntermediates, destination];
+  }
+
+  if (new Set(orderedStops.map(s => s.id)).size !== input.stops.length || route.legs?.length !== input.stops.length - 1) {
+    throw new Error('Google Routes returned an incomplete route');
   }
 
   const legs = (route.legs ?? []).map((leg, index) => ({
@@ -374,9 +382,36 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { mode, stops, optimize } = requestSchema.parse(body);
-    const payload = await optimizeForMode(mode, stops, optimize);
-    return NextResponse.json(payload);
+    const { mode, stops, optimize, origin: suppliedOrigin, originAddress } = requestSchema.parse(body);
+    let origin = suppliedOrigin;
+    if (originAddress) {
+      try {
+        const location = await geocodeAddress({ address: originAddress });
+        origin = { name: location.formattedAddress, lat: location.lat, lng: location.lng };
+      } catch {
+        return NextResponse.json({ error: 'Starting address could not be found. Check the address or use your current location.' }, { status: 400 });
+      }
+    }
+    if (stops.length < 2 && !origin) return NextResponse.json({ error: 'Add two stores or a starting location.' }, { status: 400 });
+    const originStop = origin ? { ...origin, id: ROUTE_ORIGIN_ID } : undefined;
+    const ordered = optimize ? orderRouteStops(stops, originStop) : [...(originStop ? [originStop] : []), ...stops];
+    const routes: TerritoryOptimizedRouteResponse[] = [];
+    for (const batch of splitRouteLegs(ordered)) routes.push(await optimizeForMode(mode, batch, optimize));
+    const warning = [...new Set(routes.map(r => r.warning).filter(Boolean))].join(' ');
+    const ids = routes.flatMap((r, i) => i ? r.orderedStopIds.slice(1) : r.orderedStopIds).filter(id => id !== ROUTE_ORIGIN_ID);
+    if (ids.length !== stops.length || new Set(ids).size !== stops.length) throw new Error('Route did not include every selected store');
+    return NextResponse.json({
+      ...routes[0], origin,
+      orderedStopIds: ids,
+      legs: routes.flatMap(r => r.legs),
+      totalDistanceMeters: routes.reduce((sum, r) => sum + r.totalDistanceMeters, 0),
+      totalDurationSeconds: routes.reduce((sum, r) => sum + r.totalDurationSeconds, 0),
+      estimationModel: routes.some(r => r.estimationModel === 'fallback-order') ? 'fallback-order' : routes[0].estimationModel,
+      warning: warning || undefined,
+      capExceeded: routes.some(r => r.capExceeded),
+      planningNote: mode === 'transit' ? 'Geographic stop order with estimated transit times; not live transit schedules.' : routes.length > 1 ? 'Geographic ordering across the full route, with Google road optimization in connected sections.' : undefined,
+      geometry: { type: 'LineString', coordinates: routes.flatMap((r, i) => i ? (r.geometry?.coordinates ?? []).slice(1) : r.geometry?.coordinates ?? []) },
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
