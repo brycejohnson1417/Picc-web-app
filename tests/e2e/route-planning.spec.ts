@@ -36,6 +36,7 @@ test('50 stores, starting address, optimization and navigable sections on mobile
     const origin = body.originAddress ? {name:'Verified starting address',lat:40.8,lng:-74} : body.origin;
     await route.fulfill({json:{ mode:body.mode, origin, orderedStopIds:body.stops.map((s:{id:string})=>s.id), legs:[], totalDurationSeconds:4000,totalDistanceMeters:8000,estimationModel:'google-routes',geometry:null }});
   });
+  await page.locator('summary').filter({hasText:'Starting location'}).click();
   await page.getByLabel('Starting location', {exact:true}).fill('100 Starting Avenue');
   await page.getByRole('button',{name:'Apply',exact:true}).click();
   await expect(page.getByText(/Start: Verified starting address/)).toBeVisible();
@@ -96,6 +97,7 @@ test('saves all 50 store IDs and displays the saved route', async ({page}) => {
 test('failed address leaves the existing route intact and can be corrected', async ({page})=>{
   await setup(page,27);
   await page.route('**/api/territory/optimize-route',route=>route.fulfill({status:400,json:{error:'Starting address could not be found.'}}));
+  await page.locator('summary').filter({hasText:'Starting location'}).click();
   await page.getByLabel('Starting location',{exact:true}).fill('Invalid address');
   await page.getByRole('button',{name:'Apply',exact:true}).click();
   await expect(page.getByRole('alert').filter({hasText:'Starting address could not be found.'})).toBeVisible();

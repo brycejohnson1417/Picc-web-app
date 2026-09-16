@@ -52,6 +52,7 @@ export function RouteMobile() {
   const [optMode, setOptMode] = useState<RouteMode>('car');
   const [optimizing, setOptimizing] = useState(false);
   const [originAddress, setOriginAddress] = useState('');
+  const [editingOrigin, setEditingOrigin] = useState(false);
   const [originError, setOriginError] = useState('');
   const [locating, setLocating] = useState(false);
   const [showDirections, setShowDirections] = useState(false);
@@ -153,7 +154,7 @@ export function RouteMobile() {
       const data = payload as TerritoryOptimizedRouteResponse;
       routePlan.setOptimizedRoute(data);
 
-      if (address) toast.success('Starting location applied');
+      if (requestedAddress) { setEditingOrigin(false); toast.success('Starting location applied'); }
       if (data.warning) {
         toast.warning(data.warning);
       } else if (data.estimationModel === 'transit-heuristic') {
@@ -189,6 +190,7 @@ export function RouteMobile() {
     navigator.geolocation.getCurrentPosition(position => {
       routePlan.setOrigin({ name: 'Current location', lat: position.coords.latitude, lng: position.coords.longitude });
       setLocating(false);
+      setEditingOrigin(false);
     }, () => { setOriginError('Location access failed. Allow location access or enter an address.'); setLocating(false); }, { timeout: 10000, maximumAge: 60000 });
   }
 
@@ -275,7 +277,8 @@ export function RouteMobile() {
                   <div><p className="font-semibold">{routePlan.selectedCount} / 50 stores</p><p className="text-sm text-slate-500">{activeOptimized ? 'Route calculated' : 'Ready to plan'}</p></div>
                   <button disabled={optimizing} onClick={() => setShowAddModal(true)} className="min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-blue-700 disabled:opacity-50">Choose Accounts</button>
                 </div>
-                <div className="mt-4 border-t border-slate-100 pt-4">
+                <details open={editingOrigin} onToggle={event => setEditingOrigin(event.currentTarget.open)} className="mt-3 border-t border-slate-100 pt-2">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm"><span><span className="block font-semibold">Starting location</span><span className="block text-slate-500">{routePlan.origin ? `Start: ${routePlan.origin.name}` : 'Start at first store'}</span></span><span className="font-medium text-blue-700">{editingOrigin ? 'Close' : 'Change'}</span></summary>
                   <label htmlFor="route-origin" className="block text-sm font-semibold">Starting location</label>
                   <form className="mt-2 flex gap-2" onSubmit={event => { event.preventDefault(); if (originAddress.trim()) void optimizeRoute(originAddress.trim()); }}>
                     <input id="route-origin" disabled={optimizing || locating} value={originAddress} onChange={event => { setOriginAddress(event.target.value); setOriginError(''); }} placeholder="Enter a street address" className="h-11 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-base" />
@@ -285,9 +288,9 @@ export function RouteMobile() {
                     <button disabled={locating || optimizing} onClick={useCurrentLocation} className="min-h-11 font-medium text-blue-700">{locating ? 'Finding location…' : 'Use current location'}</button>
                     {routePlan.origin ? <button disabled={optimizing} onClick={() => { routePlan.setOrigin(null); setOriginError(''); }} className="min-h-11 text-slate-600 underline">Remove start</button> : null}
                   </div>
-                  <p className="text-xs leading-5 text-slate-500">{routePlan.origin ? `Start: ${routePlan.origin.name}. This starting location stays on this device and applies to loaded routes.` : 'Without a starting location, the first store stays first.'}</p>
+                  <p className="text-xs leading-5 text-slate-500">{routePlan.origin ? 'Saved on this device; also used when loading routes.' : 'Without a starting location, the first store stays first.'}</p>
                   {originError ? <p role="alert" className="mt-2 text-sm text-red-700">{originError}</p> : null}
-                </div>
+                </details>
                 <fieldset disabled={optimizing || locating} className="mt-3">
                   <SegmentedControl
                     value={optMode}
@@ -382,7 +385,7 @@ export function RouteMobile() {
       )}
 
       {tab === 'current' && selectedStops.length > 0 ? (
-        <div className="fixed bottom-[var(--picc-bottom-nav-clearance)] left-0 right-0 z-[2600]">
+        <div className="fixed bottom-[var(--picc-bottom-nav-clearance)] left-0 right-0 z-[2600] md:bottom-[calc(var(--picc-bottom-nav-clearance)+12px)]">
           <div className="mx-auto grid max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#c4c5cc] bg-[#f3f3f6] py-2 text-[#5a95e7]">
             <button onClick={launchGo} className="mx-2 rounded-3xl bg-[#3ac128] px-2 py-2 text-[20px] font-bold text-white">
               GO
