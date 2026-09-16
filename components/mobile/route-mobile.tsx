@@ -1,5 +1,6 @@
 'use client';
 
+import * as Dialog from '@radix-ui/react-dialog';
 import { AlertTriangle, ArrowDown, ArrowUp, CalendarDays, Check, ChevronRight, ListChecks, Loader2, MapPin, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -12,6 +13,7 @@ import { MobileSearch } from '@/components/mobile/mobile-search';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
 import type { RouteMode, TerritoryOptimizedRouteResponse, TerritoryStorePin, TerritoryStoresResponse } from '@/lib/territory/types';
 import { useRoutePlan } from '@/lib/territory/route-plan-client';
+import { splitRouteLegs, ROUTE_ORIGIN_ID, type RouteLocation } from '@/lib/territory/route-planning';
 import { cn } from '@/lib/utils';
 
 function firstLetter(name: string) {
@@ -49,6 +51,11 @@ export function RouteMobile() {
   const [search, setSearch] = useState('');
   const [optMode, setOptMode] = useState<RouteMode>('car');
   const [optimizing, setOptimizing] = useState(false);
+  const [originAddress, setOriginAddress] = useState('');
+  const [originError, setOriginError] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [showDirections, setShowDirections] = useState(false);
+  useEffect(() => { setOriginAddress(routePlan.origin?.name ?? ''); }, [routePlan.origin?.name]);
 
   useEffect(() => {
     if (tab === 'current') {
@@ -95,6 +102,10 @@ export function RouteMobile() {
     return ids.map((id) => storeById.get(id)).filter((store): store is TerritoryStorePin => Boolean(store));
   }, [activeOptimized?.orderedStopIds, routePlan.orderedStopIds, selectedStops, storeById]);
 
+  const missingIds = routePlan.selectedStopIds.filter(id => !storeById.has(id));
+  const routeReady = missingIds.length === 0 && !storesQuery.isError && !storesQuery.isLoading && orderedStops.length <= 50;
+  const navigationStops = routePlan.origin ? [{ ...routePlan.origin, id: ROUTE_ORIGIN_ID }, ...orderedStops] : orderedStops;
+  const navigationSections = splitRouteLegs(navigationStops, optMode === 'transit' ? 2 : 5);
   const legs = activeOptimized?.legs ?? [];
   const totalDistanceMeters = activeOptimized?.totalDistanceMeters ?? legs.reduce((sum, leg) => sum + leg.distanceMeters, 0);
   const totalDurationSeconds = activeOptimized?.totalDurationSeconds ?? legs.reduce((sum, leg) => sum + leg.durationSeconds, 0);
@@ -112,19 +123,25 @@ export function RouteMobile() {
     routePlan.setOrderedStopIds(nextOrder);
   }
 
-  async function optimizeRoute() {
-    if (orderedStops.length < 2) {
+  async function optimizeRoute(address?: string) {
+    if (!routeReady) { toast.error('Resolve unavailable stores or reduce the route to 50 stores first.'); return; }
+    if (orderedStops.length < 2 && !routePlan.origin && !address) {
       toast.error('Add at least 2 locations to optimize.');
       return;
     }
 
+    const requestedAddress = address ?? (originAddress.trim() !== (routePlan.origin?.name ?? '') ? originAddress.trim() || undefined : undefined);
     setOptimizing(true);
+    setOriginError('');
     try {
       const response = await fetch('/api/territory/optimize-route', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: optMode,
+          optimize: !address,
+          origin: routePlan.origin ?? undefined,
+          originAddress: requestedAddress,
           stops: orderedStops.map((stop) => ({ id: stop.id, name: stop.name, lat: stop.lat, lng: stop.lng })),
         }),
       });
@@ -136,40 +153,43 @@ export function RouteMobile() {
       const data = payload as TerritoryOptimizedRouteResponse;
       routePlan.setOptimizedRoute(data);
 
+      if (address) toast.success('Starting location applied');
       if (data.warning) {
         toast.warning(data.warning);
       } else if (data.estimationModel === 'transit-heuristic') {
-        toast.success('Transit route optimized (ETA uses transit heuristic).');
-      } else {
+        toast.success('Stop order updated. Transit times are estimates.');
+      } else if (!address) {
         toast.success('Route optimized using road directions.');
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Optimization failed');
+      const message = error instanceof Error ? error.message : 'Optimization failed';
+      if (requestedAddress) setOriginError(message);
+      toast.error(message);
     } finally {
       setOptimizing(false);
     }
   }
 
+  function directionsUrl(section: RouteLocation[]) {
+    const coords = section.map(stop => `${stop.lat},${stop.lng}`);
+    const params = new URLSearchParams({ api: '1', travelmode: optMode === 'transit' ? 'transit' : optMode === 'bike' ? 'bicycling' : 'driving', origin: coords[0], destination: coords[coords.length - 1] });
+    if (coords.length > 2) params.set('waypoints', coords.slice(1, -1).join('|'));
+    return `https://www.google.com/maps/dir/?${params.toString()}`;
+  }
+
   function launchGo() {
-    if (orderedStops.length < 2) {
-      toast.error('Add at least 2 locations to launch directions.');
-      return;
-    }
+    if (!routeReady || !navigationSections.length) { toast.error('Add two stores or a starting location, and resolve unavailable stores.'); return; }
+    setShowDirections(true);
+  }
 
-    const coords = orderedStops.map((stop) => `${stop.lat},${stop.lng}`);
-    const googleMode = optMode === 'transit' ? 'transit' : optMode === 'bike' ? 'bicycling' : 'driving';
-
-    const params = new URLSearchParams({
-      api: '1',
-      travelmode: googleMode,
-      origin: coords[0],
-      destination: coords[coords.length - 1],
-    });
-
-    const waypoints = coords.slice(1, -1).join('|');
-    if (waypoints) params.set('waypoints', waypoints);
-
-    window.open(`https://www.google.com/maps/dir/?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  function useCurrentLocation() {
+    setOriginError('');
+    if (!navigator.geolocation) { setOriginError('Location is unavailable. Enter a starting address instead.'); return; }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(position => {
+      routePlan.setOrigin({ name: 'Current location', lat: position.coords.latitude, lng: position.coords.longitude });
+      setLocating(false);
+    }, () => { setOriginError('Location access failed. Allow location access or enter an address.'); setLocating(false); }, { timeout: 10000, maximumAge: 60000 });
   }
 
   function launchCalendarDraft() {
@@ -185,14 +205,14 @@ export function RouteMobile() {
     const params = new URLSearchParams({
       action: 'TEMPLATE',
       text: `PICC ${optMode === 'transit' ? 'Transit' : optMode === 'bike' ? 'Bike' : 'Driving'} Route - ${new Date().toLocaleDateString()}`,
-      details,
+      details: `${routePlan.origin ? `Start: ${routePlan.origin.name}\n` : ''}${details}`,
     });
 
     window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank', 'noopener,noreferrer');
   }
 
   return (
-    <div className="min-h-[calc(100dvh-92px)] bg-[#e6e6e9]">
+    <div className="min-h-[calc(100dvh-92px)] bg-[#f3f5f8] text-slate-900">
       <MobileHeader
         title="Route"
         right={
@@ -201,7 +221,7 @@ export function RouteMobile() {
               {savedEditing ? 'Done' : 'Edit'}
             </button>
           ) : (
-            <button type="button" className="grid h-10 w-10 place-items-center" onClick={() => setShowAddModal(true)} aria-label="Choose route accounts">
+            <button type="button" className="grid h-10 w-10 place-items-center" onClick={() => setShowAddModal(true)} aria-label="Choose route accounts" disabled={optimizing}>
               <ListChecks className="h-8 w-8" />
             </button>
           )
@@ -219,6 +239,15 @@ export function RouteMobile() {
 
       {tab === 'current' ? (
         <div className={cn(selectedStops.length > 0 ? 'pb-[172px]' : 'pb-6')}>
+          {routePlan.selectedCount > 50 ? <p role="alert" className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">This route contains more than 50 stores. Remove stores to enable optimization.</p> : null}
+          {storesQuery.isLoading ? <p role="status" className="px-4 py-3 text-sm text-slate-600">Loading route accounts…</p> : null}
+          {storesQuery.isError || (!storesQuery.isLoading && missingIds.length > 0) ? (
+            <div role="alert" className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              <p>{storesQuery.isError ? 'Accounts could not be loaded.' : `${missingIds.length} selected ${missingIds.length === 1 ? 'store is' : 'stores are'} unavailable. Your selection has been kept.`}</p>
+              <button className="min-h-11 font-semibold underline" onClick={() => void storesQuery.refetch()}>Retry accounts</button>
+              {!storesQuery.isError ? missingIds.map((id, index) => <div key={id} className="flex items-center justify-between gap-3"><span>Unavailable store {index + 1}</span><button className="min-h-11 underline" onClick={() => routePlan.removeStop(id)}>Remove unavailable store {index + 1}</button></div>) : null}
+            </div>
+          ) : null}
           {selectedStops.length === 0 ? (
             <div className="px-5 py-5">
               <div className="rounded-xl border border-[#cfd3dc] bg-white p-5 shadow-[0_16px_36px_rgba(24,33,45,0.08)]">
@@ -241,14 +270,25 @@ export function RouteMobile() {
             </div>
           ) : (
             <>
-              <div className="border-b border-[#c9cad0] px-6 py-5">
-                <button onClick={() => setShowAddModal(true)} className="w-full rounded-[38px] bg-[#4f8edf] px-6 py-4 text-[23px] font-semibold text-white">
-                  Choose Accounts
-                </button>
-                <p className="mt-3 text-center text-[20px] font-semibold text-[#595c62]">
-                  <Check className="mr-2 inline h-6 w-6" /> Route Updated
-                </p>
-                <div className="mt-3">
+              <div className="border-b border-slate-200 bg-white px-4 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div><p className="font-semibold">{routePlan.selectedCount} / 50 stores</p><p className="text-sm text-slate-500">{activeOptimized ? 'Route calculated' : 'Ready to plan'}</p></div>
+                  <button disabled={optimizing} onClick={() => setShowAddModal(true)} className="min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-blue-700 disabled:opacity-50">Choose Accounts</button>
+                </div>
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <label htmlFor="route-origin" className="block text-sm font-semibold">Starting location</label>
+                  <form className="mt-2 flex gap-2" onSubmit={event => { event.preventDefault(); if (originAddress.trim()) void optimizeRoute(originAddress.trim()); }}>
+                    <input id="route-origin" disabled={optimizing || locating} value={originAddress} onChange={event => { setOriginAddress(event.target.value); setOriginError(''); }} placeholder="Enter a street address" className="h-11 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-base" />
+                    <button disabled={optimizing || locating || !originAddress.trim() || !routeReady} className="min-h-11 rounded-lg bg-blue-700 px-3 text-sm font-semibold text-white disabled:opacity-50">{optimizing ? 'Working…' : 'Apply'}</button>
+                  </form>
+                  <div className="flex flex-wrap items-center gap-x-4 text-sm">
+                    <button disabled={locating || optimizing} onClick={useCurrentLocation} className="min-h-11 font-medium text-blue-700">{locating ? 'Finding location…' : 'Use current location'}</button>
+                    {routePlan.origin ? <button disabled={optimizing} onClick={() => { routePlan.setOrigin(null); setOriginError(''); }} className="min-h-11 text-slate-600 underline">Remove start</button> : null}
+                  </div>
+                  <p className="text-xs leading-5 text-slate-500">{routePlan.origin ? `Start: ${routePlan.origin.name}. This starting location stays on this device and applies to loaded routes.` : 'Without a starting location, the first store stays first.'}</p>
+                  {originError ? <p role="alert" className="mt-2 text-sm text-red-700">{originError}</p> : null}
+                </div>
+                <fieldset disabled={optimizing || locating} className="mt-3">
                   <SegmentedControl
                     value={optMode}
                     onChange={(value) => {
@@ -257,45 +297,47 @@ export function RouteMobile() {
                     }}
                     options={MODE_OPTIONS}
                   />
-                </div>
-                {optMode === 'transit' ? <p className="mt-2 text-center text-[14px] text-[#64666d]">Transit optimization uses route + transfer heuristics, then opens Google Transit directions.</p> : null}
+                </fieldset>
+                {optMode === 'transit' ? <p className="mt-2 text-center text-[14px] text-[#64666d]">Transit times are geographic estimates, not live schedules.</p> : null}
               </div>
 
-              <div className="border-b border-[#c7c8ce] px-4 py-2 text-[#6f7278]">
+              {activeOptimized?.warning ? <p role="alert" className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">Road directions unavailable. Distances and times below are straight-line estimates. Try optimizing again.</p> : null}
+              {activeOptimized?.planningNote ? <p className="bg-blue-50 px-4 py-2 text-xs leading-5 text-blue-900">{activeOptimized.planningNote}</p> : null}
+              <div className="border-b border-slate-200 px-4 py-3 text-slate-600">
                 <p className="text-[16px]">{new Date().toLocaleDateString()}</p>
                 <p className="flex items-center justify-between text-[19px] font-semibold">
                   CURRENT ROUTE
-                  <span className="text-[#4f8edf]">{formatDuration(totalDurationSeconds)} · {formatDistance(totalDistanceMeters)}</span>
+                  <span className="text-sm text-blue-700">{activeOptimized ? `${formatDuration(totalDurationSeconds)} · ${formatDistance(totalDistanceMeters)}` : 'Optimize for travel times'}</span>
                 </p>
               </div>
 
               {orderedStops.map((stop, index) => {
-                const previousLeg = legs[index - 1];
+                const previousLeg = legs.find(leg => leg.toStopId === stop.id);
 
                 return (
                   <div key={stop.id}>
-                    {index > 0 ? (
+                    {previousLeg ? (
                       <p className="bg-[#d9d9dd] px-6 py-1 text-[16px] text-[#7a7d83]">
                         Travel {formatDuration(previousLeg?.durationSeconds ?? 0)} · {formatDistance(previousLeg?.distanceMeters ?? 0)}
                       </p>
                     ) : null}
-                    <div className="grid grid-cols-[36px_38px_minmax(0,1fr)_28px] items-start gap-3 border-b border-[#cbccd2] px-4 py-3">
+                    <div className="grid grid-cols-[44px_28px_minmax(0,1fr)_44px] items-center gap-2 border-b border-slate-200 bg-white px-3 py-3">
                       <div className="flex flex-col items-center gap-1">
                         <button
                           type="button"
                           aria-label={`Move ${stop.name} up`}
-                          className="grid h-4 w-4 place-items-center rounded text-[#7d8088] disabled:text-[#c9cad0]"
+                          className="grid h-11 w-11 place-items-center rounded text-slate-500 hover:bg-slate-100 disabled:text-slate-200"
                           onClick={() => moveStop(stop.id, 'up')}
-                          disabled={index === 0}
+                          disabled={optimizing || index === 0}
                         >
                           <ArrowUp className="h-4 w-4" />
                         </button>
                         <button
                           type="button"
                           aria-label={`Move ${stop.name} down`}
-                          className="grid h-4 w-4 place-items-center rounded text-[#7d8088] disabled:text-[#c9cad0]"
+                          className="grid h-11 w-11 place-items-center rounded text-slate-500 hover:bg-slate-100 disabled:text-slate-200"
                           onClick={() => moveStop(stop.id, 'down')}
-                          disabled={index === orderedStops.length - 1}
+                          disabled={optimizing || index === orderedStops.length - 1}
                         >
                           <ArrowDown className="h-4 w-4" />
                         </button>
@@ -305,18 +347,19 @@ export function RouteMobile() {
                         <button
                           type="button"
                           onClick={() => router.push(`/accounts?storeId=${encodeURIComponent(stop.id)}`)}
-                          className="block w-full text-left text-[23px] font-semibold leading-[1.15] text-[#3c3e44] whitespace-normal break-words"
+                          className="block w-full text-left text-base font-semibold leading-snug text-slate-900 whitespace-normal break-words"
                         >
                           {stop.name}
                         </button>
-                        <p className="mt-1 text-[14px] text-[#979aa2]">
-                          {index === 0 ? 'Start stop' : `Stop ${index + 1}`}
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          {stop.locationAddress || `Stop ${index + 1}`}
                         </p>
+                        <span className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: stop.statusColor || '#64748b' }} />{stop.status || 'Status unavailable'}</span>
                       </div>
                       <button
                         type="button"
                         aria-label={`Remove ${stop.name}`}
-                        className="mt-1 grid h-8 w-8 place-items-center rounded-lg text-[#9da0a8]"
+                        disabled={optimizing} className="grid h-11 w-11 place-items-center rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-700"
                         onClick={() => routePlan.removeStop(stop.id)}
                       >
                         <Trash2 className="h-5 w-5" />
@@ -344,7 +387,7 @@ export function RouteMobile() {
             <button onClick={launchGo} className="mx-2 rounded-3xl bg-[#3ac128] px-2 py-2 text-[20px] font-bold text-white">
               GO
             </button>
-            <ActionIconButton label={optimizing ? '...' : 'optimize'} onClick={optimizeRoute} icon={<RotateCcw className="h-7 w-7" />} disabled={optimizing} />
+            <ActionIconButton label={optimizing ? '...' : 'optimize'} onClick={() => void optimizeRoute()} icon={<RotateCcw className="h-7 w-7" />} disabled={optimizing || locating || !routeReady} />
             <ActionIconButton
               label="save"
               onClick={async () => {
@@ -376,6 +419,7 @@ export function RouteMobile() {
             />
             <ActionIconButton
               label="clear"
+              disabled={optimizing}
               onClick={() => {
                 routePlan.clearStops();
               }}
@@ -386,6 +430,16 @@ export function RouteMobile() {
         </div>
       ) : null}
 
+      <Dialog.Root open={showDirections} onOpenChange={setShowDirections}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[5200] bg-slate-950/40" />
+          <Dialog.Content className="fixed bottom-0 left-1/2 z-[5201] max-h-[80dvh] w-full max-w-[var(--app-shell-max)] -translate-x-1/2 overflow-auto rounded-t-2xl bg-white p-5 pb-8 text-slate-900">
+            <div className="flex items-center justify-between"><Dialog.Title className="text-lg font-semibold">Route directions</Dialog.Title><Dialog.Close aria-label="Close directions" className="grid h-11 w-11 place-items-center"><X className="h-5 w-5" /></Dialog.Close></div>
+            <Dialog.Description className="mb-3 text-sm text-slate-600">Open each section in order. Sections share their connecting stop so Google Maps keeps every store.</Dialog.Description>
+            {navigationSections.map((section, index) => <a key={index} href={directionsUrl(section)} target="_blank" rel="noopener noreferrer" className="mb-2 block rounded-lg border border-slate-200 px-4 py-3 hover:bg-blue-50"><span className="font-semibold text-blue-700">Section {index + 1} of {navigationSections.length}</span><span className="mt-1 block text-sm text-slate-600">{section[0].name} → {section[section.length - 1].name}</span></a>)}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       {showAddModal ? (
         <AddLocationModal
           stores={stores}
