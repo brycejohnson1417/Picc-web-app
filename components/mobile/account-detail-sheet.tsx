@@ -12,6 +12,7 @@ import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-pan
 import { PreferredPartnerProposalPanel } from '@/components/crm/preferred-partner-proposal-panel';
 import { PreferredPartnerSavingsPanel } from '@/components/crm/preferred-partner-savings-panel';
 import { SegmentedControl } from '@/components/mobile/segmented-control';
+import { NavigationChooser } from '@/components/territory/navigation-chooser';
 import { NotionOptionChip } from '@/components/shared/notion-option-chip';
 import { Button, Textarea } from '@/components/ui';
 import type { RuntimeFreshness } from '@/lib/runtime/account-contact-contract';
@@ -279,7 +280,6 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   const contacts = detail?.contacts ?? [];
   const crm = detail?.crm;
   const isPreferredPartner = Boolean(activeStore.isPreferredPartner);
-  const navigateUrl = `https://www.google.com/maps/dir/?api=1&destination=${activeStore.lat},${activeStore.lng}`;
   const notionUrl = `https://www.notion.so/${activeStore.notionPageId.replace(/-/g, '')}`;
   const addressValue = activeStore.locationAddress ?? activeStore.locationLabel ?? 'No address';
   const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${activeStore.lat},${activeStore.lng}`;
@@ -894,12 +894,19 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
             <ActionButton label={routeSelected ? 'remove' : 'add to...'} onClick={() => onAddToRoute(activeStore.id)} icon={<MapPinned className="h-5 w-5" />} />
             {appAccess.canEdit ? <ActionButton label={checkingIn ? 'saving...' : 'check-in'} onClick={() => openCheckInModal()} icon={<PencilLine className="h-5 w-5" />} disabled={checkingIn} /> : null}
             <ActionButton label="center" onClick={handleCenter} icon={<MapPinned className="h-5 w-5" />} />
-            <a href={navigateUrl} target="_blank" rel="noreferrer" className={cn(actionBaseClass, 'text-center')}>
-              <Navigation className="h-5 w-5" />
-              <span>navigate</span>
-            </a>
+            <ActionButton label="navigate" onClick={() => setNavChooserOpen(true)} icon={<Navigation className="h-5 w-5" />} />
           </div>
         </div>
+        <NavigationChooser
+          open={navChooserOpen}
+          onClose={() => setNavChooserOpen(false)}
+          destination={{
+            lat: activeStore.lat,
+            lng: activeStore.lng,
+            address: activeStore.locationAddress ?? activeStore.locationLabel ?? null,
+            label: activeStore.name,
+          }}
+        />
       </div>
     </div>
   );
