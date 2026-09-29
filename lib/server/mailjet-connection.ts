@@ -2,7 +2,7 @@ import 'server-only';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@/lib/db/prisma';
-import { sendMailjetMessage, verifyMailjetSender, type MailjetConfig } from '@/lib/email/mailjet';
+import { verifyMailjetSender, type MailjetConfig } from '@/lib/email/mailjet';
 
 export class MailjetSettingsError extends Error {}
 const storedSchema = z.object({ fromEmail: z.string().email(), fromName: z.string(), encryptedKey: z.string(), encryptedSecret: z.string() });
@@ -19,7 +19,7 @@ export function encryptMailjetSecret(orgId: string, value: string) {
   const data = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
   return ['v1',iv.toString('base64url'),cipher.getAuthTag().toString('base64url'),data.toString('base64url')].join('.');
 }
-function decrypt(orgId: string, value: string) {
+export function decryptMailjetSecret(orgId: string, value: string) {
   const [version,iv,tag,data,extra] = value.split('.');
   if (version !== 'v1' || !iv || !tag || !data || extra) throw new MailjetSettingsError('Saved credentials could not be opened. Reconnect Mailjet.');
   const cipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(iv,'base64url'));
@@ -33,7 +33,7 @@ export async function getMailjetConfig(orgId: string): Promise<MailjetConfig | n
   const row = await connection(orgId);
   if (!row?.enabled) return null;
   const config = storedSchema.parse(row.config);
-  return {apiKey:decrypt(orgId,config.encryptedKey),apiSecret:decrypt(orgId,config.encryptedSecret),fromEmail:config.fromEmail,fromName:config.fromName};
+  return {apiKey:decryptMailjetSecret(orgId,config.encryptedKey),apiSecret:decryptMailjetSecret(orgId,config.encryptedSecret),fromEmail:config.fromEmail,fromName:config.fromName};
 }
 export async function getMailjetStatus(orgId: string) {
   const row = await connection(orgId);
@@ -56,10 +56,11 @@ export async function disconnectMailjet(orgId: string) {
   await prisma.integrationConnection.updateMany({where:{id:connectionId(orgId),orgId,provider:'MAILJET'},data:{enabled:false,status:'IDLE',config:{},lastSyncedAt:null}});
   return getMailjetStatus(orgId);
 }
-export async function testMailjetConnection(orgId: string, recipient: string) {
+export async function testMailjetConnection(orgId: string, recipient: string, requestId: string = randomUUID()) {
   const config = await getMailjetConfig(orgId);
   if (!config) throw new MailjetSettingsError('Connect Mailjet before sending a test.');
-  const result = await sendMailjetMessage(config,{to:recipient,subject:'PICC email connection test',text:'Your PICC Mailjet connection submitted this test email. Confirm that it arrived in the expected inbox.',html:'<p>Your PICC Mailjet connection submitted this test email. Confirm that it arrived in the expected inbox.</p>',idempotencyKey:`mailjet-test-${randomUUID()}`});
+  const { dispatchMailjetEmail } = await import('./mailjet-dispatch');
+  const result = await dispatchMailjetEmail(orgId,config,{to:recipient,subject:'PICC email connection test',text:'Your PICC Mailjet connection submitted this test email. Confirm that it arrived in the expected inbox.',html:'<p>Your PICC Mailjet connection submitted this test email. Confirm that it arrived in the expected inbox.</p>',idempotencyKey:`mailjet-test-${requestId}`});
   if (result.status !== 'SENT') throw new MailjetSettingsError(result.error || 'Mailjet did not accept the test email.');
   return {accepted:true,recipient,providerMessageId:result.providerMessageId};
 }

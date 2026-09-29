@@ -1,3 +1,4 @@
+import { GMAIL_INSERT_SCOPE } from '@/lib/server/gmail-sent-copy';
 import { parseGmailMessage, type GmailMessagePayload, type ParsedGmailMessage } from '@/lib/gmail/gmail-domain';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -40,7 +41,7 @@ export function gmailConfigurationStatus() {
   };
 }
 
-export function buildGmailAuthorizationUrl(state: string) {
+export function buildGmailAuthorizationUrl(state: string, sentCopies = false) {
   const config = gmailConfig();
   const query = new URLSearchParams({
     client_id: config.clientId,
@@ -49,7 +50,7 @@ export function buildGmailAuthorizationUrl(state: string) {
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
-    scope: `openid email ${GMAIL_READONLY_SCOPE}`,
+    scope: `openid email ${GMAIL_READONLY_SCOPE}${sentCopies ? ` ${GMAIL_INSERT_SCOPE}` : ''}`,
     state,
   });
   return `${GOOGLE_AUTH_URL}?${query}`;

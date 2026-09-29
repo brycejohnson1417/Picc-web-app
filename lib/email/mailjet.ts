@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export type MailjetConfig = { apiKey: string; apiSecret: string; fromEmail: string; fromName: string };
-export type MailjetMessage = { to: string; subject: string; html: string; text?: string; idempotencyKey: string };
+export type MailjetMessage = { to: string; subject: string; html: string; text?: string; idempotencyKey: string; messageId?: string };
 export type EmailResult = { status: 'SENT' | 'FAILED' | 'UNAVAILABLE'; providerMessageId: string | null; error: string | null };
 const headers = (config: MailjetConfig) => ({ Authorization: `Basic ${Buffer.from(`${config.apiKey}:${config.apiSecret}`).toString('base64')}`, 'Content-Type': 'application/json' });
 
@@ -26,6 +26,8 @@ export async function sendMailjetMessage(config: MailjetConfig, input: MailjetMe
     const response = await request('https://api.mailjet.com/v3.1/send', {
       method: 'POST', headers: headers(config), signal: AbortSignal.timeout(15_000), redirect: 'error',
       body: JSON.stringify({ Messages: [{ From: { Email: config.fromEmail, Name: config.fromName }, To: [{ Email: input.to }],
+        ...(input.messageId ? { Headers: { 'X-PICC-Archive-ID': input.messageId } } : {}),
+        ReplyTo: { Email: config.fromEmail, Name: config.fromName },
         Subject: input.subject, HTMLPart: input.html, ...(input.text ? { TextPart: input.text } : {}),
         CustomID: input.idempotencyKey.slice(0, 255), CustomCampaign: campaign, DeduplicateCampaign: true }] }),
     });

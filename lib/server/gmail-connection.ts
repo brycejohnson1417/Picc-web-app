@@ -34,7 +34,7 @@ async function withGmailConnectionTable<T>(query: () => Promise<T>) {
 export function getGmailConnectionStatus(orgId: string, clerkUserId: string) {
   return withGmailConnectionTable(() => prisma.gmailConnection.findUnique({
     where: { orgId_clerkUserId: { orgId, clerkUserId } },
-    select: { mailboxEmail: true, status: true, lastSyncedAt: true, lastError: true, updatedAt: true },
+    select: { sentCopiesEnabled: true, grantedScope: true, mailboxEmail: true, status: true, lastSyncedAt: true, lastError: true, updatedAt: true },
   }));
 }
 

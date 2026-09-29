@@ -21,3 +21,10 @@ it('returns safe failure on network errors without retrying a potentially accept
 it('rejects inactive sender validation', async () => {
   await expect(verifyMailjetSender(config,vi.fn().mockResolvedValue(Response.json({Data:[{Email:config.fromEmail,Status:'Inactive'}]})))).rejects.toThrow('verified sender');
 });
+it('uses an archive correlation header without overriding Mailjet Message-Id',async()=>{
+ const request=vi.fn().mockResolvedValue(Response.json({Messages:[{Status:'success',To:[{MessageUUID:'id'}]}]}));
+ await sendMailjetMessage(config,{...message,messageId:'picc-archive@example.com'},request);
+ const sent=JSON.parse(request.mock.calls[0][1].body).Messages[0];
+ expect(sent.Headers).toEqual({'X-PICC-Archive-ID':'picc-archive@example.com'});
+ expect(sent.Headers['Message-ID']).toBeUndefined();expect(sent.ReplyTo.Email).toBe(config.fromEmail);
+});

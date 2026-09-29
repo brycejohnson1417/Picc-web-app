@@ -1,0 +1,13 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+const m=vi.hoisted(()=>({guard:vi.fn(),connection:vi.fn(),list:vi.fn(),find:vi.fn(),update:vi.fn(),copy:vi.fn()}));
+vi.mock('@/lib/auth/api-guard',()=>({guard:m.guard}));
+vi.mock('@/lib/db/prisma',()=>({prisma:{gmailConnection:{findUnique:m.connection,update:m.update},mailjetDispatch:{findMany:m.list,findFirst:m.find}}}));
+vi.mock('@/lib/server/mailjet-dispatch',()=>({copyDispatchToGmail:m.copy}));
+import { GET, PATCH, POST } from '@/app/api/integrations/gmail/sent-copies/route';
+const req=(method:string,data:unknown)=>new Request('http://localhost/api/integrations/gmail/sent-copies',{method,body:JSON.stringify(data)});
+beforeEach(()=>{vi.resetAllMocks();m.guard.mockResolvedValue({orgId:'org',userId:'user'});m.connection.mockResolvedValue({id:'connection',mailboxEmail:'sender@example.com',sentCopiesEnabled:true,grantedScope:'https://www.googleapis.com/auth/gmail.insert'});m.list.mockResolvedValue([]);});
+it('lists only the signed-in mailbox sender inside its own organization',async()=>{expect((await GET())!.status).toBe(200);expect(m.list.mock.calls[0][0].where).toEqual({orgId:'org',fromEmail:'sender@example.com'});});
+it('cannot opt in without insertion consent',async()=>{m.connection.mockResolvedValue({id:'connection',grantedScope:'readonly'});expect((await PATCH(req('PATCH',{enabled:true})))!.status).toBe(409);expect(m.update).not.toHaveBeenCalled();});
+it('a foreign dispatch cannot be copied',async()=>{m.find.mockResolvedValue(null);expect((await POST(req('POST',{id:'a'.repeat(64)})))!.status).toBe(404);expect(m.copy).not.toHaveBeenCalled();expect(m.find.mock.calls[0][0].where).toEqual({id:'a'.repeat(64),orgId:'org',fromEmail:'sender@example.com'});});
+it('retries only the scoped copy service',async()=>{m.find.mockResolvedValue({id:'a'.repeat(64)});expect((await POST(req('POST',{id:'a'.repeat(64)})))!.status).toBe(200);expect(m.copy).toHaveBeenCalledWith('org','a'.repeat(64),'user');});
+it('stops before data access when the role guard denies access',async()=>{m.guard.mockResolvedValue({error:new Response(null,{status:403})});expect((await GET())!.status).toBe(403);expect(m.connection).not.toHaveBeenCalled();});
