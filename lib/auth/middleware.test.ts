@@ -24,7 +24,7 @@ describe('middleware cron route boundary', () => {
     vi.stubEnv('NODE_ENV', 'production');
   });
 
-  it.each(['/api/accounts', '/territory', '/home', '/sign-in'])('fails closed at %s with production test keys', async (pathname) => {
+  it.each(['/api/accounts', '/territory', '/home', '/sign-in', '/', '/sso-callback', '/sso-callback/complete'])('fails closed at %s with production test keys', async (pathname) => {
     vi.stubEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', 'pk_test_example');
     vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_example');
     vi.stubEnv('DEMO_MODE', 'true');

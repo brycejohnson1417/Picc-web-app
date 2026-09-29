@@ -15,7 +15,7 @@ const isProtectedRoute = createRouteMatcher([
   '/api/(.*)',
 ]);
 const isApiRoute = createRouteMatcher(['/api/(.*)']);
-const isSignInRoute = createRouteMatcher(['/sign-in(.*)']);
+const isAuthEntryRoute = createRouteMatcher(['/', '/sign-in(.*)', '/sso-callback(.*)']);
 const isCronSyncRoute = createRouteMatcher(['/api/cron/notion-sync', '/api/cron/nabis-sync', '/api/cron/daily-briefing']);
 const isPublicWebhookRoute = createRouteMatcher(['/api/webhooks/notion']);
 const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
@@ -73,7 +73,7 @@ function fallbackBypassMiddleware(req: NextRequest) {
     );
   }
 
-  if (isProtectedRoute(req) || isSignInRoute(req)) {
+  if (isProtectedRoute(req) || isAuthEntryRoute(req)) {
     return new NextResponse(AUTH_CONFIGURATION_MESSAGE, {
       status: 503,
       headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
