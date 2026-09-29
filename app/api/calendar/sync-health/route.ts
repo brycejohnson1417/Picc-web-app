@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
-import { getCalendarSyncHealth } from '@/lib/server/calendar-sync-health';
 import { getUserRole } from '@/lib/rbac/guards';
 
 export const dynamic = 'force-dynamic';
@@ -32,8 +31,10 @@ export async function GET() {
       );
     }
 
-    const payload = await getCalendarSyncHealth(ctx.orgId);
-    return NextResponse.json(payload, { headers: responseHeaders() });
+    return NextResponse.json(
+      { error: 'Worker calendar sync has been retired.' },
+      { status: 410, headers: responseHeaders() },
+    );
   } catch (error) {
     console.error('[picc-calendar-sync-health]', error);
     return NextResponse.json(
