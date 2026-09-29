@@ -37,7 +37,7 @@ export async function sendBriefingForUser(input: { orgId: string; clerkUserId: s
     const existing = await prisma.dailyBriefingDelivery.findUnique({ where: { orgId_clerkUserId_localDate: { orgId: input.orgId, clerkUserId: input.clerkUserId, localDate: date } } });
     if (existing?.status === IntegrationSyncStatus.SUCCESS) return { status: 'already_sent' as const };
   }
-  const territory = await loadTerritoryStores({ preferredPartnerFilter: 'all' });
+  const territory = await loadTerritoryStores({ orgId: input.orgId, preferredPartnerFilter: 'all' });
   const assignmentEmail = gmail?.mailboxEmail || preference.briefingRecipientEmail;
   const briefing = buildDailyBriefing(territory.stores.map(toBriefingStore), assignmentEmail, date);
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://piccnewyork.org').replace(/\/$/, '');
