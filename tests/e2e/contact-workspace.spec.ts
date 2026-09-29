@@ -339,6 +339,41 @@ test('lets the signed-in rep inspect and explicitly disconnect their Gmail', asy
   await expect(page.getByRole('button', { name: 'Connect my Gmail' })).toBeVisible();
 });
 
+test('shows Gmail setup errors in Settings and lets the rep retry', async ({ page }) => {
+  let attempts = 0;
+  await page.route('**/api/integrations/gmail', async (route) => {
+    attempts += 1;
+    if (attempts === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Gmail setup is temporarily unavailable. Ask an administrator to finish setup, then try again.' }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ configuration: { configured: true, redirectUri: null }, connection: null }),
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/settings#connected-services');
+  const setupError = page.getByText('Gmail setup is temporarily unavailable. Ask an administrator to finish setup, then try again.');
+  await expect(setupError).toBeVisible();
+  if (process.env.PICC_EVIDENCE_DIR) {
+    await setupError.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${process.env.PICC_EVIDENCE_DIR}/gmail-setup-error-mobile.png` });
+  }
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.getByText('Not connected')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Connect my Gmail' })).toBeVisible();
+  if (process.env.PICC_EVIDENCE_DIR) {
+    await page.screenshot({ path: `${process.env.PICC_EVIDENCE_DIR}/gmail-setup-recovered-mobile.png` });
+  }
+});
+
 test('saves action defaults and can explicitly send a daily debrief now', async ({ page }) => {
   let preference = { defaultEmailDays: 7, defaultTextDays: 3, defaultCallDays: 1, resurfaceAfterDays: 30, dailyBriefingEnabled: false, dailyBriefingTime: '08:00', timezone: 'America/New_York', briefingRecipientEmail: 'rep@picc.co' };
   let savedPayload: typeof preference | null = null;

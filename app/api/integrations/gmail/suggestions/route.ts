@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
 import { extractMailboxPeople, normalizeMailboxEmail } from '@/lib/gmail/gmail-domain';
-import { getGmailAccess, GmailNotConnectedError } from '@/lib/server/gmail-connection';
+import {
+  getGmailAccess,
+  GMAIL_SETUP_UNAVAILABLE_MESSAGE,
+  GmailIntegrationUnavailableError,
+  GmailNotConnectedError,
+} from '@/lib/server/gmail-connection';
 import { listGmailMessages } from '@/lib/server/gmail-provider';
 import { loadAccountContactRuntime } from '@/lib/server/account-contact-runtime';
 
@@ -20,7 +25,12 @@ export async function GET() {
       .slice(0, 20);
     return NextResponse.json({ suggestions, mailboxEmail: connection.mailboxEmail });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Suggested contacts could not be loaded';
-    return NextResponse.json({ error: message }, { status: error instanceof GmailNotConnectedError ? 409 : 502 });
+    if (error instanceof GmailNotConnectedError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof GmailIntegrationUnavailableError) {
+      return NextResponse.json({ error: GMAIL_SETUP_UNAVAILABLE_MESSAGE }, { status: 503 });
+    }
+    return NextResponse.json({ error: 'Suggested contacts could not be loaded. Try again.' }, { status: 502 });
   }
 }
