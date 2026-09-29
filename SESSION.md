@@ -1,16 +1,18 @@
-# Issue 192: runtime dependency security patches
+# Issue 90: production authentication must fail closed
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/192
-Branch: codex/192-dependency-patches from main 28f021f.
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/90
+Branch: codex/90-production-auth, based on origin/main 28f021f.
 
-Scope: supported Next.js 15 patches, sharp security release, compatible transitive dependency fixes, current audit proof.
-Out of scope: framework-major migration, xlsx replacement (#107), application refactors, schema/auth/provider changes.
-Owned paths: package.json, package-lock.json, SESSION.md.
-Checked PRs 190,191,189,182,166,144,135,82; no focused package overlap other than obsolete architecture rewrite #144. Source slices stay independent; resolve shared handoff only after a preceding merge.
+Scope: prevent production demo/admin bypass, reject invalid production Clerk configuration consistently at middleware/API boundaries, retain explicit local demo mode.
+Out of scope: OAuth permissions, provider replacement, membership changes, production environment edits, schema/data writes, UI redesign.
 
-TDD exception: package metadata changes are measured with npm audit and the full existing regression suite, not mirrored unit tests. Run clean npm ci, npm run verify, and representative browser checks. Keep a before/after audit and explicitly report unresolved findings. Do not use audit fix --force.
-Architecture remains root Next.js app, Clerk, Prisma and existing integrations. This is reversible dependency patching.
+Owned paths: lib/config/runtime.ts, lib/config/runtime.test.ts, middleware.ts, lib/auth/middleware.test.ts, lib/auth/api-guard.ts, lib/auth/api-guard.test.ts, SESSION.md.
+Open PRs checked: 189, 182, 166, 144, 135, 82. No source overlap with focused runtime/API guard changes. SESSION.md is a stale shared handoff on older PRs and is not product source. PR 144 proposes incompatible retired architecture and must not land over this work.
 
-Validation: clean npm ci and npm run verify passed on Node 22 (50 files, 215 tests before integrating #191). Production audit reduced from 13 affected entries (1 critical, 10 high, 2 moderate) to 5 high entries: Prisma tooling chain and xlsx (#107). Browser smoke rendered configuration gates; authenticated flows remain unverified without environment configuration. No production credentials were copied into this checkout.
-Merged main a3ee3a1 (#191); resolved only SESSION.md by keeping this slice's scope. No source conflict. Repeat full verification against combined tree before publication.
-Combined-tree verification passed: lint, typecheck, 51 test files / 217 tests, Prisma schema validation, production build. Lockfile churn includes native-platform packages and compatible security fixes; only three PR-owned files change relative to current main.
+Plan: RED tests for production/test/missing/live keys and explicit demo flags; GREEN shared runtime gate and middleware/API behavior; verify normal authenticated protection and independent cron/webhook boundaries. Run npm run verify and a real-browser production misconfiguration check. Existing baseline: 50 files / 215 tests passed during the same-session audit at 28f021f.
+
+Architecture: retain Clerk and existing server boundaries. No auth provider migration. Approval-lane work: do not merge before explicit approval on the PR.
+
+Validation completed: RED 14 failures / 2 passes in focused auth suite; GREEN 16/16 focused tests. Full npm run verify passed lint, typecheck, 52 test files / 230 tests, Prisma validation, and production build. Local production build with test keys and DEMO_MODE=true returned 503/no-store for territory, home, sign-in, and API routes; installed Playwright verified the browser body. Screenshot is retained in the private audit folder. Current production configuration was read-only checked: live Clerk keys, demo mode disabled. No production environment or auth changes applied.
+
+PR review follow-up: include / and /sso-callback(.*) in the fail-closed entry-route matcher. Added three regressions that first failed with HTTP 200, then passed with non-cacheable 503. Full verification with Node 22 and patched Next 15.5.26 passed (53 files, 235 tests, lint, typecheck, Prisma validation, production build). User approved authentication merge in the cleanup task.

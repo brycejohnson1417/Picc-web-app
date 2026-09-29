@@ -4,9 +4,13 @@ import type { AppRole } from '@/lib/types/rbac';
 import { evaluateUserAccess, getSharedWorkspaceId } from '@/lib/auth/access-policy';
 import { getUserRole } from '@/lib/rbac/guards';
 import { ensureWorkspaceAndMembership } from '@/lib/auth/bootstrap';
-import { AUTH_BYPASS_MODE, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
+import { AUTH_BYPASS_MODE, AUTH_CONFIGURATION_MESSAGE, PRODUCTION_AUTH_MISCONFIGURED, DEMO_ORG_ID, DEMO_USER_ID } from '@/lib/config/runtime';
 
 export async function guard(allowedRoles?: AppRole[]) {
+  if (PRODUCTION_AUTH_MISCONFIGURED) {
+    return { error: NextResponse.json({ error: AUTH_CONFIGURATION_MESSAGE }, { status: 503, headers: { 'Cache-Control': 'no-store' } }) };
+  }
+
   if (AUTH_BYPASS_MODE) {
     const role: AppRole = 'ADMIN';
     if (allowedRoles?.length && !allowedRoles.includes(role)) {
