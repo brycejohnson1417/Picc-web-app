@@ -9,3 +9,5 @@ Architecture: use the existing on-demand PDF import pattern used by proposal/ord
 Evidence: dashboard statically imports html2canvas, jspdf, jspdf-autotable; current build 202 kB route / 417 kB first-load. Other PDF surfaces already defer imports.
 Validation: no business behavior change; TDD exception for pure extraction, verify generated PDF download via browser and measure production build bundle before/after; npm run verify. Check loading/error states. No broad rewrite.
 Overlap: checked #194,#195,#200,#202,#189,#166,#135,#82; owned source paths do not overlap.
+
+Scope update: browser RED exposed pre-existing unsupported oklch export failure. Also own package.json/package-lock.json for html2canvas-pro, a compatible modern-color renderer, isolated to this export. Validate real downloaded PDF and rendered pages.
