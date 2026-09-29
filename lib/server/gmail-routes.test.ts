@@ -86,18 +86,12 @@ describe('Gmail routes', () => {
     expect(JSON.stringify(payload)).not.toContain('database');
   });
 
-  it('indexes exact-contact Gmail activity under the current user and tenant', async () => {
+  it('does not move or rewrite persisted contact activity when refreshing Gmail', async () => {
     const prisma = baseMocks();
-    const provider = await import('@/lib/server/gmail-provider');
     const { POST } = await import('@/app/api/contacts/[contactId]/gmail/route');
-    const response = await POST(request(`/api/contacts/${contactId}/gmail`, 'POST'), { params: Promise.resolve({ contactId }) });
-
-    expect(response?.status).toBe(200);
-    expect(provider.listGmailMessages).toHaveBeenCalledWith('access', '{from:mara@example.com to:mara@example.com} newer_than:2y', 30);
-    expect(prisma.crmContactActivity.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { orgId_actorClerkUserId_providerMessageId: { orgId: 'org-1', actorClerkUserId: 'user-1', providerMessageId: 'message-1' } },
-      create: expect.objectContaining({ profileId: 'profile-1', actorClerkUserId: 'user-1', channel: 'EMAIL' }),
-    }));
+    await POST(request(`/api/contacts/${contactId}/gmail`, 'POST'), { params: Promise.resolve({ contactId }) });
+    expect(prisma.crmContactActivity.upsert).not.toHaveBeenCalled();
+    expect(prisma.crmContactProfile.upsert).not.toHaveBeenCalled();
   });
 
   it('returns only recent mailbox people who are not already CRM contacts', async () => {

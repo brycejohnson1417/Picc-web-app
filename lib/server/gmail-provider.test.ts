@@ -37,3 +37,22 @@ describe('Gmail provider boundary', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('thread retrieval', () => {
+  it('paginates metadata reads and uses a full read only for an expanded thread', async () => {
+    const { listGmailThreads, getGmailThread } = await import('./gmail-provider');
+    const urls: string[] = [];
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input); urls.push(url);
+      return new Response(JSON.stringify(url.includes('/threads?') ? { threads: [{id:'t1'},{id:'t1'},{id:'t2'}], nextPageToken:'next3' } : {id:'t1',messages:[]}),{status:200});
+    }) as unknown as typeof fetch;
+    const page = await listGmailThreads('token','from:buyer@example.com','page2',fetcher);
+    expect(page.threads).toHaveLength(2);expect(page.nextPageToken).toBe('next3');
+    expect(new URL(urls[0]).searchParams.get('pageToken')).toBe('page2');
+    expect(new URL(urls[0]).searchParams.get('maxResults')).toBe('20');
+    expect(new URL(urls[1]).searchParams.getAll('metadataHeaders')).toContain('Cc');
+    expect(urls.every(url => !url.includes('format=full'))).toBe(true);
+    await getGmailThread('token','t1','full',fetcher);
+    expect(urls.at(-1)).toContain('format=full');
+  });
+});

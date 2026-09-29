@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { suggestionIsRelevant } from '@/lib/gmail/conversations';
 import { guard } from '@/lib/auth/api-guard';
 import { extractMailboxPeople, normalizeMailboxEmail } from '@/lib/gmail/gmail-domain';
 import {
@@ -21,7 +22,7 @@ export async function GET() {
     const messages = await listGmailMessages(accessToken, 'newer_than:90d -category:promotions -category:social', 60);
     const existingEmails = new Set(runtime.contacts.map((contact) => normalizeMailboxEmail(contact.email)).filter(Boolean));
     const suggestions = extractMailboxPeople(messages, connection.mailboxEmail)
-      .filter((person) => !existingEmails.has(person.email))
+      .filter((person) => !existingEmails.has(person.email) && suggestionIsRelevant(person.email, connection.mailboxEmail))
       .slice(0, 20);
     return NextResponse.json({ suggestions, mailboxEmail: connection.mailboxEmail });
   } catch (error) {
