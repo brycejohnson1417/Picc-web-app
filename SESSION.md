@@ -1,18 +1,9 @@
-# Issue 90: production authentication must fail closed
+# Issue 107: Spreadsheet parser hardening
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/90
-Branch: codex/90-production-auth, based on origin/main 28f021f.
-
-Scope: prevent production demo/admin bypass, reject invalid production Clerk configuration consistently at middleware/API boundaries, retain explicit local demo mode.
-Out of scope: OAuth permissions, provider replacement, membership changes, production environment edits, schema/data writes, UI redesign.
-
-Owned paths: lib/config/runtime.ts, lib/config/runtime.test.ts, middleware.ts, lib/auth/middleware.test.ts, lib/auth/api-guard.ts, lib/auth/api-guard.test.ts, SESSION.md.
-Open PRs checked: 189, 182, 166, 144, 135, 82. No source overlap with focused runtime/API guard changes. SESSION.md is a stale shared handoff on older PRs and is not product source. PR 144 proposes incompatible retired architecture and must not land over this work.
-
-Plan: RED tests for production/test/missing/live keys and explicit demo flags; GREEN shared runtime gate and middleware/API behavior; verify normal authenticated protection and independent cron/webhook boundaries. Run npm run verify and a real-browser production misconfiguration check. Existing baseline: 50 files / 215 tests passed during the same-session audit at 28f021f.
-
-Architecture: retain Clerk and existing server boundaries. No auth provider migration. Approval-lane work: do not merge before explicit approval on the PR.
-
-Validation completed: RED 14 failures / 2 passes in focused auth suite; GREEN 16/16 focused tests. Full npm run verify passed lint, typecheck, 52 test files / 230 tests, Prisma validation, and production build. Local production build with test keys and DEMO_MODE=true returned 503/no-store for territory, home, sign-in, and API routes; installed Playwright verified the browser body. Screenshot is retained in the private audit folder. Current production configuration was read-only checked: live Clerk keys, demo mode disabled. No production environment or auth changes applied.
-
-PR review follow-up: include / and /sso-callback(.*) in the fail-closed entry-route matcher. Added three regressions that first failed with HTTP 200, then passed with non-cacheable 503. Full verification with Node 22 and patched Next 15.5.26 passed (53 files, 235 tests, lint, typecheck, Prisma validation, production build). User approved authentication merge in the cleanup task.
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/107
+Branch: codex/107-spreadsheet-hardening, from main 4fde001.
+Scope: replace the vulnerable registry SheetJS version with the official fixed distribution; bound spreadsheet inputs and retain required workbook/CSV behavior.
+Owned: package.json, package-lock.json, lib/integrations/sheets.ts, lib/integrations/spreadsheet-input.ts and tests, lib/server/preferred-partner-proposal.ts, SESSION.md.
+Out of scope: Prisma tooling, provider changes, schema, production data, UI redesign.
+Overlap checked: #195/#194/#189/#182/#166/#135/#82. No source overlap with current changes except SESSION; inspect #135 proposal overlap before implementation and sequence/rebase as needed. Dependency updates exclusive.
+Validation: RED malformed/oversized input tests first; GREEN representative workbook/CSV tests; clean npm ci, npm audit, npm run verify. Existing SheetJS API adapter retained; no new parser abstraction beyond input validation.
