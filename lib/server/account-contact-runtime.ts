@@ -1,4 +1,5 @@
 import 'server-only';
+import { requireWorkspaceContext } from '@/lib/auth/workspace';
 
 import {
   type AccountContactRuntimePayload,
@@ -9,11 +10,12 @@ import {
   type RuntimeAccountSummary,
 } from '@/lib/runtime/account-contact-contract';
 import { loadLiveNotionContactsWithMeta } from '@/lib/server/notion-live-crm';
-import { loadTerritoryStores } from '@/lib/server/notion-territory';
+import { loadTerritoryStores, requireTerritorySourceOrg } from '@/lib/server/notion-territory';
 import type { PreferredPartnerFilter } from '@/lib/territory/preferred-partner';
 import type { TerritoryStoresResponse } from '@/lib/territory/types';
 
 export interface AccountContactRuntimeInput {
+  orgId?: string;
   statuses?: string[];
   reps?: string[];
   pppStatuses?: string[];
@@ -70,8 +72,11 @@ function mapAccounts(
 export async function loadAccountContactRuntime(
   input: AccountContactRuntimeInput = {},
 ): Promise<AccountContactRuntimePayload> {
+  const orgId = input.orgId ?? (await requireWorkspaceContext()).orgId;
+  requireTerritorySourceOrg(orgId);
   const [territoryResult, contactsResult] = await Promise.allSettled([
     loadTerritoryStores({
+      orgId,
       statuses: input.statuses,
       reps: input.reps,
       pppStatuses: input.pppStatuses,

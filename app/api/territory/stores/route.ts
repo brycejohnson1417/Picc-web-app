@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
-import { loadTerritoryStores, processPendingTerritoryStoreSyncQueue } from '@/lib/server/notion-territory';
+import { loadTerritoryStores, processPendingTerritoryStoreSyncQueue, requireTerritorySourceOrg, TERRITORY_WORKSPACE_ERROR } from '@/lib/server/notion-territory';
 import type { PreferredPartnerFilter } from '@/lib/territory/preferred-partner';
 import type { TerritoryStoresResponse } from '@/lib/territory/types';
 import { prisma } from '@/lib/db/prisma';
@@ -117,6 +117,7 @@ export async function GET(request: Request) {
   });
 
   try {
+    requireTerritorySourceOrg(access.orgId);
     if (!refresh) {
       const cached = readTerritoryCache(cacheKey);
       if (cached) {
@@ -135,6 +136,7 @@ export async function GET(request: Request) {
     }
 
     const payload = await loadTerritoryStores({
+      orgId: access.orgId!,
       statuses,
       reps,
       pppStatuses,
@@ -193,10 +195,10 @@ export async function GET(request: Request) {
         error: message,
       },
       {
-        status: 500,
+        status: message === TERRITORY_WORKSPACE_ERROR ? 403 : 500,
         headers: {
           'X-Territory-Data-Source': 'postgis',
-          'Cache-Control': 'private, max-age=30, stale-while-revalidate=120',
+          'Cache-Control': 'private, no-store',
         },
       },
     );

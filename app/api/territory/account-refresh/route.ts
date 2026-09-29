@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireTerritoryApiAccess } from '@/lib/auth/territory-access';
-import { loadTerritoryStores } from '@/lib/server/notion-territory';
+import { loadTerritoryStores, TERRITORY_WORKSPACE_ERROR } from '@/lib/server/notion-territory';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     const payload = requestSchema.parse(await request.json());
     const normalizedPageId = payload.storePageId.replace(/-/g, '').toLowerCase();
-    const refreshed = await loadTerritoryStores({ refresh: true });
+    const refreshed = await loadTerritoryStores({ orgId: access.orgId!, refresh: true });
     const store = refreshed.stores.find((entry) => entry.notionPageId.replace(/-/g, '').toLowerCase() === normalizedPageId);
 
     if (!store) {
@@ -43,6 +43,6 @@ export async function POST(request: Request) {
     }
 
     const message = error instanceof Error ? error.message : 'Account refresh failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: message === TERRITORY_WORKSPACE_ERROR ? 403 : 500 });
   }
 }
