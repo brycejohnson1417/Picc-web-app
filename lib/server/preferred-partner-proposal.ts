@@ -1,6 +1,6 @@
+import { parseReportRows } from '@/lib/integrations/spreadsheet-input';
 import 'server-only';
 
-import * as XLSX from 'xlsx';
 import { resolveAccountIdentity } from '@/lib/server/account-identity';
 import { loadNabisDaysOffRows, loadNyInventoryRows, loadNyWarehouseRows } from '@/lib/server/nabis-api';
 import { loadTerritoryStoreDetail } from '@/lib/server/notion-territory';
@@ -375,34 +375,6 @@ function calculateEarliestDeliveryDate(generatedAt: Date, daysOffRows: Array<Rec
   return formatNyDateKey(candidate);
 }
 
-function parseInputRows(rawInput: string) {
-  const trimmed = rawInput.trim();
-  if (!trimmed) {
-    return { format: 'json' as const, rows: [] as InputRow[] };
-  }
-
-  if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (Array.isArray(parsed)) {
-      return {
-        format: 'json' as const,
-        rows: parsed.filter((row): row is InputRow => Boolean(row) && typeof row === 'object'),
-      };
-    }
-    throw new Error('Expected a JSON array of Headset rows.');
-  }
-
-  const workbook = XLSX.read(trimmed, { type: 'string', raw: false });
-  const firstSheetName = workbook.SheetNames[0];
-  if (!firstSheetName) {
-    return { format: 'csv' as const, rows: [] as InputRow[] };
-  }
-  const sheet = workbook.Sheets[firstSheetName];
-  return {
-    format: 'csv' as const,
-    rows: XLSX.utils.sheet_to_json<InputRow>(sheet, { defval: null, raw: false }),
-  };
-}
 
 function normalizeHeadsetRows(rawRows: InputRow[]) {
   return rawRows
@@ -1143,7 +1115,7 @@ export async function getPreferredPartnerProposal(input: {
   accountIdOrPageId: string;
   rawReport: string;
 }) {
-  const { format, rows: rawRows } = parseInputRows(input.rawReport);
+  const { format, rows: rawRows } = parseReportRows(input.rawReport);
   const parsedRows = normalizeHeadsetRows(rawRows);
   if (parsedRows.length === 0) {
     const error = new Error('Paste a Headset JSON array or CSV export before generating a PPP proposal.');
