@@ -1,10 +1,10 @@
-# Issue 197: Prisma tooling patches
+# Issue 201: Retire worker calendar health
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/197
-Branch: codex/197-prisma-tooling, stacked on PR196 until it merges.
-Owned: package.json, package-lock.json, SESSION.md.
-Scope: Prisma 6 patch plus supported tooling updates to address effect/deepmerge/esbuild audit findings. No Prisma major upgrade, schema migration, API changes, or production records.
-Validation: advisory baseline is RED; clean npm ci, Prisma generation/validation, npm run verify and npm audit are GREEN proof. Dependency-only change has no new source behavior test.
-Architecture: retain existing Prisma client and PostgreSQL adapter. Check config loader compatibility if an override is required. PR196 package overlap is deliberately sequenced via its head commit; no other source overlap. Other open PRs checked: 195,194,189,182,166,135,82.
-
-Validation follow-up: own lib/gmail/gmail-domain.test.ts solely to make signature tampering deterministic; the old final-character replacement can decode to the same bytes. No production OAuth implementation change.
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/201
+Branch: codex/201-retired-calendar-health from cf42d431.
+Scope: remove Home worker calendar health query/tile, retire guarded endpoint with 410, delete unused service.
+Owned: app/(main)/home/page.tsx; app/api/calendar/sync-health/route.ts; lib/server/calendar-sync-health.ts; lib/server/calendar-sync-health-route.test.ts; SESSION.md.
+Out of scope: schema, production data, current calendar, notification preferences, payroll/history.
+Architecture: retain existing authentication/role guards and active Home freshness signals; no new abstraction.
+Validation: RED endpoint regression test, existing guards, verify, local Home browser proof.
+Overlap: checked #194,#195,#200,#189,#166,#135,#82. #195 overlaps Home and must rebase preserving its org guard. No overlap with other changes.
