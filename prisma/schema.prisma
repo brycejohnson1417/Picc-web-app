@@ -82,6 +82,7 @@ enum WorkflowStatus {
 }
 
 enum IntegrationProvider {
+  MAILJET
   NOTION
   GOOGLE_SHEETS
   GMAIL

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { IntegrationSyncStatus } from '@prisma/client';
 import { buildDailyBriefing, isBriefingDeliveryWindow, type BriefingStore } from '@/lib/follow-up/follow-up-intelligence';
 import { prisma } from '@/lib/db/prisma';
@@ -48,7 +49,7 @@ export async function sendBriefingForUser(input: { orgId: string; clerkUserId: s
     update: { recipientEmail: preference.briefingRecipientEmail, status: IntegrationSyncStatus.RUNNING, lastError: null },
   });
   try {
-    await sendDailyBriefingEmail({ to: preference.briefingRecipientEmail, ...email });
+    await sendDailyBriefingEmail({ orgId: input.orgId, to: preference.briefingRecipientEmail, ...email, idempotencyKey: delivery ? `debrief-${delivery.id}` : `debrief-preview-${randomUUID()}` });
     if (delivery) await prisma.dailyBriefingDelivery.update({ where: { id: delivery.id }, data: { status: IntegrationSyncStatus.SUCCESS, sentAt: new Date(), lastError: null } });
     return { status: 'sent' as const, recipientEmail: preference.briefingRecipientEmail, counts: { followUps: briefing.followUps.length, pppOnboarding: briefing.pppOnboarding.length, warmLeads: briefing.warmLeads.length } };
   } catch (error) {

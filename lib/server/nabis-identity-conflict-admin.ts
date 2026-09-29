@@ -54,7 +54,7 @@ export async function getNabisIdentityReviewSettings(orgId: string) {
       emailEnabled: recipient.emailEnabled,
       inAppEnabled: recipient.inAppEnabled,
     },
-    emailProviderReady: transactionalEmailReady(),
+    emailProviderReady: await transactionalEmailReady(orgId),
   };
 }
 

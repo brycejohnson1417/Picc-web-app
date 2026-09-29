@@ -1,3 +1,4 @@
+import { sendTransactionalEmail } from '@/lib/server/transactional-email';
 import { buildDailyBriefing, type BriefingStore } from '@/lib/follow-up/follow-up-intelligence';
 
 type DailyBriefing = ReturnType<typeof buildDailyBriefing>;
@@ -25,14 +26,7 @@ export function renderDailyBriefingEmail(briefing: DailyBriefing, localDate: str
   };
 }
 
-export async function sendDailyBriefingEmail(input: { to: string; subject: string; html: string }, fetchImpl: typeof fetch = fetch) {
-  const apiKey = process.env.SENDGRID_API_KEY?.trim();
-  const from = process.env.DAILY_DEBRIEF_FROM_EMAIL?.trim();
-  if (!apiKey || !from) throw new Error('Daily briefing email delivery is not configured');
-  const response = await fetchImpl('https://api.sendgrid.com/v3/mail/send', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ personalizations: [{ to: [{ email: input.to }] }], from: { email: from, name: 'PICC New York' }, subject: input.subject, content: [{ type: 'text/html', value: input.html }] }),
-  });
-  if (!response.ok) throw new Error(`Daily briefing email failed (${response.status})`);
+export async function sendDailyBriefingEmail(input: { orgId: string; to: string; subject: string; html: string; idempotencyKey: string }) {
+  const result = await sendTransactionalEmail(input);
+  if (result.status !== 'SENT') throw new Error(result.error || 'Mailjet did not accept the daily debrief.');
 }

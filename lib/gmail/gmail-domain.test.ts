@@ -23,7 +23,9 @@ describe('Gmail domain safety', () => {
     const state = encodeOAuthState({ orgId: 'org-1', userId: 'user-1', nonce: 'nonce-1', returnTo: '/settings' });
 
     expect(decodeOAuthState(state)).toMatchObject({ orgId: 'org-1', userId: 'user-1', nonce: 'nonce-1' });
-    expect(() => decodeOAuthState(`${state.slice(0, -1)}x`)).toThrow('Invalid Gmail OAuth state');
+    const [payload, signature] = state.split('.');
+    const changedSignature = `${signature[0] === 'A' ? 'B' : 'A'}${signature.slice(1)}`;
+    expect(() => decodeOAuthState(`${payload}.${changedSignature}`)).toThrow('Invalid Gmail OAuth state');
   });
 
   it('encrypts provider tokens with authenticated encryption', () => {
