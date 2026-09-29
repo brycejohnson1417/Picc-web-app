@@ -3,14 +3,14 @@ import { expect, test } from '@playwright/test';
 const store = {
   id: 'store-1',
   notionPageId: 'account-page-1',
-  name: 'Harbor House',
+  name: 'Example Store',
   status: 'Customer',
   statusKey: 'customer',
   statusColor: '#1f9d55',
   statusColorName: 'green',
   pinKind: 'customer',
-  repNames: ['Mina Torres'],
-  repEmails: ['mina@piccplatform.com'],
+  repNames: ['Example Rep'],
+  repEmails: ['rep@example.com'],
   lat: 40.7128,
   lng: -74.006,
   locationLabel: 'New York, NY',
@@ -23,7 +23,7 @@ const store = {
   state: 'NY',
   daysOverdue: 6,
   phoneNumber: '+12125550115',
-  email: 'orders@harbor.example',
+  email: 'orders@example.com',
   referralSource: null,
   isPreferredPartner: true,
   followUpDate: null,
@@ -38,7 +38,7 @@ function storesResponse() {
     stores: [store],
     filters: {
       statuses: [{ value: 'Customer', count: 1 }],
-      reps: [{ value: 'Mina Torres', count: 1 }],
+      reps: [{ value: 'Example Rep', count: 1 }],
       pppStatuses: [],
       headsetConnectionStatuses: [],
       preferredPartners: [{ value: 'preferred', count: 1 }],
@@ -66,9 +66,9 @@ function storeDetailResponse() {
     contacts: [
       {
         id: 'contact-page-1',
-        name: 'Mara Vega',
+        name: 'Example Buyer',
         roleTitle: 'Buyer',
-        email: 'mara@harbor.example',
+        email: 'mara@example.com',
         phone: '+1 (347) 555-0198',
         status: 'ACTIVE',
         linkedWork: 'Primary contact',
@@ -80,11 +80,11 @@ function storeDetailResponse() {
       contact: null,
       contactEmail: null,
       contactPhone: null,
-      primaryContactName: 'Mara Vega',
-      primaryContactBuyer: 'Mara Vega',
-      primaryContactEmail: 'mara@harbor.example',
+      primaryContactName: 'Example Buyer',
+      primaryContactBuyer: 'Example Buyer',
+      primaryContactEmail: 'mara@example.com',
       primaryContactPhone: '+1 (347) 555-0198',
-      rep: 'Mina Torres',
+      rep: 'Example Rep',
       accountManager: null,
       piccCreditStatus: null,
       accountStatus: 'Customer',
@@ -125,7 +125,7 @@ test('accounts stay dense, keep the alphabet rail clear, and create a follow-up'
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/accounts');
 
-  const accountCard = page.getByRole('button', { name: /Harbor House.*Customer.*Mina Torres/s });
+  const accountCard = page.getByRole('button', { name: /Example Store.*Customer.*Example Rep/s });
   await expect(accountCard).toBeVisible();
   await expect(accountCard).not.toContainText('88 Test Street');
   await expect(accountCard).toContainText('6 days');
@@ -143,7 +143,7 @@ test('accounts stay dense, keep the alphabet rail clear, and create a follow-up'
 
   await page.getByRole('button', { name: 'New follow-up' }).click();
   await page.getByPlaceholder('Search account or rep').fill('Harbor');
-  await page.getByRole('button', { name: /Harbor House.*Mina Torres/s }).click();
+  await page.getByRole('button', { name: /Example Store.*Example Rep/s }).click();
   await page.getByRole('button', { name: 'Tomorrow' }).click();
   await page.getByPlaceholder('What needs to happen next?').fill('Review the next order');
   await page.getByRole('button', { name: 'Set follow-up' }).click();
@@ -151,7 +151,7 @@ test('accounts stay dense, keep the alphabet rail clear, and create a follow-up'
   await expect(page.getByText('Follow-up set')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'New follow-up' })).toBeHidden();
   expect(followUpPayload).toMatchObject({
-    store: { id: 'store-1', notionPageId: 'account-page-1', name: 'Harbor House' },
+    store: { id: 'store-1', notionPageId: 'account-page-1', name: 'Example Store' },
     followUpNeeded: true,
     followUpReason: 'Review the next order',
   });
@@ -163,12 +163,12 @@ test('account details exposes direct actions and prompts for a follow-up after G
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/accounts');
-  await page.getByRole('button', { name: /Harbor House.*Customer.*Mina Torres/s }).click();
+  await page.getByRole('button', { name: /Example Store.*Customer.*Example Rep/s }).click();
 
   await expect(page.getByText('Associated Contacts')).toBeVisible();
-  const email = page.getByRole('link', { name: 'Email Mara Vega' });
-  const text = page.getByRole('link', { name: 'Text Mara Vega' });
-  const call = page.getByRole('link', { name: 'Call Mara Vega' });
+  const email = page.getByRole('link', { name: 'Email Example Buyer' });
+  const text = page.getByRole('link', { name: 'Text Example Buyer' });
+  const call = page.getByRole('link', { name: 'Call Example Buyer' });
   await expect(email).toHaveAttribute('href', /https:\/\/mail\.google\.com\/mail\/\?view=cm&fs=1&to=mara%40harbor\.example/);
   await expect(text).toHaveAttribute('href', 'sms:+13475550198');
   await expect(call).toHaveAttribute('href', 'tel:+13475550198');
@@ -186,7 +186,7 @@ test('account details exposes direct actions and prompts for a follow-up after G
   await email.click();
 
   await expect(page.getByRole('heading', { name: 'Set follow-up?' })).toBeVisible();
-  await expect(page.getByText('Gmail opened for Mara Vega.')).toBeVisible();
+  await expect(page.getByText('Gmail opened for Example Buyer.')).toBeVisible();
   const expectedDefaultDate = await page.evaluate(() => { const date = new Date(); date.setHours(12, 0, 0, 0); date.setDate(date.getDate() + 11); return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'); });
   await expect(page.getByLabel('Follow-up date')).toHaveValue(expectedDefaultDate);
   if (process.env.PICC_EVIDENCE_DIR) {
@@ -231,7 +231,7 @@ test('add contact supports multiple CRM roles and requires explicit replacement 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/accounts');
   await page.getByRole('button', { name: 'Add contact' }).click();
-  await page.getByRole('button', { name: /Harbor House.*New York, NY/s }).click();
+  await page.getByRole('button', { name: /Example Store.*New York, NY/s }).click();
   await page.getByLabel('Full name *').fill('Jordan Lee');
   await page.getByLabel('Role / position *').fill('Buyer');
   await page.getByLabel('Primary Contact').check();
@@ -259,7 +259,7 @@ test('reviews Gmail suggestions before quick-adding a prefilled contact', async 
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        mailboxEmail: 'rep@picc.co',
+        mailboxEmail: 'rep@example.com',
         suggestions: [{ name: 'Taylor Morgan', email: 'taylor@example.com', messageCount: 4, lastInteractionAt: '2026-08-13T16:00:00.000Z' }],
       }),
     });
@@ -324,18 +324,18 @@ test('lets the signed-in rep inspect and explicitly disconnect their Gmail', asy
       contentType: 'application/json',
       body: JSON.stringify({
         configuration: { configured: true, redirectUri: 'https://app.example/api/integrations/gmail/callback' },
-        connection: connected ? { mailboxEmail: 'rep@picc.co', status: 'SUCCESS', lastSyncedAt: '2026-08-14T16:00:00.000Z', lastError: null, updatedAt: '2026-08-14T16:00:00.000Z' } : null,
+        connection: connected ? { mailboxEmail: 'rep@example.com', status: 'SUCCESS', lastSyncedAt: '2026-08-14T16:00:00.000Z', lastError: null, updatedAt: '2026-08-14T16:00:00.000Z' } : null,
       }),
     });
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/settings#connected-services');
-  await expect(page.getByText('rep@picc.co')).toBeVisible();
+  await expect(page.getByText('rep@example.com')).toBeVisible();
   await page.getByRole('button', { name: 'Disconnect' }).click();
   await expect(page.getByRole('button', { name: 'Confirm disconnect' })).toBeVisible();
   await page.getByRole('button', { name: 'Confirm disconnect' }).click();
-  await expect(page.getByText('Not connected')).toBeVisible();
+  await expect(page.getByText('rep@example.com')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Connect my Gmail' })).toBeVisible();
 });
 
@@ -367,7 +367,7 @@ test('shows Gmail setup errors in Settings and lets the rep retry', async ({ pag
     await page.screenshot({ path: `${process.env.PICC_EVIDENCE_DIR}/gmail-setup-error-mobile.png` });
   }
   await page.getByRole('button', { name: 'Try again' }).click();
-  await expect(page.getByText('Not connected')).toBeVisible();
+  await expect(setupError).toBeHidden();
   await expect(page.getByRole('button', { name: 'Connect my Gmail' })).toBeVisible();
   if (process.env.PICC_EVIDENCE_DIR) {
     await page.screenshot({ path: `${process.env.PICC_EVIDENCE_DIR}/gmail-setup-recovered-mobile.png` });
@@ -375,7 +375,7 @@ test('shows Gmail setup errors in Settings and lets the rep retry', async ({ pag
 });
 
 test('saves action defaults and can explicitly send a daily debrief now', async ({ page }) => {
-  let preference = { defaultEmailDays: 7, defaultTextDays: 3, defaultCallDays: 1, resurfaceAfterDays: 30, dailyBriefingEnabled: false, dailyBriefingTime: '08:00', timezone: 'America/New_York', briefingRecipientEmail: 'rep@picc.co' };
+  let preference = { defaultEmailDays: 7, defaultTextDays: 3, defaultCallDays: 1, resurfaceAfterDays: 30, dailyBriefingEnabled: false, dailyBriefingTime: '08:00', timezone: 'America/New_York', briefingRecipientEmail: 'rep@example.com' };
   let savedPayload: typeof preference | null = null;
   await page.route('**/api/settings/follow-up-preferences', async (route) => {
     if (route.request().method() === 'PATCH') {
@@ -385,14 +385,16 @@ test('saves action defaults and can explicitly send a daily debrief now', async 
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preference }) });
   });
   await page.route('**/api/settings/follow-up-preferences/send-preview', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'sent', recipientEmail: 'rep@picc.co' }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'sent', recipientEmail: preference.briefingRecipientEmail }) });
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/settings#follow-up-defaults');
   await page.getByLabel('After email').fill('9');
-  await page.getByLabel('Daily debrief email').check();
+  await expect(page.getByText('Scheduled emails are paused. You can send a debrief manually after an administrator connects Mailjet.', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Daily debrief email', { exact: true })).toHaveCount(0);
+  await page.getByLabel('Manual debrief recipient').fill('review@example.com');
   await page.getByRole('button', { name: 'Send debrief now' }).click();
   await expect(page.getByText('Daily debrief sent')).toBeVisible();
-  expect(savedPayload).toMatchObject({ defaultEmailDays: 9, dailyBriefingEnabled: true, briefingRecipientEmail: 'rep@picc.co' });
+  expect(savedPayload).toMatchObject({ defaultEmailDays: 9, dailyBriefingEnabled: false, briefingRecipientEmail: 'review@example.com' });
 });
