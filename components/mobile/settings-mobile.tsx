@@ -11,6 +11,7 @@ import { WorkspacePanel, WorkspacePanelHeader } from '@/components/layout/worksp
 import { AdminOpsPanel } from '@/components/settings/admin-ops-panel';
 import { NabisSyncAdminPanel } from '@/components/settings/nabis-sync-admin-panel';
 import { GoogleUsageBudgetCard } from '@/components/territory/google-usage-budget-card';
+import { MailjetConnectionCard } from '@/components/settings/mailjet-connection-card';
 import { GmailConnectionCard } from '@/components/settings/gmail-connection-card';
 import { FollowUpPreferencesCard } from '@/components/settings/follow-up-preferences-card';
 import { Button, Input, Textarea } from '@/components/ui';
@@ -672,14 +673,15 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
           <WorkspacePanelHeader
             eyebrow="Connected Services"
             title="Your communication accounts"
-            description="Connections belong to the signed-in rep and can be removed here at any time."
+            description="Connect your personal Gmail mailbox. Administrators also manage workspace email delivery here."
           />
           <GmailConnectionCard />
+          {appAccess.role === 'ADMIN' ? <MailjetConnectionCard /> : null}
         </WorkspacePanel>
       </section>
 
       <section id="follow-up-defaults" className="scroll-mt-28">
-        <WorkspacePanel className="space-y-4"><WorkspacePanelHeader eyebrow="Follow-Ups & Debrief" title="Set the rhythm once" description="Prefill the right next-touch date and choose whether the app should email your daily action list." /><FollowUpPreferencesCard /></WorkspacePanel>
+        <WorkspacePanel className="space-y-4"><WorkspacePanelHeader eyebrow="Follow-Ups & Debrief" title="Set the rhythm once" description="Set next-touch defaults and send a daily action list manually. Scheduled emails are paused." /><FollowUpPreferencesCard /></WorkspacePanel>
       </section>
 
       {canViewTeamActivity ? (

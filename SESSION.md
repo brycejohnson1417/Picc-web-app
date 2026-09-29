@@ -1,15 +1,14 @@
-# Issue 94: Defer dashboard export libraries
+# Issue 199: Mailjet consolidation
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/94
-Branch: codex/94-dashboard-export-lazy from cf42d431.
-Scope: extract PDF export from the large dashboard component and load it only on explicit export; preserve output and controls.
-Owned: components/dashboard/nabis-sales-dashboard.tsx; components/dashboard/nabis-dashboard-pdf.ts; tests/e2e/dashboard-export.spec.ts; SESSION.md.
-Out of scope: data semantics, redesign, auth, settings/territory refactors, production writes.
-Architecture: use the existing on-demand PDF import pattern used by proposal/order exports; keep rendering thin and isolate export dependencies.
-Evidence: dashboard statically imports html2canvas, jspdf, jspdf-autotable; current build 202 kB route / 417 kB first-load. Other PDF surfaces already defer imports.
-Validation: no business behavior change; TDD exception for pure extraction, verify generated PDF download via browser and measure production build bundle before/after; npm run verify. Check loading/error states. No broad rewrite.
-Overlap: checked #194,#195,#200,#202,#189,#166,#135,#82; owned source paths do not overlap.
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/199
+Branch: codex/199-mailjet-consolidation from main 5feada8.
+Scope: encrypted org-scoped Mailjet configuration, admin settings/status/validation/test-send/disconnect, existing alert/debrief callers, honest paused scheduler controls, additive provider enum migration.
+Owned: lib/server/mailjet*.ts; lib/email/mailjet*.ts; app/api/integrations/mailjet/**; components/settings/mailjet-connection-card.tsx; components/settings/follow-up-preferences-card.tsx; components/mobile/settings-mobile.tsx; lib/server/{transactional-email,daily-briefing-email,daily-briefing,nabis-identity-conflicts,nabis-identity-conflict-admin}*.ts; prisma/schema.prisma and new mailjet enum migration; env example; focused E2E; SESSION.md.
+Out of scope: customer campaigns, scheduled activation, old table deletion, active data migration, marketing UI.
+Architecture: existing IntegrationConnection holds encrypted credentials, deterministic per-org connection ID; server boundary owns Mailjet requests. Use a dedicated application encryption key, never return secrets. Standard Settings controls and existing DESIGN-SYSTEM; product register, daylight mobile use, restrained color and clear status.
+Overlap: #135 settings-mobile and #195 daily-briefing require rebase before their release; #195 remains blocked. #198 packages do not overlap. Checked #194,#189,#182,#166,#82. Schema exclusive.
+Tests: RED Mailjet response/error cases and admin/org guards; GREEN send contract and encrypted persistence; actual browser controls including bad credentials/network and save/cancel; full verify. No live send without approved test recipient. Schema/env changes approval-lane.
 
-Scope update: browser RED exposed pre-existing unsupported oklch export failure. Also own package.json/package-lock.json for html2canvas-pro, a compatible modern-color renderer, isolated to this export. Validate real downloaded PDF and rendered pages.
+## Validation
 
-Final validation: clean install, zero audit vulnerabilities, combined-main verify 250 tests; real browser PDF download passed. Initial dashboard JS 417 -> 235 kB. Modern color rendering repaired; tall sections paginate instead of clipping. Local seeded report only.
+Updated onto main e4732d2. Full `npm run verify` passed: 60 test files, 263 tests, lint, typecheck, Prisma validation, and production build. Chromium tests passed for the mobile Mailjet Settings fixture workflow and dashboard PDF download on the combined tree. Fixture checks do not establish live provider or inbox delivery.
