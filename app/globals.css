@@ -1,5 +1,30 @@
 @import "tailwindcss";
 
+/* The app uses a light palette; OS preferences must not activate partial dark utilities. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root { color-scheme: only light; }
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]), textarea, select) {
+    background-color: #fff;
+    color: #0f172a;
+    caret-color: #0f172a;
+    color-scheme: only light;
+  }
+}
+
+/* Keep placeholder contrast consistent, including legacy per-screen overrides. */
+:where(input, textarea)::placeholder { color: #475569; opacity: 1; }
+
+@media (forced-colors: none) {
+  input:autofill,
+  input:-webkit-autofill {
+    -webkit-text-fill-color: #0f172a;
+    caret-color: #0f172a;
+    box-shadow: 0 0 0 1000px #fff inset;
+  }
+}
+
 :root {
   --background: 230 230 233;
   --foreground: 23 24 28;
