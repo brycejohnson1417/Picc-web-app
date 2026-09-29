@@ -142,7 +142,7 @@ test('accounts stay dense, keep the alphabet rail clear, and create a follow-up'
   }
 
   await page.getByRole('button', { name: 'New follow-up' }).click();
-  await page.getByPlaceholder('Search account or rep').fill('Harbor');
+  await page.getByPlaceholder('Search account or rep').fill('Example Store');
   await page.getByRole('button', { name: /Example Store.*Example Rep/s }).click();
   await page.getByRole('button', { name: 'Tomorrow' }).click();
   await page.getByPlaceholder('What needs to happen next?').fill('Review the next order');
@@ -169,7 +169,7 @@ test('account details exposes direct actions and prompts for a follow-up after G
   const email = page.getByRole('link', { name: 'Email Example Buyer' });
   const text = page.getByRole('link', { name: 'Text Example Buyer' });
   const call = page.getByRole('link', { name: 'Call Example Buyer' });
-  await expect(email).toHaveAttribute('href', /https:\/\/mail\.google\.com\/mail\/\?view=cm&fs=1&to=mara%40harbor\.example/);
+  await expect(email).toHaveAttribute('href', /https:\/\/mail\.google\.com\/mail\/\?view=cm&fs=1&to=mara%40example\.com/);
   await expect(text).toHaveAttribute('href', 'sms:+13475550198');
   await expect(call).toHaveAttribute('href', 'tel:+13475550198');
 
