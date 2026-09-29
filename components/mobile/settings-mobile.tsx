@@ -857,7 +857,7 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
                     value={inviteNote}
                     onChange={(event) => setInviteNote(event.target.value)}
                     placeholder="Optional note to include with the invite..."
-                    className="min-h-[96px] border-[#c6c8d0] bg-white text-[15px] text-[#1d1f23] placeholder:text-[#7c8089]"
+                    className="min-h-[96px] border-[#c6c8d0] bg-white text-[15px] text-[#1d1f23]"
                   />
                   <Button
                     type="button"
@@ -918,7 +918,7 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
                     value={operationalInviteNote}
                     onChange={(event) => setOperationalInviteNote(event.target.value)}
                     placeholder="Optional onboarding note..."
-                    className="min-h-[96px] border-[#c6c8d0] bg-white text-[15px] text-[#1d1f23] placeholder:text-[#7c8089]"
+                    className="min-h-[96px] border-[#c6c8d0] bg-white text-[15px] text-[#1d1f23]"
                   />
                   <Button
                     type="button"
