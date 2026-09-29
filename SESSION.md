@@ -11,3 +11,5 @@ Validation: no business behavior change; TDD exception for pure extraction, veri
 Overlap: checked #194,#195,#200,#202,#189,#166,#135,#82; owned source paths do not overlap.
 
 Scope update: browser RED exposed pre-existing unsupported oklch export failure. Also own package.json/package-lock.json for html2canvas-pro, a compatible modern-color renderer, isolated to this export. Validate real downloaded PDF and rendered pages.
+
+Final validation: clean install, zero audit vulnerabilities, combined-main verify 250 tests; real browser PDF download passed. Initial dashboard JS 417 -> 235 kB. Modern color rendering repaired; tall sections paginate instead of clipping. Local seeded report only.
