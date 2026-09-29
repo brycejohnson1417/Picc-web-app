@@ -1,9 +1,10 @@
-# Issue 107: Spreadsheet parser hardening
+# Issue 197: Prisma tooling patches
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/107
-Branch: codex/107-spreadsheet-hardening, from main 4fde001.
-Scope: replace the vulnerable registry SheetJS version with the official fixed distribution; bound spreadsheet inputs and retain required workbook/CSV behavior.
-Owned: package.json, package-lock.json, lib/integrations/sheets.ts, lib/integrations/spreadsheet-input.ts and tests, lib/server/preferred-partner-proposal.ts, SESSION.md.
-Out of scope: Prisma tooling, provider changes, schema, production data, UI redesign.
-Overlap checked: #195/#194/#189/#182/#166/#135/#82. No source overlap with current changes except SESSION; inspect #135 proposal overlap before implementation and sequence/rebase as needed. Dependency updates exclusive.
-Validation: RED malformed/oversized input tests first; GREEN representative workbook/CSV tests; clean npm ci, npm audit, npm run verify. Existing SheetJS API adapter retained; no new parser abstraction beyond input validation.
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/197
+Branch: codex/197-prisma-tooling, stacked on PR196 until it merges.
+Owned: package.json, package-lock.json, SESSION.md.
+Scope: Prisma 6 patch plus supported tooling updates to address effect/deepmerge/esbuild audit findings. No Prisma major upgrade, schema migration, API changes, or production records.
+Validation: advisory baseline is RED; clean npm ci, Prisma generation/validation, npm run verify and npm audit are GREEN proof. Dependency-only change has no new source behavior test.
+Architecture: retain existing Prisma client and PostgreSQL adapter. Check config loader compatibility if an override is required. PR196 package overlap is deliberately sequenced via its head commit; no other source overlap. Other open PRs checked: 195,194,189,182,166,135,82.
+
+Validation follow-up: own lib/gmail/gmail-domain.test.ts solely to make signature tampering deterministic; the old final-character replacement can decode to the same bytes. No production OAuth implementation change.
