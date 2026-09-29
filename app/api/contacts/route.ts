@@ -1,3 +1,4 @@
+import { requireNotionAccountOwnership, INVALID_CRM_REFERENCE } from '@/lib/server/crm-reference-ownership';
 import { NextResponse } from 'next/server';
 import { parseJsonBody, routeErrorResponse } from '@/lib/api/route-errors';
 import { guard } from '@/lib/auth/api-guard';
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
 
   try {
     const payload = await parseJsonBody(req, notionContactCreateSchema);
+    await requireNotionAccountOwnership(ctx.orgId, payload.accountPageId);
     const result = await createVerifiedContact(payload, createNotionContactCreationAdapter());
     const status = result.status === 'role_collision' ? 409 : result.status === 'partial_relation' ? 202 : result.status === 'created_verified' ? 201 : 200;
     return NextResponse.json(result, { status });
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
     return routeErrorResponse(error, {
       fallbackMessage: 'Failed to create contact',
       zodMessage: 'Invalid contact payload',
-      statusByMessage: { 'Contact account not found': 404 },
+      statusByMessage: { 'Contact account not found': 404, [INVALID_CRM_REFERENCE]: 404 },
     });
   }
 }

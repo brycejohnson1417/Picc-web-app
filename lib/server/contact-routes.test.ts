@@ -28,6 +28,7 @@ async function mockDependencies(input?: {
   createResult?: unknown;
   retryResult?: unknown;
 }) {
+  vi.doMock('@/lib/db/prisma', () => ({ prisma: { territoryStoreReadModel: { findFirst: vi.fn().mockResolvedValue({ id: 'store' }) } } }));
   vi.doMock('@/lib/auth/api-guard', () => ({
     guard: vi.fn().mockResolvedValue(input?.guardResult ?? { orgId: 'org', userId: 'user' }),
   }));
