@@ -1,21 +1,12 @@
-# Pricing catalog correction
+# Issue 93: disable placeholder membership sync
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/185
-Branch: codex/185-refresh-pricing
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/93
+Branch: codex/93-disable-mock-sync from main 28f021f.
 
-Scope: refresh three superseded catalog entries and regression-test the shared pricing/comparison consumers.
-Owned paths: lib/preferred-partner/pricing.ts, lib/preferred-partner/pricing.test.ts, lib/server/preferred-partner-savings.test.ts, lib/server/preferred-partner-proposal.test.ts, SESSION.md.
-Out of scope: order/payment mutations, external-system writes, schema/auth, account-specific policies, redesign.
-Architecture: retain shared domain catalog; existing browser comparison/proposal flows consume its results.
-Validation: RED regression before catalog edit, focused tests, npm run verify, authenticated browser check when available.
+Scope: return a clear disabled response from the admin-only placeholder sync endpoint; eliminate hardcoded membership writes. No caller exists in the current UI.
+Out of scope: membership deletion, real Notion ingestion, role changes, schema, provider/environment changes.
+Owned paths: app/api/integrations/notion/sync-team-directory/route.ts, lib/server/notion-team-directory-route.test.ts, SESSION.md.
+Checked PRs 190,189,182,166,144,135,82. No focused source overlap; old SESSION claims are stale. Distinct source paths from #90.
 
-## 2026-09-16: Route completeness (#187)
-
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/187
-Branch: codex/187-route-completeness, based on origin/main b35df64.
-Scope: route order completeness, 50-store optimization, existing lead status and configurable origin.
-Out of scope: schema/auth/sync/secrets changes, account mutations, unrelated UI.
-Owned paths: components/mobile/route-mobile.tsx; components/territory/route-sheet.tsx; lib/territory/route*.ts; lib/territory/types.ts; app/api/territory/optimize-route/route.ts; lib/server/territory-saved-routes.ts; route-specific tests; appended SESSION.md section.
-Checked PRs #182, #166, #144, #135, #82. Shared SESSION.md changes are append-only and must rebase before merge. #144 is an old monorepo rewrite contrary to current repo instructions; this slice is rebased on canonical current main and must be rechecked before merge. No active route-specific ownership found.
-Architecture: existing route hook and Google adapter, domain helpers for ordering/batching; existing DESIGN-SYSTEM.md governs UI.
-Validation: RED stale-order and 50-stop/origin regressions first; npm run verify; npm run test:e2e; native browser desktop/mobile interaction QA with screenshots/video.
+Test plan: RED admin request must return 501 without membership writes; unauthorized request remains forbidden. GREEN route replacement; npm run verify. No frontend behavior is changed and no UI caller exists, so browser feature testing is not applicable to this endpoint removal. Existing baseline 215 tests passed at 28f021f.
+Architecture: retain existing admin guard; remove the fake provider implementation rather than add a replacement integration. No production membership data is changed.
