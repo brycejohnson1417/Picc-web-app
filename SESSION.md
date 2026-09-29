@@ -1,21 +1,12 @@
-# Pricing catalog correction
+# Issue 192: runtime dependency security patches
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/185
-Branch: codex/185-refresh-pricing
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/192
+Branch: codex/192-dependency-patches from main 28f021f.
 
-Scope: refresh three superseded catalog entries and regression-test the shared pricing/comparison consumers.
-Owned paths: lib/preferred-partner/pricing.ts, lib/preferred-partner/pricing.test.ts, lib/server/preferred-partner-savings.test.ts, lib/server/preferred-partner-proposal.test.ts, SESSION.md.
-Out of scope: order/payment mutations, external-system writes, schema/auth, account-specific policies, redesign.
-Architecture: retain shared domain catalog; existing browser comparison/proposal flows consume its results.
-Validation: RED regression before catalog edit, focused tests, npm run verify, authenticated browser check when available.
+Scope: supported Next.js 15 patches, sharp security release, compatible transitive dependency fixes, current audit proof.
+Out of scope: framework-major migration, xlsx replacement (#107), application refactors, schema/auth/provider changes.
+Owned paths: package.json, package-lock.json, SESSION.md.
+Checked PRs 190,191,189,182,166,144,135,82; no focused package overlap other than obsolete architecture rewrite #144. Source slices stay independent; resolve shared handoff only after a preceding merge.
 
-## 2026-09-16: Route completeness (#187)
-
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/187
-Branch: codex/187-route-completeness, based on origin/main b35df64.
-Scope: route order completeness, 50-store optimization, existing lead status and configurable origin.
-Out of scope: schema/auth/sync/secrets changes, account mutations, unrelated UI.
-Owned paths: components/mobile/route-mobile.tsx; components/territory/route-sheet.tsx; lib/territory/route*.ts; lib/territory/types.ts; app/api/territory/optimize-route/route.ts; lib/server/territory-saved-routes.ts; route-specific tests; appended SESSION.md section.
-Checked PRs #182, #166, #144, #135, #82. Shared SESSION.md changes are append-only and must rebase before merge. #144 is an old monorepo rewrite contrary to current repo instructions; this slice is rebased on canonical current main and must be rechecked before merge. No active route-specific ownership found.
-Architecture: existing route hook and Google adapter, domain helpers for ordering/batching; existing DESIGN-SYSTEM.md governs UI.
-Validation: RED stale-order and 50-stop/origin regressions first; npm run verify; npm run test:e2e; native browser desktop/mobile interaction QA with screenshots/video.
+TDD exception: package metadata changes are measured with npm audit and the full existing regression suite, not mirrored unit tests. Run clean npm ci, npm run verify, and representative browser checks. Keep a before/after audit and explicitly report unresolved findings. Do not use audit fix --force.
+Architecture remains root Next.js app, Clerk, Prisma and existing integrations. This is reversible dependency patching.
