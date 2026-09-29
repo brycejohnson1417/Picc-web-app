@@ -8,3 +8,5 @@ Out of scope: schema, production data, current calendar, notification preference
 Architecture: retain existing authentication/role guards and active Home freshness signals; no new abstraction.
 Validation: RED endpoint regression test, existing guards, verify, local Home browser proof.
 Overlap: checked #194,#195,#200,#189,#166,#135,#82. #195 overlaps Home and must rebase preserving its org guard. No overlap with other changes.
+
+Validation completed: npm run verify passed 57 files / 250 tests; mobile Home sync disclosure retains retailer/order status and legacy endpoint returns 410. No database writes.
