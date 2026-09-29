@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback, type FormEvent } from 'react';
+import { useEffect, useState, useCallback, useRef, type FormEvent } from 'react';
 import { Button, Input, Skeleton } from '@/components/ui';
 
 type Status = {configured:boolean;encryptionReady:boolean;fromEmail:string;fromName:string;validatedAt:string|null};
@@ -15,6 +15,7 @@ export function MailjetConnectionCard() {
   const [working,setWorking]=useState(false);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
+  const testRequestId=useRef<string|null>(null);
   const [recipient,setRecipient]=useState('');
   const [confirmDisconnect,setConfirmDisconnect]=useState(false);
   const load = useCallback(async () => {
@@ -28,7 +29,7 @@ export function MailjetConnectionCard() {
   }
   async function sendTest(event:FormEvent) {
     event.preventDefault();setWorking(true);setError('');setNotice('');
-    try {await request('POST',{recipient});setNotice(`Mailjet accepted the test for ${recipient}. Check the recipient inbox and spam folder to confirm delivery.`);}catch(e){setError(e instanceof Error?e.message:'Test email could not be sent.');}finally{setWorking(false);}
+    try {testRequestId.current ??= crypto.randomUUID();await request('POST',{recipient,requestId:testRequestId.current});testRequestId.current=null;setNotice(`Mailjet accepted the test for ${recipient}. Check the recipient inbox and spam folder to confirm delivery.`);}catch(e){setError(e instanceof Error?e.message:'Test email could not be sent.');}finally{setWorking(false);}
   }
   async function disconnect() {
     setWorking(true);setError('');setNotice('');try{setStatus(await request('DELETE'));setConfirmDisconnect(false);setForm(empty);setNotice('Mailjet disconnected. Workspace email delivery is disabled.');}catch(e){setError(e instanceof Error?e.message:'Disconnect failed.');}finally{setWorking(false);}
