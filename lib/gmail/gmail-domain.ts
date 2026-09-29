@@ -17,6 +17,7 @@ export type ParsedGmailMessage = {
   snippet: string;
   occurredAt: string;
   externalUrl: string;
+  automated: boolean;
 };
 
 type OAuthState = {
@@ -102,6 +103,7 @@ export function parseGmailMessage(payload: GmailMessagePayload): ParsedGmailMess
     snippet: payload.snippet?.trim() ?? '',
     occurredAt: Number.isFinite(internalDate) && internalDate > 0 ? new Date(internalDate).toISOString() : new Date(0).toISOString(),
     externalUrl: `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(threadId)}`,
+    automated: Boolean(header(payload, 'List-Unsubscribe') || header(payload, 'List-Id') || /bulk|list|junk/i.test(header(payload, 'Precedence')) || (header(payload, 'Auto-Submitted') && header(payload, 'Auto-Submitted').toLowerCase() !== 'no')),
   };
 }
 
@@ -122,10 +124,11 @@ export function normalizeMailboxEmail(value: string) {
   return match?.[0]?.toLowerCase() ?? '';
 }
 
-export function extractMailboxPeople(messages: Array<Pick<ParsedGmailMessage, 'from' | 'to' | 'occurredAt'>>, mailboxEmail: string) {
+export function extractMailboxPeople(messages: Array<Pick<ParsedGmailMessage, 'from' | 'to' | 'occurredAt'> & { automated?: boolean }>, mailboxEmail: string) {
   const ownEmail = normalizeMailboxEmail(mailboxEmail);
   const people = new Map<string, { email: string; name: string; messageCount: number; lastInteractionAt: string }>();
   for (const message of messages) {
+    if (message.automated) continue;
     for (const person of [...parseMailboxPeople(message.from), ...parseMailboxPeople(message.to)]) {
       if (!person.email || person.email === ownEmail) continue;
       const current = people.get(person.email);

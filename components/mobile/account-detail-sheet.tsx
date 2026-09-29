@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle2, ChevronDown, Clock3, Copy, MapPinned, Naviga
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAppAccess } from '@/components/auth/app-access-provider';
+import { GmailConversations } from '@/components/crm/gmail-conversations';
 import { ContactCreateFlow } from '@/components/crm/contact-create-flow';
 import { ContactQuickActions } from '@/components/crm/contact-quick-actions';
 import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-panel';
@@ -18,7 +19,7 @@ import type { RuntimeFreshness } from '@/lib/runtime/account-contact-contract';
 import type { TerritoryStoreContact, TerritoryStoreDetailResponse, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
-type DetailTab = 'detail' | 'location' | 'ai' | 'orders' | 'history';
+type DetailTab = 'detail' | 'location' | 'ai' | 'orders' | 'history' | 'email';
 const STORE_DETAIL_CACHE_PREFIX = 'territory-store-detail:';
 const STORE_DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -514,6 +515,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
               { value: 'ai', label: 'AI' },
               { value: 'orders', label: 'Orders' },
               { value: 'history', label: 'History' },
+              { value: 'email', label: 'Email' },
             ]}
             className="bg-[#d4d4d8] [&_button]:py-1.5 [&_button]:text-[13px]"
           />
@@ -746,6 +748,8 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
               </div>
             </>
           ) : null}
+
+          {tab === 'email' ? <div className="p-4"><GmailConversations kind="account" recordId={activeStore.notionPageId} /></div> : null}
 
           {tab === 'history' ? (
             <>

@@ -1,10 +1,11 @@
 'use client';
 
 import * as Dialog from '@radix-ui/react-dialog';
-import { Archive, BellPlus, Check, ChevronLeft, Download, Instagram, Linkedin, Loader2, Mail, MoreHorizontal, RefreshCw, Star, Trash2, UserRound, UsersRound, X } from 'lucide-react';
+import { Archive, BellPlus, Check, ChevronLeft, Download, Instagram, Linkedin, Loader2, MoreHorizontal, Star, Trash2, UserRound, UsersRound, X } from 'lucide-react';
 import Link from 'next/link';
 import { cloneElement, type ReactElement, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { GmailConversations } from '@/components/crm/gmail-conversations';
 import { ContactQuickActions, type ContactQuickActionAccount } from '@/components/crm/contact-quick-actions';
 import { useAppAccess } from '@/components/auth/app-access-provider';
 import type { RuntimeContactSummary } from '@/lib/runtime/account-contact-contract';
@@ -24,12 +25,6 @@ type ProfilePayload = {
   reminders: Reminder[];
   activities: Activity[];
 };
-type GmailPayload = {
-  configuration: { configured: boolean; redirectUri: string | null };
-  connection: { mailboxEmail: string; status: string; lastSyncedAt: string | null; lastError: string | null } | null;
-  activities: Array<{ id: string; summary: string; occurredAt: string; externalUrl: string | null }>;
-};
-
 const blankProfile: ProfilePayload = {
   favorite: false,
   frequencyDays: null,
@@ -66,8 +61,6 @@ export function ContactProfileWorkspace({ contact, accounts, contacts }: { conta
   const [mergeSearch, setMergeSearch] = useState('');
   const [mergeTargetId, setMergeTargetId] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [gmail, setGmail] = useState<GmailPayload | null>(null);
-  const [gmailLoading, setGmailLoading] = useState(true);
 
   const profileUrl = `/api/contacts/${encodeURIComponent(contact.id)}/profile`;
   useEffect(() => {
@@ -82,35 +75,6 @@ export function ContactProfileWorkspace({ contact, accounts, contacts }: { conta
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, [profileUrl]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetch(`/api/contacts/${encodeURIComponent(contact.id)}/gmail`, { cache: 'no-store' })
-      .then(async (response) => {
-        const payload = (await response.json()) as GmailPayload & { error?: string };
-        if (!response.ok) throw new Error(payload.error || 'Gmail activity could not be loaded.');
-        if (!cancelled) setGmail(payload);
-      })
-      .catch((caught) => !cancelled && setError(caught instanceof Error ? caught.message : 'Gmail activity could not be loaded.'))
-      .finally(() => !cancelled && setGmailLoading(false));
-    return () => { cancelled = true; };
-  }, [contact.id]);
-
-  async function refreshGmail() {
-    setGmailLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/gmail`, { method: 'POST' });
-      const payload = (await response.json().catch(() => ({}))) as Pick<GmailPayload, 'activities'> & { syncedCount?: number; error?: string };
-      if (!response.ok) throw new Error(payload.error || 'Gmail activity could not be refreshed.');
-      setGmail((current) => current ? { ...current, activities: payload.activities ?? [] } : current);
-      toast.success(payload.syncedCount ? `${payload.syncedCount} related emails found` : 'No related emails found');
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Gmail activity could not be refreshed.');
-    } finally {
-      setGmailLoading(false);
-    }
-  }
 
   const mergeOptions = useMemo(() => {
     const query = mergeSearch.trim().toLocaleLowerCase('en-US');
@@ -281,16 +245,7 @@ export function ContactProfileWorkspace({ contact, accounts, contacts }: { conta
 
         {!loading && tab === 'timeline' ? (
           <section className="mt-4 space-y-2">
-            <div className="rounded-xl border border-[#dce2eb] bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#fff0eb] text-[#c93412]"><Mail className="h-4 w-4" /></div>
-                  <div className="min-w-0"><h2 className="font-semibold">Gmail activity</h2><p className="mt-1 truncate text-xs text-[#687486]">{gmail?.connection?.mailboxEmail ?? 'Your individual mailbox connection'}</p></div>
-                </div>
-                {gmail?.connection ? <button type="button" onClick={() => void refreshGmail()} disabled={gmailLoading || !contact.email} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#cbd3df] px-3 text-sm font-semibold disabled:opacity-50"><RefreshCw className={cn('h-4 w-4', gmailLoading && 'animate-spin')} /> Refresh</button> : null}
-              </div>
-              {gmailLoading && !gmail ? <p className="mt-3 text-sm text-[#687486]">Checking Gmail connection…</p> : !gmail?.configuration.configured ? <p className="mt-3 text-sm text-amber-800">Gmail needs administrator setup before mailbox activity can load.</p> : !gmail.connection ? <p className="mt-3 text-sm text-[#687486]">Connect your Gmail in <Link href="/settings#connected-services" className="font-semibold text-[#315d9c] underline">Settings</Link> to see related threads.</p> : !contact.email ? <p className="mt-3 text-sm text-amber-800">Add an email address to this contact before searching Gmail.</p> : gmail.activities.length ? <div className="mt-3 space-y-2">{gmail.activities.map((activity) => <a key={activity.id} href={activity.externalUrl || undefined} target="_blank" rel="noreferrer" className="block rounded-lg border border-[#e1e6ed] bg-[#f8fafc] px-3 py-2.5 hover:border-[#9db8f7]"><div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold leading-5">{activity.summary}</p><time className="shrink-0 text-xs text-[#738091]">{formatWhen(activity.occurredAt)}</time></div></a>)}</div> : <p className="mt-3 text-sm text-[#687486]">No related threads loaded yet. Refresh to search this mailbox by the contact’s exact email address.</p>}
-            </div>
+            <GmailConversations kind="contact" recordId={contact.id} />
             {profile.activities.length ? profile.activities.map((activity) => (
               <a key={activity.id} href={activity.externalUrl || undefined} className={cn('block rounded-xl border border-[#dce2eb] bg-white px-4 py-3', activity.externalUrl ? 'hover:border-[#9db8f7]' : 'pointer-events-none')}>
                 <div className="flex items-center justify-between gap-3"><p className="font-semibold">{activity.summary}</p><time className="shrink-0 text-xs text-[#738091]">{formatWhen(activity.occurredAt)}</time></div>

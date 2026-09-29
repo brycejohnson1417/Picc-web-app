@@ -70,3 +70,11 @@ describe('Gmail domain safety', () => {
     });
   });
 });
+
+describe('automated sender exclusion',()=>{
+ it('detects list headers and excludes those messages from contact recommendations',()=>{
+   const automated=parseGmailMessage({id:'a',threadId:'t',payload:{headers:[{name:'From',value:'Editor <editor@newsletter.example>'},{name:'List-Unsubscribe',value:'<https://newsletter.example/unsubscribe>'}]}});
+   expect(automated.automated).toBe(true);
+   expect(extractMailboxPeople([automated],'rep@example.com')).toEqual([]);
+ });
+});
