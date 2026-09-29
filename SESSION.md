@@ -8,3 +8,7 @@ Out of scope: customer campaigns, scheduled activation, old table deletion, acti
 Architecture: existing IntegrationConnection holds encrypted credentials, deterministic per-org connection ID; server boundary owns Mailjet requests. Use a dedicated application encryption key, never return secrets. Standard Settings controls and existing DESIGN-SYSTEM; product register, daylight mobile use, restrained color and clear status.
 Overlap: #135 settings-mobile and #195 daily-briefing require rebase before their release; #195 remains blocked. #198 packages do not overlap. Checked #194,#189,#182,#166,#82. Schema exclusive.
 Tests: RED Mailjet response/error cases and admin/org guards; GREEN send contract and encrypted persistence; actual browser controls including bad credentials/network and save/cancel; full verify. No live send without approved test recipient. Schema/env changes approval-lane.
+
+## Validation
+
+Updated onto main e4732d2. Full `npm run verify` passed: 60 test files, 263 tests, lint, typecheck, Prisma validation, and production build. Chromium tests passed for the mobile Mailjet Settings fixture workflow and dashboard PDF download on the combined tree. Fixture checks do not establish live provider or inbox delivery.
