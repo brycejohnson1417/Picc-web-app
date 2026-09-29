@@ -1,12 +1,15 @@
-# Issue 201: Retire worker calendar health
+# Issue 94: Defer dashboard export libraries
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/201
-Branch: codex/201-retired-calendar-health from cf42d431.
-Scope: remove Home worker calendar health query/tile, retire guarded endpoint with 410, delete unused service.
-Owned: app/(main)/home/page.tsx; app/api/calendar/sync-health/route.ts; lib/server/calendar-sync-health.ts; lib/server/calendar-sync-health-route.test.ts; SESSION.md.
-Out of scope: schema, production data, current calendar, notification preferences, payroll/history.
-Architecture: retain existing authentication/role guards and active Home freshness signals; no new abstraction.
-Validation: RED endpoint regression test, existing guards, verify, local Home browser proof.
-Overlap: checked #194,#195,#200,#189,#166,#135,#82. #195 overlaps Home and must rebase preserving its org guard. No overlap with other changes.
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/94
+Branch: codex/94-dashboard-export-lazy from cf42d431.
+Scope: extract PDF export from the large dashboard component and load it only on explicit export; preserve output and controls.
+Owned: components/dashboard/nabis-sales-dashboard.tsx; components/dashboard/nabis-dashboard-pdf.ts; tests/e2e/dashboard-export.spec.ts; SESSION.md.
+Out of scope: data semantics, redesign, auth, settings/territory refactors, production writes.
+Architecture: use the existing on-demand PDF import pattern used by proposal/order exports; keep rendering thin and isolate export dependencies.
+Evidence: dashboard statically imports html2canvas, jspdf, jspdf-autotable; current build 202 kB route / 417 kB first-load. Other PDF surfaces already defer imports.
+Validation: no business behavior change; TDD exception for pure extraction, verify generated PDF download via browser and measure production build bundle before/after; npm run verify. Check loading/error states. No broad rewrite.
+Overlap: checked #194,#195,#200,#202,#189,#166,#135,#82; owned source paths do not overlap.
 
-Validation completed: npm run verify passed 57 files / 250 tests; mobile Home sync disclosure retains retailer/order status and legacy endpoint returns 410. No database writes.
+Scope update: browser RED exposed pre-existing unsupported oklch export failure. Also own package.json/package-lock.json for html2canvas-pro, a compatible modern-color renderer, isolated to this export. Validate real downloaded PDF and rendered pages.
+
+Final validation: clean install, zero audit vulnerabilities, combined-main verify 250 tests; real browser PDF download passed. Initial dashboard JS 417 -> 235 kB. Modern color rendering repaired; tall sections paginate instead of clipping. Local seeded report only.
