@@ -1,6 +1,8 @@
 'use client';
 
+import { toast } from 'sonner';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { completeRouteOrder, hasCompleteRouteOrder, validRouteLocation, type RouteLocation } from './route-planning';
 import type { RouteMode, TerritoryOptimizedRouteResponse } from '@/lib/territory/types';
 
 export interface SavedRoute {
@@ -16,6 +18,7 @@ export interface SavedRoute {
 }
 
 interface RoutePlanStorage {
+  origin: RouteLocation | null;
   selectedStopIds: string[];
   orderedStopIds: string[];
   savedRoutes: SavedRoute[];
@@ -27,6 +30,7 @@ const STORAGE_KEY = 'picc_route_plan_v1';
 const EVENT_NAME = 'picc-route-plan-updated';
 
 const INITIAL_STATE: RoutePlanStorage = {
+  origin: null,
   selectedStopIds: [],
   orderedStopIds: [],
   savedRoutes: [],
@@ -98,10 +102,11 @@ function readStorage(): RoutePlanStorage {
       : [];
 
     return {
-      selectedStopIds,
-      orderedStopIds,
+      origin: validRouteLocation(parsed.origin) ? parsed.origin : null,
+      selectedStopIds: uniqueIds(selectedStopIds),
+      orderedStopIds: completeRouteOrder(selectedStopIds, orderedStopIds),
       savedRoutes,
-      optimizedRoute,
+      optimizedRoute: optimizedRoute && hasCompleteRouteOrder(uniqueIds(selectedStopIds), optimizedRoute.orderedStopIds) ? optimizedRoute : null,
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
     };
   } catch {
@@ -142,10 +147,10 @@ export function useRoutePlan() {
     const normalized: RoutePlanStorage = {
       ...next,
       selectedStopIds: uniqueIds(next.selectedStopIds),
-      orderedStopIds: uniqueIds(next.orderedStopIds.filter((id) => next.selectedStopIds.includes(id))),
+      orderedStopIds: completeRouteOrder(next.selectedStopIds, next.orderedStopIds),
       savedRoutes: next.savedRoutes,
       optimizedRoute:
-        next.optimizedRoute && next.optimizedRoute.orderedStopIds.every((id) => next.selectedStopIds.includes(id))
+        next.optimizedRoute && hasCompleteRouteOrder(uniqueIds(next.selectedStopIds), next.optimizedRoute.orderedStopIds)
           ? next.optimizedRoute
           : null,
       updatedAt: new Date().toISOString(),
@@ -201,6 +206,8 @@ export function useRoutePlan() {
   }, [state.orderedStopIds, state.selectedStopIds]);
 
   return {
+    origin: state.origin,
+    setOrigin: (origin: RouteLocation | null) => updateState(prev => ({ ...prev, origin, optimizedRoute: null })),
     selectedStopIds: state.selectedStopIds,
     orderedStopIds,
     savedRoutes: state.savedRoutes,
@@ -211,6 +218,7 @@ export function useRoutePlan() {
     toggleStop: (stopId: string) =>
       updateState((prev) => {
         const exists = prev.selectedStopIds.includes(stopId);
+        if (!exists && prev.selectedStopIds.length >= 50) { toast.error("Routes support up to 50 stores. Remove a store before adding another."); return prev; }
         return {
           ...prev,
           selectedStopIds: exists ? prev.selectedStopIds.filter((id) => id !== stopId) : [...prev.selectedStopIds, stopId],
@@ -239,14 +247,15 @@ export function useRoutePlan() {
         optimizedRoute: null,
       })),
     setOptimizedRoute: (optimizedRoute: TerritoryOptimizedRouteResponse | null) =>
-      updateState((prev) => ({
-        ...prev,
-        orderedStopIds: optimizedRoute ? optimizedRoute.orderedStopIds.filter((id) => prev.selectedStopIds.includes(id)) : prev.orderedStopIds,
-        optimizedRoute:
-          optimizedRoute && optimizedRoute.orderedStopIds.every((id) => prev.selectedStopIds.includes(id))
-            ? optimizedRoute
-            : null,
-      })),
+      updateState((prev) => {
+        if (optimizedRoute && !hasCompleteRouteOrder(prev.selectedStopIds, optimizedRoute.orderedStopIds)) return prev;
+        return {
+          ...prev,
+          origin: optimizedRoute?.origin ?? prev.origin,
+          orderedStopIds: optimizedRoute?.orderedStopIds ?? prev.orderedStopIds,
+          optimizedRoute,
+        };
+      }),
     clearOptimizedRoute: () =>
       updateState((prev) => ({
         ...prev,
@@ -305,7 +314,7 @@ export function useRoutePlan() {
           ...prev,
           selectedStopIds: route.stopIds,
           orderedStopIds: route.stopIds,
-          optimizedRoute: route.optimizedRoute ?? null,
+          optimizedRoute: null,
         };
       }),
     deleteSavedRoute: async (routeId: string) => {

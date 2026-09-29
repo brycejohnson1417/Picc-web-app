@@ -253,6 +253,8 @@ export interface TerritoryOptimizedLeg {
 }
 
 export interface TerritoryOptimizedRouteResponse {
+  origin?: { name: string; lat: number; lng: number };
+  planningNote?: string;
   mode: RouteMode;
   orderedStopIds: string[];
   totalDistanceMeters: number;

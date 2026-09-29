@@ -8,13 +8,13 @@ export type PreferredPartnerPrice = {
 };
 
 export const PREFERRED_PARTNER_PRICING: PreferredPartnerPrice[] = [
-  { brand: 'Chopsticks', displayBrand: 'Chopsticks 2-Pk', size: '2 (.5g)', weight: '1g', standardWholesale: 5, preferredWholesale: 4 },
+  { brand: 'Chopsticks', displayBrand: 'Chopsticks 2-Pk', size: '2 (.5g)', weight: '1g', standardWholesale: 5.5, preferredWholesale: 4.4 },
   { brand: 'Ichi-Roll', displayBrand: 'Ichi Single', size: 'Single', weight: '1g', standardWholesale: 5, preferredWholesale: 4 },
   { brand: 'Ichi-Roll', displayBrand: 'Ichi Pack', size: '4-Pack', weight: '4g', standardWholesale: 16, preferredWholesale: 12.8 },
   { brand: '#Juan-Roll', displayBrand: '#Juan Single', size: 'Single', weight: '1g', standardWholesale: 5, preferredWholesale: 4 },
   { brand: '#Juan-Roll', displayBrand: '#Juan Pack', size: '4-Pack', weight: '4g', standardWholesale: 16, preferredWholesale: 12.8 },
-  { brand: 'Smack.', displayBrand: 'Smack Mini Single', size: 'Mini', weight: '0.5g', standardWholesale: 4.25, preferredWholesale: 3.4 },
-  { brand: 'Smack.', displayBrand: 'Smack Single', size: 'Single', weight: '1g', standardWholesale: 6.25, preferredWholesale: 5 },
+  { brand: 'Smack.', displayBrand: 'Smack Mini Single', size: 'Mini', weight: '0.5g', standardWholesale: 4.5, preferredWholesale: 3.6 },
+  { brand: 'Smack.', displayBrand: 'Smack Single', size: 'Single', weight: '1g', standardWholesale: 6.75, preferredWholesale: 5.4 },
   { brand: 'O-Yeah', displayBrand: 'O-Yeah Single', size: 'Single', weight: '1g', standardWholesale: 7.5, preferredWholesale: 6 },
   { brand: 'O-Yeah', displayBrand: 'O-Yeah Pack', size: '5-Pack', weight: '2.5g', standardWholesale: 17.5, preferredWholesale: 14 },
   { brand: 'State of Mind', displayBrand: 'State of Mind Single', size: 'Single', weight: '1g', standardWholesale: 10, preferredWholesale: 8 },

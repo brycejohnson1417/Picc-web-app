@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 const createSavedRouteSchema = z.object({
   name: z.string().trim().min(1).max(120),
   mode: z.enum(['car', 'bike', 'transit']).default('car'),
-  stopIds: z.array(z.string().min(1)).min(1).max(25),
+  stopIds: z.array(z.string().min(1)).min(1).max(50),
   totalDistanceMeters: z.number().int().nonnegative().optional(),
   totalDurationSeconds: z.number().int().nonnegative().optional(),
 });
