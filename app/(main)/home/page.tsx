@@ -172,6 +172,7 @@ export default async function HomePage() {
   }
 
   const territoryResponse = await loadTerritoryStores({
+    orgId,
     preferredPartnerFilter: 'all',
   }).catch(() => null);
 

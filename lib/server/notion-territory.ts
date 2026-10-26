@@ -2212,7 +2212,18 @@ export async function territoryConnectionCheck() {
   };
 }
 
-export async function loadTerritoryStores(input?: {
+export const TERRITORY_WORKSPACE_ERROR = 'Territory is unavailable for this workspace';
+
+export function requireTerritorySourceOrg(orgId: string | null | undefined) {
+  const sourceOrgId = DEMO_MODE ? DEMO_ORG_ID : process.env.TERRITORY_ORG_ID?.trim();
+  if (!orgId?.trim() || !sourceOrgId || orgId.trim() !== sourceOrgId) {
+    throw new Error(TERRITORY_WORKSPACE_ERROR);
+  }
+  return orgId.trim();
+}
+
+export async function loadTerritoryStores(input: {
+  orgId: string;
   statuses?: string[];
   reps?: string[];
   pppStatuses?: string[];
@@ -2230,6 +2241,7 @@ export async function loadTerritoryStores(input?: {
   refresh?: boolean;
   maxLiveGeocodeLookups?: number;
 }): Promise<TerritoryStoresResponse> {
+  const orgId = requireTerritorySourceOrg(input.orgId);
   const snapshot = await getTerritorySnapshot({
     refresh: input?.refresh,
     maxLiveGeocodeLookups: input?.maxLiveGeocodeLookups,
@@ -2295,10 +2307,10 @@ export async function loadTerritoryStores(input?: {
   };
 
   try {
-    let readModel = await loadTerritoryStoresFromReadModel({});
+    let readModel = await loadTerritoryStoresFromReadModel({ orgId });
     if (readModel.recordsRead === 0 && snapshot.stores.length > 0) {
-      await syncTerritoryStoresReadModel(snapshot.stores);
-      readModel = await loadTerritoryStoresFromReadModel({});
+      await syncTerritoryStoresReadModel(snapshot.stores, { orgId });
+      readModel = await loadTerritoryStoresFromReadModel({ orgId });
     }
     const mergedStores = readModel.stores.map(mergeSnapshotStore).filter((store) => !isExcludedInternalTransferRetailerName(store.name));
     const filtered = filterTerritoryPins(mergedStores, selection);
