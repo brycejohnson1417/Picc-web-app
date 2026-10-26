@@ -1,11 +1,13 @@
-# Issue 91: CRM reference ownership
+# Session: issue 208, Gmail Sent copies
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/91
-Branch: codex/91-crm-reference-ownership from main 4fde001.
+Branch codex/208-gmail-sent-copies; draft PR #209. Base main 6650293.
 
-Scope: validate linked account/contact/opportunity/pipeline/stage ownership and compatibility before CRM creates. Out of scope: schema, UI, provider changes, production data changes.
-Owned paths: app/api/{contacts,tasks,opportunities,appointments}/route.ts; lib/server/crm-reference-ownership*; focused route tests; SESSION.md.
-Overlap: checked PRs 189,182,166,144,135,82; no focused source overlap other than obsolete monorepo rewrite 144. Preserve those active slices.
-Architecture: thin API handlers, shared server validation, existing route-error responses. Add RED route/domain tests for cross-org/mismatched references and no writes; GREEN valid paths; full npm run verify. No visual change, browser check limited to existing authenticated workflow availability. Access-control fixes require explicit approval before merge; prepare fully first.
+Scope: separate durable provider-send and Gmail-copy states; sender-matched opt-in; incremental insertion permission; Settings status/recovery; shared transactional and test sender. External Mailjet-console sends, backfills, tracking webhooks and agent MCP are out of scope.
 
-Implementation: three SQL CRM create routes validate account/contact/opportunity/pipeline/stage references. Contacts now uses Notion IDs, so its current endpoint validates the account page against the org-scoped territory read model before external writes; existing Notion database checks remain. RED suite: 18 failures; GREEN: 25 ownership cases plus existing contact tests. Full verify passed: 54 files / 260 tests, lint, typecheck, Prisma validation, production build. No production write tests performed.
+Architecture: reuse provider adapters; encrypted message payload while pending, stable request identity, fail closed after unknown send/insert result. No Gmail send endpoint. Concurrent provider/copy operations claimed atomically. New ledger plus connection preference requires additive migration and reviewed OAuth approval before release.
+
+Validation: RED behavior tests first; npm run verify; focused Settings E2E and screenshots/video. No external customer messages during tests. Check open #195 #194 #189 #166 #135 #82, no source overlap other than SESSION. User authorized implementing Sent copies; production remains unchanged until concrete review.
+
+Implementation review: sender API routing is centralized in mailjet-dispatch; all existing app Mailjet sends pass through it. Confirmed success is preserved even when copying fails. Read-only connection remains default, insertion is explicit. Provider forbids Message-Id overrides, so correlation uses a custom X-PICC header; mailbox threading is a live release check. Pending MIME encrypted, cleared when saved. Uncertain sends are never retried on their key, uncertain copies are lookup-only.
+
+Local proof: additive migration rehearsed in isolated picc_sentcopy_208; ten concurrent send requests yielded one provider call; ten copy claims elected one worker. Native background browser toggled the actual local setting on, reloaded, and toggled it off. Focused Playwright validates mobile/desktop recovery and authorization errors. All email providers are stubbed in tests; no real email was sent or mailbox changed.

@@ -10,7 +10,6 @@ import { WorkspaceHero, WorkspacePage, WorkspaceSection } from '@/components/lay
 import { requireWorkspaceContext } from '@/lib/auth/workspace';
 import { AUTH_BYPASS_MODE } from '@/lib/config/runtime';
 import { prisma } from '@/lib/db/prisma';
-import { getCalendarSyncHealth } from '@/lib/server/calendar-sync-health';
 import { getNabisSyncFreshness } from '@/lib/server/nabis-sync';
 import { loadTerritoryStores } from '@/lib/server/notion-territory';
 import { preferredPartnerRepBreakdown } from '@/lib/territory/preferred-partner';
@@ -27,12 +26,6 @@ function formatTimestamp(value: string | null) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
-}
-
-function calendarStatusLabel(mode: 'healthy' | 'stale' | 'manual-only') {
-  if (mode === 'healthy') return 'Healthy';
-  if (mode === 'stale') return 'Stale';
-  return 'Manual only';
 }
 
 function normalizeEmail(value: string | null | undefined) {
@@ -96,15 +89,10 @@ export default async function HomePage() {
   ]);
 
   const role = membership?.role ?? Role.SALES_REP;
-  const showCalendarHealth = role === Role.ADMIN || role === Role.OPS_TEAM || role === Role.FINANCE;
   const viewerEmail = normalizeEmail(
     viewer?.primaryEmailAddress?.emailAddress ?? viewer?.emailAddresses?.[0]?.emailAddress ?? '',
   );
   const viewerHasAdminOverride = role === Role.ADMIN && viewerEmail === 'bryce@piccplatform.com';
-
-  const [calendarHealth] = await Promise.all([
-    showCalendarHealth ? getCalendarSyncHealth(orgId) : Promise.resolve(null),
-  ]);
 
   const [contactSource, contactProfiles, followUpPreference] = await Promise.all([
     loadLiveNotionContactsWithMeta().catch(() => ({ rows: [] })),
@@ -162,14 +150,6 @@ export default async function HomePage() {
       description: 'Recent order data available from cached sync tables.',
     },
   ];
-
-  if (calendarHealth) {
-    freshnessTiles.push({
-      title: 'Calendar sync',
-      value: calendarStatusLabel(calendarHealth.mode),
-      description: calendarHealth.staleWarning ?? calendarHealth.manualOnlyReason ?? 'Availability sync is current.',
-    });
-  }
 
   const territoryResponse = await loadTerritoryStores({
     preferredPartnerFilter: 'all',

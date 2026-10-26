@@ -1,3 +1,4 @@
+import { GMAIL_INSERT_SCOPE } from '@/lib/server/gmail-sent-copy';
 import { parseGmailMessage, type GmailMessagePayload, type ParsedGmailMessage } from '@/lib/gmail/gmail-domain';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -40,7 +41,7 @@ export function gmailConfigurationStatus() {
   };
 }
 
-export function buildGmailAuthorizationUrl(state: string) {
+export function buildGmailAuthorizationUrl(state: string, sentCopies = false) {
   const config = gmailConfig();
   const query = new URLSearchParams({
     client_id: config.clientId,
@@ -49,7 +50,7 @@ export function buildGmailAuthorizationUrl(state: string) {
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
-    scope: `openid email ${GMAIL_READONLY_SCOPE}`,
+    scope: `openid email ${GMAIL_READONLY_SCOPE}${sentCopies ? ` ${GMAIL_INSERT_SCOPE}` : ''}`,
     state,
   });
   return `${GOOGLE_AUTH_URL}?${query}`;
@@ -93,6 +94,7 @@ async function gmailJson<T>(path: string, accessToken: string, fetchImpl: typeof
   const response = await fetchImpl(`${GMAIL_API_URL}${path}`, {
     headers: { authorization: `Bearer ${accessToken}` },
     cache: 'no-store',
+    signal: AbortSignal.timeout(10000),
   });
   const payload = (await response.json().catch(() => ({}))) as T & { error?: { message?: string } };
   if (!response.ok) throw new Error(payload.error?.message || 'Gmail request failed');
@@ -111,11 +113,30 @@ export async function listGmailMessages(accessToken: string, query: string, maxR
   for (let index = 0; index < ids.length; index += 8) {
     const batch = ids.slice(index, index + 8);
     const values = await Promise.all(batch.map(({ id }) => gmailJson<GmailMessagePayload>(
-      `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+      `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id&metadataHeaders=Precedence&metadataHeaders=Auto-Submitted`,
       accessToken,
       fetchImpl,
     )));
     messages.push(...values.map(parseGmailMessage));
   }
   return messages.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+}
+
+/** On-demand read-through; no mailbox messages or contact links are persisted. */
+export async function listGmailThreads(accessToken: string, query: string, pageToken?: string, fetchImpl?: typeof fetch) {
+  const params = new URLSearchParams({ q: query, maxResults: '20' });
+  if (pageToken) params.set('pageToken', pageToken);
+  const listed = await gmailJson<{ threads?: Array<{ id: string }>; nextPageToken?: string }>(`/threads?${params}`, accessToken, fetchImpl);
+  const threads: import('@/lib/gmail/conversations').GmailThreadPayload[] = [];
+  const ids = [...new Set((listed.threads ?? []).map(thread => thread.id))].slice(0, 20);
+  for (let i = 0; i < ids.length; i += 4) {
+    threads.push(...await Promise.all(ids.slice(i,i+4).map(id => getGmailThread(accessToken, id, 'metadata', fetchImpl))));
+  }
+  return { threads, nextPageToken: listed.nextPageToken ?? null };
+}
+
+export function getGmailThread(accessToken: string, id: string, format: 'metadata' | 'full', fetchImpl?: typeof fetch) {
+  const params = new URLSearchParams({ format });
+  if (format === 'metadata') for (const name of ['From','To','Cc','Subject','Date']) params.append('metadataHeaders',name);
+  return gmailJson<import('@/lib/gmail/conversations').GmailThreadPayload>(`/threads/${encodeURIComponent(id)}?${params}`,accessToken,fetchImpl);
 }

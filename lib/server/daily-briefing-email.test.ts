@@ -1,12 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderDailyBriefingEmail, sendDailyBriefingEmail } from '@/lib/server/daily-briefing-email';
 
-const priorKey = process.env.SENDGRID_API_KEY;
-const priorFrom = process.env.DAILY_DEBRIEF_FROM_EMAIL;
-afterEach(() => {
-  process.env.SENDGRID_API_KEY = priorKey;
-  process.env.DAILY_DEBRIEF_FROM_EMAIL = priorFrom;
-});
+const {send}=vi.hoisted(()=>({send:vi.fn()}));
+vi.mock('@/lib/server/transactional-email',()=>({sendTransactionalEmail:send}));
 
 describe('daily briefing email', () => {
   it('renders the requested sections without an LLM', () => {
@@ -20,12 +16,11 @@ describe('daily briefing email', () => {
   });
 
   it('sends through the configured transactional email boundary', async () => {
-    process.env.SENDGRID_API_KEY = 'test-key';
-    process.env.DAILY_DEBRIEF_FROM_EMAIL = 'briefing@picc.co';
-    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 202 })) as unknown as typeof fetch;
-    await sendDailyBriefingEmail({ to: 'rep@picc.co', subject: 'Daily', html: '<p>Hello</p>' }, fetchImpl);
-    expect(fetchImpl).toHaveBeenCalledWith('https://api.sendgrid.com/v3/mail/send', expect.objectContaining({ method: 'POST' }));
-    const body = JSON.parse((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string);
-    expect(body.personalizations[0].to[0].email).toBe('rep@picc.co');
+    send.mockResolvedValue({status:'SENT',providerMessageId:'message-1',error:null});
+    const input={orgId:'org-a',to:'rep@example.com',subject:'Daily',html:'<p>Hello</p>',idempotencyKey:'daily-1'};
+    await sendDailyBriefingEmail(input);
+    expect(send).toHaveBeenCalledWith(input);
+    send.mockResolvedValue({status:'FAILED',error:'Mailjet rejected message'});
+    await expect(sendDailyBriefingEmail(input)).rejects.toThrow('Mailjet rejected message');
   });
 });
