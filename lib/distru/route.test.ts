@@ -1,0 +1,10 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+const m=vi.hoisted(()=>({guard:vi.fn(),data:vi.fn(),connect:vi.fn(),sync:vi.fn()}));
+vi.mock('@/lib/auth/api-guard',()=>({guard:m.guard}));
+vi.mock('@/lib/server/distru-service',()=>({distruData:m.data,connectDistru:m.connect,syncDistruBatch:m.sync,testDistru:vi.fn(),disconnectDistru:vi.fn(),mapDistruCompany:vi.fn(),annotateDistru:vi.fn()}));
+vi.mock('@/lib/server/sales-ny-source',()=>({salesNYData:vi.fn().mockResolvedValue({records:[]}),refreshSalesNY:vi.fn()}));
+import { GET, POST } from '@/app/api/integrations/distru/route';
+beforeEach(()=>{vi.resetAllMocks();m.guard.mockResolvedValue({orgId:'org-a',role:'ADMIN'});m.data.mockResolvedValue({records:[]});});
+it('requires allowed roles and scopes reads to authenticated workspace',async()=>{await GET();expect(m.data).toHaveBeenCalledWith('org-a');expect(m.guard).toHaveBeenCalledWith(['ADMIN','OPS_TEAM','SALES_REP','FINANCE']);});
+it('denies non-admin mutations before reading credentials',async()=>{m.guard.mockResolvedValue({error:new Response('Forbidden',{status:403})});expect((await POST(new Request('http://localhost/api/integrations/distru',{method:'POST',body:JSON.stringify({action:'connect',key:'private'})})))!.status).toBe(403);expect(m.connect).not.toHaveBeenCalled();});
+it('never returns raw exception content',async()=>{m.data.mockRejectedValue(new Error('private-key connection string'));const response=await GET();expect(await response!.text()).not.toContain('private-key');expect(response!.status).toBe(503);});

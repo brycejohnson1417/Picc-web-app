@@ -675,6 +675,7 @@ export function SettingsMobile({ embedded = false }: { embedded?: boolean }) {
             title="Your communication accounts"
             description="Connect your personal Gmail mailbox. Administrators also manage workspace email delivery here."
           />
+          <a href="/distru" className="block rounded-lg border p-4 text-sm font-medium hover:bg-muted">Distru sales &amp; Sales NY reconciliation →</a>
           <GmailConnectionCard />
           {appAccess.role === 'ADMIN' ? <MailjetConnectionCard /> : null}
         </WorkspacePanel>

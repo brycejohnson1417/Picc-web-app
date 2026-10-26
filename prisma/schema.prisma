@@ -82,6 +82,7 @@ enum WorkflowStatus {
 }
 
 enum IntegrationProvider {
+  DISTRU
   MAILJET
   NOTION
   GOOGLE_SHEETS
@@ -1655,6 +1656,7 @@ model IntegrationConnection {
   checkpoints  SyncCheckpoint[]
   syncRuns     SyncRun[]
   externalMaps ExternalRecordMap[]
+  salesSourceRecords SalesSourceRecord[]
 
   @@index([orgId, provider])
 }
@@ -1947,4 +1949,19 @@ model TerritoryFilterPreset {
 
   @@unique([orgId, ownerEmail, name])
   @@index([orgId, ownerEmail, updatedAt])
+}
+
+// Source-scoped cache; never merged into another distributor's history.
+model SalesSourceRecord {
+  id String @id @default(cuid())
+  orgId String
+  integrationId String
+  integration IntegrationConnection @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  resource String
+  externalId String
+  payload Json
+  annotation Json @default("{}")
+  seenAt DateTime @default(now())
+  @@unique([integrationId, resource, externalId])
+  @@index([orgId, resource])
 }

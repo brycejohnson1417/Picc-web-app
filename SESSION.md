@@ -1,13 +1,11 @@
-# Session: issue 208, Gmail Sent copies
+# Session: issue #210
 
-Branch codex/208-gmail-sent-copies; draft PR #209. Base main 6650293.
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/210
 
-Scope: separate durable provider-send and Gmail-copy states; sender-matched opt-in; incremental insertion permission; Settings status/recovery; shared transactional and test sender. External Mailjet-console sends, backfills, tracking webhooks and agent MCP are out of scope.
+Scope: isolated read-only distributor integration; secure browser connection and reconciliation; source-specific reporting; bounded sync and focused tests; authoritative spreadsheet credit/payment values and Notion identity reconciliation. Existing Nabis history remains intact.
+Out of scope: distributor writes, unrelated account sheet work, historical replacement and other products. Production application migration and credential setup require separate approval before merge/deployment.
+Architecture: current Next.js/Clerk/Prisma integration patterns, dedicated provider and source cache. Admin mutations and workspace-scoped reads. DESIGN-SYSTEM.md applies.
+Validation: RED tests for identity, transport, financial math and sync boundaries; repo verify and E2E; actual browser inspection. Live verification requires credentials and authenticated app access.
+Concurrency: checked open PRs #189, #135, #82. Avoid account-detail sheet overlap. Owned paths described in issue #210. Shared schema work is exclusive.
 
-Architecture: reuse provider adapters; encrypted message payload while pending, stable request identity, fail closed after unknown send/insert result. No Gmail send endpoint. Concurrent provider/copy operations claimed atomically. New ledger plus connection preference requires additive migration and reviewed OAuth approval before release.
-
-Validation: RED behavior tests first; npm run verify; focused Settings E2E and screenshots/video. No external customer messages during tests. Check open #195 #194 #189 #166 #135 #82, no source overlap other than SESSION. User authorized implementing Sent copies; production remains unchanged until concrete review.
-
-Implementation review: sender API routing is centralized in mailjet-dispatch; all existing app Mailjet sends pass through it. Confirmed success is preserved even when copying fails. Read-only connection remains default, insertion is explicit. Provider forbids Message-Id overrides, so correlation uses a custom X-PICC header; mailbox threading is a live release check. Pending MIME encrypted, cleared when saved. Uncertain sends are never retried on their key, uncertain copies are lookup-only.
-
-Local proof: additive migration rehearsed in isolated picc_sentcopy_208; ten concurrent send requests yielded one provider call; ten copy claims elected one worker. Native background browser toggled the actual local setting on, reloaded, and toggled it off. Focused Playwright validates mobile/desktop recovery and authorization errors. All email providers are stubbed in tests; no real email was sent or mailbox changed.
+Current state: draft implementation, not deployed. Provider credentials and a working Sheets connection are required for live integration proof. Notion changes explicitly authorized in the task are audited privately; no private source rows are committed. Browser fixtures exercise connection, multi-page resume, matching and authoritative credit; they are test data only, not production proof.
