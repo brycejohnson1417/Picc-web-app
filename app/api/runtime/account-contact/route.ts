@@ -28,6 +28,7 @@ export async function GET(request: Request) {
 
   try {
     const payload = await loadAccountContactRuntime({
+      orgId: access.orgId!,
       statuses: readMultiParam(searchParams, 'status'),
       reps: readMultiParam(searchParams, 'rep'),
       pppStatuses: readMultiParam(searchParams, 'pppStatus'),
