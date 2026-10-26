@@ -221,6 +221,7 @@ model OrganizationWorkspace {
   crmContactReminders       CrmContactReminder[]
   crmContactActivities      CrmContactActivity[]
   gmailConnections          GmailConnection[]
+  mailjetDispatches         MailjetDispatch[]
   followUpPreferences       UserFollowUpPreference[]
   dailyBriefingDeliveries   DailyBriefingDelivery[]
   tags                      Tag[]
@@ -529,6 +530,29 @@ model CrmContactActivity {
   @@index([profileId, occurredAt])
 }
 
+// Send is claimed once; mailbox-copy retries never transition sendState.
+model MailjetDispatch {
+  id               String @id
+  orgId            String
+  org              OrganizationWorkspace @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  requestHash      String
+  fromEmail        String
+  recipient       String
+  subject         String
+  messageId       String @unique
+  encryptedRaw    String?
+  sendState       String @default("SENDING")
+  providerMessageId String?
+  copyState       String @default("WAITING")
+  gmailMessageId  String?
+  copyAttemptAt   DateTime?
+  sentAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([orgId, fromEmail, createdAt])
+}
+
 model GmailConnection {
   id                    String                @id @default(cuid())
   orgId                 String
@@ -539,6 +563,7 @@ model GmailConnection {
   encryptedRefreshToken String?
   accessTokenExpiresAt  DateTime?
   grantedScope          String
+  sentCopiesEnabled     Boolean @default(false)
   status                IntegrationSyncStatus @default(IDLE)
   lastSyncedAt          DateTime?
   lastError             String?

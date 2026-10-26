@@ -1,15 +1,13 @@
-# Session: Gmail conversations (#206)
+# Session: issue 208, Gmail Sent copies
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/206
-Branch: codex/206-gmail-conversations (from c6c7dff).
+Branch codex/208-gmail-sent-copies; draft PR #209. Base main 6650293.
 
-Scope: replace destructive single-contact Gmail activity import with private, read-through thread retrieval; exact From/To/Cc matching; account contact rollups; paginated conversations and readable message previews in both existing UI surfaces; filter automated/internal suggested contacts.
-Out of scope: sending, scheduled mailbox mirroring, AI, attachments, schema changes, permission expansion, and deleting legacy activities.
+Scope: separate durable provider-send and Gmail-copy states; sender-matched opt-in; incremental insertion permission; Settings status/recovery; shared transactional and test sender. External Mailjet-console sends, backfills, tracking webhooks and agent MCP are out of scope.
 
-Architecture: Gmail remains authoritative. Queries use the existing per-user/org token boundary and account/contact runtime. No persisted relationship can be moved when another contact is viewed. Existing imported rows stay untouched. Only bounded on-demand provider reads. The same read-only scope and role guard remain.
+Architecture: reuse provider adapters; encrypted message payload while pending, stable request identity, fail closed after unknown send/insert result. No Gmail send endpoint. Concurrent provider/copy operations claimed atomically. New ledger plus connection preference requires additive migration and reviewed OAuth approval before release.
 
-Validation: RED provider/domain/route tests for one thread matching two contacts, exact matching and Cc, pagination, safe message rendering, errors and isolation. Full npm run verify, targeted browser flows at mobile/desktop, then deployed verification.
+Validation: RED behavior tests first; npm run verify; focused Settings E2E and screenshots/video. No external customer messages during tests. Check open #195 #194 #189 #166 #135 #82, no source overlap other than SESSION. User authorized implementing Sent copies; production remains unchanged until concrete review.
 
-Owned paths: lib/gmail/conversations*; lib/server/gmail-conversations*; Gmail provider/domain and tests; app/api/contacts/[contactId]/gmail/route.ts; app/api/accounts/[accountId]/gmail/route.ts; components/crm/gmail-conversations.tsx; contact-profile-workspace.tsx; components/mobile/account-detail-sheet.tsx (Gmail insertion only); suggestions route; tests/e2e/gmail-conversations.spec.ts; SESSION.md.
+Implementation review: sender API routing is centralized in mailjet-dispatch; all existing app Mailjet sends pass through it. Confirmed success is preserved even when copying fails. Read-only connection remains default, insertion is explicit. Provider forbids Message-Id overrides, so correlation uses a custom X-PICC header; mailbox threading is a live release check. Pending MIME encrypted, cleared when saved. Uncertain sends are never retried on their key, uncertain copies are lookup-only.
 
-Overlap: checked open PRs #195, #194, #189, #166, #135, #82. Do not edit shared runtime/auth/schema files owned by #194/#195. Account sheet overlaps #189/#135: both claims are stale (latest commits/comments September 22 and June 3, >24h); reclaim only the Gmail insertion and require those PRs to rebase before landing. SESSION is a per-branch checkpoint. Existing mobile sheet is canonical, not a new account screen.
+Local proof: additive migration rehearsed in isolated picc_sentcopy_208; ten concurrent send requests yielded one provider call; ten copy claims elected one worker. Native background browser toggled the actual local setting on, reloaded, and toggled it off. Focused Playwright validates mobile/desktop recovery and authorization errors. All email providers are stubbed in tests; no real email was sent or mailbox changed.

@@ -19,7 +19,7 @@ export async function PUT(request: Request) {
 }
 export async function POST(request: Request) {
   const ctx=await guard(['ADMIN']);if ('error' in ctx) return ctx.error;
-  try {const {recipient}=z.object({recipient:z.string().trim().email().max(254)}).parse(await request.json());return json(await testMailjetConnection(ctx.orgId,recipient));} catch(error) {return failure(error);}
+  try {const {recipient,requestId}=z.object({recipient:z.string().trim().email().max(254),requestId:z.string().uuid()}).parse(await request.json());return json(await testMailjetConnection(ctx.orgId,recipient,requestId));} catch(error) {return failure(error);}
 }
 export async function DELETE() {
   const ctx=await guard(['ADMIN']);if ('error' in ctx) return ctx.error;

@@ -25,6 +25,7 @@ type OAuthState = {
   userId: string;
   nonce: string;
   returnTo: string;
+  sentCopies?: boolean;
   issuedAt: number;
 };
 

@@ -56,3 +56,9 @@ describe('thread retrieval', () => {
     expect(urls.at(-1)).toContain('format=full');
   });
 });
+it('requests mailbox insertion only for an explicit Sent-copy opt-in, never sending permission',()=>{
+ process.env.GMAIL_OAUTH_CLIENT_ID='client';process.env.GMAIL_OAUTH_CLIENT_SECRET='secret';process.env.NEXT_PUBLIC_APP_URL='https://app.example.com';
+ expect(new URL(buildGmailAuthorizationUrl('state')).searchParams.get('scope')).not.toContain('gmail.insert');
+ const scopes=new URL(buildGmailAuthorizationUrl('state',true)).searchParams.get('scope')!;
+ expect(scopes).toContain('gmail.insert');expect(scopes).not.toContain('gmail.send');expect(scopes).not.toContain('gmail.modify');
+});
