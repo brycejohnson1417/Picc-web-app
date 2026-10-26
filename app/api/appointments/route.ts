@@ -1,3 +1,5 @@
+import { parseJsonBody, routeErrorResponse } from '@/lib/api/route-errors';
+import { requireCrmReferences, INVALID_CRM_REFERENCE } from '@/lib/server/crm-reference-ownership';
 import { NextResponse } from 'next/server';
 import { ActivityType } from '@prisma/client';
 import { z } from 'zod';
@@ -27,33 +29,37 @@ export async function POST(req: Request) {
   const ctx = await guard(['ADMIN', 'OPS_TEAM', 'SALES_REP', 'BRAND_AMBASSADOR']);
   if ('error' in ctx) return ctx.error;
 
-  const body = await req.json();
-  const payload = schema.parse(body);
+  try {
+    const payload = await parseJsonBody(req, schema);
+    await requireCrmReferences(ctx.orgId, payload);
 
-  const appointment = await prisma.appointment.create({
-    data: {
+    const appointment = await prisma.appointment.create({
+      data: {
+        orgId: ctx.orgId,
+        accountId: payload.accountId,
+        contactId: payload.contactId,
+        opportunityId: payload.opportunityId,
+        title: payload.title,
+        startsAt: new Date(payload.startsAt),
+        endsAt: new Date(payload.endsAt),
+        reminderMinutes: payload.reminderMinutes,
+        description: payload.description,
+        createdByUserId: ctx.userId,
+      },
+    });
+
+    await writeActivity({
       orgId: ctx.orgId,
       accountId: payload.accountId,
-      contactId: payload.contactId,
-      opportunityId: payload.opportunityId,
-      title: payload.title,
-      startsAt: new Date(payload.startsAt),
-      endsAt: new Date(payload.endsAt),
-      reminderMinutes: payload.reminderMinutes,
-      description: payload.description,
-      createdByUserId: ctx.userId,
-    },
-  });
+      appointmentId: appointment.id,
+      actorClerkUserId: ctx.userId,
+      type: ActivityType.APPOINTMENT_CREATED,
+      title: 'Appointment scheduled',
+      description: payload.title,
+    });
 
-  await writeActivity({
-    orgId: ctx.orgId,
-    accountId: payload.accountId,
-    appointmentId: appointment.id,
-    actorClerkUserId: ctx.userId,
-    type: ActivityType.APPOINTMENT_CREATED,
-    title: 'Appointment scheduled',
-    description: payload.title,
-  });
-
-  return NextResponse.json(appointment, { status: 201 });
+    return NextResponse.json(appointment, { status: 201 });
+  } catch (error) {
+    return routeErrorResponse(error, { fallbackMessage: 'Failed to create appointment', statusByMessage: { [INVALID_CRM_REFERENCE]: 404 } });
+  }
 }

@@ -1,3 +1,4 @@
+import { requireCrmReferences, INVALID_CRM_REFERENCE } from '@/lib/server/crm-reference-ownership';
 import { NextResponse } from 'next/server';
 import { ActivityType } from '@prisma/client';
 import { z } from 'zod';
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
 
   try {
     const payload = await parseJsonBody(req, schema);
+    await requireCrmReferences(ctx.orgId, payload);
     const task = await prisma.task.create({
       data: {
         orgId: ctx.orgId,
@@ -63,6 +65,7 @@ export async function POST(req: Request) {
     return routeErrorResponse(error, {
       fallbackMessage: 'Failed to create task',
       zodMessage: 'Invalid task payload',
+      statusByMessage: { [INVALID_CRM_REFERENCE]: 404 },
     });
   }
 }
