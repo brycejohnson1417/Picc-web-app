@@ -2,9 +2,6 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import {
   AlertCircle,
   BarChart3,
@@ -239,79 +236,8 @@ export function NabisSalesDashboard() {
 
     setIsGeneratingPDF(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-
-      const doc = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 10;
-      let currentY = margin;
-
-      const addSection = async (elementId: string) => {
-        const element = document.getElementById(elementId);
-        if (!element) return;
-
-        const canvas = await html2canvas(element, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-        });
-
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const imgWidth = pageWidth - margin * 2;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-        if (currentY + imgHeight > pageHeight - margin) {
-          doc.addPage();
-          currentY = margin;
-        }
-
-        doc.addImage(imgData, 'JPEG', margin, currentY, imgWidth, imgHeight);
-        currentY += imgHeight + 8;
-      };
-
-      doc.setFontSize(18);
-      doc.setTextColor(30, 41, 59);
-      doc.text('PICC Nabis Sales Dashboard', margin, currentY + 6);
-      doc.setFontSize(10);
-      doc.setTextColor(100, 116, 139);
-      const monthText = `Range: ${selectedRangeLabel}`;
-      doc.text(monthText, pageWidth - margin - doc.getTextWidth(monthText), currentY + 6);
-      currentY += 15;
-
-      for (const sectionId of ['kpi-section', 'trend-chart-section', 'sales-trend-section', 'rep-revenue-chart', 'rep-month-metrics-card', 'market-share-card']) {
-        await addSection(sectionId);
-      }
-
-      if (currentY > pageHeight - 40) {
-        doc.addPage();
-        currentY = margin;
-      } else {
-        doc.setFontSize(12);
-        doc.setTextColor(30, 41, 59);
-        doc.text(`Order Details (${selectedRangeLabel})`, margin, currentY);
-        currentY += 5;
-      }
-
-      autoTable(doc, {
-        startY: currentY,
-        head: [['Date', 'Order #', 'Customer', 'Rep', 'Status', 'Total']],
-        body: tableData.map((order) => [
-          order.createdDate.toLocaleDateString(),
-          order.orderNumber,
-          order.customerName,
-          order.salesRep,
-          order.status,
-          formatCurrency(order.total),
-        ]),
-        theme: 'striped',
-        headStyles: { fillColor: [29, 78, 216] },
-        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
-        margin: { left: margin, right: margin, bottom: margin },
-      });
-
-      doc.save(`Nabis_Sales_Report_${dateRange.start}_to_${dateRange.end}.pdf`);
+      const { downloadDashboardPdf } = await import('./nabis-dashboard-pdf');
+      await downloadDashboardPdf({ tableData, dateRange, selectedRangeLabel });
     } catch (caughtError) {
       console.error('PDF generation failed', caughtError);
       toast.error('Failed to generate the PDF report.');

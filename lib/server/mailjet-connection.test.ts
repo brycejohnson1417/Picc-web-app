@@ -1,0 +1,20 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+const m=vi.hoisted(()=>({find:vi.fn(),upsert:vi.fn(),update:vi.fn(),verify:vi.fn()}));
+vi.mock('server-only',()=>({}));
+vi.mock('@/lib/db/prisma',()=>({prisma:{integrationConnection:{findFirst:m.find,upsert:m.upsert,updateMany:m.update}}}));
+vi.mock('@/lib/email/mailjet',()=>({verifyMailjetSender:m.verify,sendMailjetMessage:vi.fn()}));
+import {saveMailjetConnection,getMailjetStatus,getMailjetConfig,disconnectMailjet} from './mailjet-connection';
+beforeEach(()=>{vi.clearAllMocks();vi.stubEnv('MAILJET_ENCRYPTION_KEY','a-local-test-encryption-key-longer-than-32-characters');m.find.mockResolvedValue(null);m.verify.mockResolvedValue(undefined);});
+afterEach(()=>vi.unstubAllEnvs());
+it('encrypts credentials with the organization bound to the ciphertext and returns only redacted status',async()=>{
+ m.upsert.mockImplementation(async (input)=>{m.find.mockResolvedValue({...input.create});return input.create;});
+ const status=await saveMailjetConnection('org-a',{apiKey:'private-key',apiSecret:'private-secret',fromEmail:'sender@example.com',fromName:'Example'});
+ const saved=m.upsert.mock.calls[0][0].create;
+ expect(JSON.stringify(saved)).not.toContain('private-key');expect(JSON.stringify(saved)).not.toContain('private-secret');
+ expect(status).toMatchObject({configured:true,fromEmail:'sender@example.com'});expect(JSON.stringify(await getMailjetStatus('org-a'))).not.toContain('encrypted');
+ expect(await getMailjetConfig('org-a')).toMatchObject({apiKey:'private-key',apiSecret:'private-secret'});
+ await expect(getMailjetConfig('org-b')).rejects.toThrow();
+});
+it('does not persist failed sender validation',async()=>{m.verify.mockRejectedValue(new Error('Sender is not verified'));await expect(saveMailjetConnection('org-a',{apiKey:'key',apiSecret:'secret',fromEmail:'sender@example.com',fromName:'Example'})).rejects.toThrow('not verified');expect(m.upsert).not.toHaveBeenCalled();});
+it('clears credentials on disconnect and scopes the update',async()=>{await disconnectMailjet('org-a');expect(m.update).toHaveBeenCalledWith({where:{id:'mailjet:org-a',orgId:'org-a',provider:'MAILJET'},data:{enabled:false,status:'IDLE',config:{},lastSyncedAt:null}});});
+it('refuses credential persistence without the encryption key',async()=>{vi.stubEnv('MAILJET_ENCRYPTION_KEY','');await expect(saveMailjetConnection('org-a',{apiKey:'key',apiSecret:'secret',fromEmail:'sender@example.com',fromName:'Example'})).rejects.toThrow('Secure email setup');expect(m.upsert).not.toHaveBeenCalled();});

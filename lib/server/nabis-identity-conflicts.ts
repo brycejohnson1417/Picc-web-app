@@ -392,7 +392,7 @@ export async function persistNabisIdentityConflict(
       (async (notification) => {
         await deliverNabisIdentityConflictEmail(notification, {
           resolveRecipient: async () => ({ email: recipient.email, enabled: recipient.emailEnabled }),
-          send: sendTransactionalEmail,
+          send: (message) => sendTransactionalEmail({ ...message, orgId: notification.orgId }),
           update: updateConflictEmailState,
         });
       }),
@@ -407,7 +407,7 @@ export async function retryNabisIdentityConflictEmail(orgId: string, notificatio
   const recipient = await resolveNabisIdentityConflictRecipient(orgId);
   await deliverNabisIdentityConflictEmail(notification, {
     resolveRecipient: async () => ({ email: recipient.email, enabled: recipient.emailEnabled }),
-    send: sendTransactionalEmail,
+    send: (message) => sendTransactionalEmail({ ...message, orgId: notification.orgId }),
     update: updateConflictEmailState,
   });
   return (await listNabisIdentityConflicts(orgId)).find((item) => item.id === notificationId) ?? notification;

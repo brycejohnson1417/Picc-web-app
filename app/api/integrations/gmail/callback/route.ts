@@ -1,3 +1,4 @@
+import { GMAIL_INSERT_SCOPE } from '@/lib/server/gmail-sent-copy';
 import { IntegrationSyncStatus } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { guard } from '@/lib/auth/api-guard';
@@ -25,6 +26,8 @@ export async function GET(request: NextRequest) {
     if (!nonce || nonce !== state.nonce || state.orgId !== ctx.orgId || state.userId !== ctx.userId) throw new Error('Gmail OAuth session does not match');
     const tokens = await exchangeGmailCode(code);
     if (!tokens.refresh_token) throw new Error('Google did not return offline mailbox access. Reconnect and approve access.');
+    const hasInsert = tokens.scope?.split(' ').includes(GMAIL_INSERT_SCOPE) === true;
+    if(state.sentCopies && !hasInsert)throw new Error('Gmail copy permission was not granted');
     const profile = await getGmailProfile(tokens.access_token);
     await prisma.gmailConnection.upsert({
       where: { orgId_clerkUserId: { orgId: ctx.orgId, clerkUserId: ctx.userId } },
@@ -36,6 +39,7 @@ export async function GET(request: NextRequest) {
         encryptedRefreshToken: protectToken(tokens.refresh_token),
         accessTokenExpiresAt: tokenExpiry(tokens),
         grantedScope: tokens.scope || GMAIL_READONLY_SCOPE,
+        sentCopiesEnabled: state.sentCopies === true && hasInsert,
         status: IntegrationSyncStatus.SUCCESS,
       },
       update: {
@@ -44,6 +48,7 @@ export async function GET(request: NextRequest) {
         encryptedRefreshToken: protectToken(tokens.refresh_token),
         accessTokenExpiresAt: tokenExpiry(tokens),
         grantedScope: tokens.scope || GMAIL_READONLY_SCOPE,
+        sentCopiesEnabled: state.sentCopies === true && hasInsert,
         status: IntegrationSyncStatus.SUCCESS,
         lastError: null,
       },

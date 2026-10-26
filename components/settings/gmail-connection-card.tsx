@@ -1,5 +1,6 @@
 'use client';
 
+import { GmailSentCopies } from './gmail-sent-copies';
 import { CheckCircle2, Copy, ExternalLink, Loader2, Mail, RefreshCw, Unplug } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -27,7 +28,11 @@ export function GmailConnectionCard() {
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load().then(()=>{
+      if(new URLSearchParams(window.location.search).get('gmail')==='error')setError('Google connection was not completed. Reconnect and approve the requested access, or keep your existing connection.');
+    });
+  }, []);
 
   async function connect() {
     setWorking(true);
@@ -59,6 +64,23 @@ export function GmailConnectionCard() {
     }
   }
 
+  if (!status && error) {
+    return (
+      <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[#c93412] shadow-sm"><Mail className="h-5 w-5" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Gmail needs attention</p>
+            <p className="mt-1 text-sm leading-6">{error}</p>
+            <button type="button" onClick={() => void load()} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 text-sm font-semibold">
+              <RefreshCw className="h-4 w-4" /> Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!status) return <div className="grid min-h-32 place-items-center rounded-2xl border border-[#d6dae2] bg-[#f7f9fc]"><Loader2 className="h-5 w-5 animate-spin text-[#6a7583]" /></div>;
 
   return (
@@ -70,7 +92,7 @@ export function GmailConnectionCard() {
             <h3 className="text-lg font-semibold text-[#18212d]">Gmail</h3>
             {status.connection ? <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800"><CheckCircle2 className="h-3.5 w-3.5" /> Connected</span> : <span className="rounded-full border border-[#d6dae2] bg-white px-2.5 py-1 text-xs font-semibold text-[#657081]">Not connected</span>}
           </div>
-          <p className="mt-1 text-sm leading-6 text-[#5c6674]">Connect your own mailbox with read-only access. Other reps cannot see or use your Gmail connection.</p>
+          <p className="mt-1 text-sm leading-6 text-[#5c6674]">Read your conversations and optionally save app-sent emails in Sent. Your Gmail connection stays private to you.</p>
         </div>
       </div>
 
@@ -93,6 +115,7 @@ export function GmailConnectionCard() {
           {status.configuration.redirectUri ? <button type="button" onClick={() => { void navigator.clipboard.writeText(status.configuration.redirectUri!); toast.success('Redirect URI copied'); }} className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 font-semibold"><Copy className="h-4 w-4" /> Copy redirect URI</button> : null}
         </div>
       )}
+      {status.connection ? <GmailSentCopies /> : null}
       {error ? <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
     </div>
   );

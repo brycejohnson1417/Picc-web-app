@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { GmailConversations } from '@/components/crm/gmail-conversations';
 import { AccountHero } from '@/components/crm/account-hero';
 import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-panel';
 import { PreferredPartnerProposalPanel } from '@/components/crm/preferred-partner-proposal-panel';
@@ -155,6 +156,8 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
           </CardContent>
         </Card>
       </section>
+
+      <GmailConversations kind="account" recordId={notionPageId} />
 
       <section className="space-y-4">
         <div>
