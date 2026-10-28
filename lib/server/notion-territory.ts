@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { prisma } from '@/lib/db/prisma';
+import { getSharedWorkspaceId } from '@/lib/auth/access-policy';
 import { isExcludedInternalTransferRetailerName } from '@/lib/nabis/internal-transfers';
 import { AUTH_BYPASS_MODE, DEMO_MODE, DEMO_ORG_ID } from '@/lib/config/runtime';
 import {
@@ -2216,10 +2217,14 @@ export const TERRITORY_WORKSPACE_ERROR = 'Territory is unavailable for this work
 
 export function requireTerritorySourceOrg(orgId: string | null | undefined) {
   const sourceOrgId = DEMO_MODE ? DEMO_ORG_ID : process.env.TERRITORY_ORG_ID?.trim();
-  if (!orgId?.trim() || !sourceOrgId || orgId.trim() !== sourceOrgId) {
+  const callerOrgId = orgId?.trim();
+  const sharedWorkspaceId = DEMO_MODE ? DEMO_ORG_ID : getSharedWorkspaceId();
+  if (!callerOrgId || !sourceOrgId || (callerOrgId !== sourceOrgId && callerOrgId !== sharedWorkspaceId)) {
     throw new Error(TERRITORY_WORKSPACE_ERROR);
   }
-  return orgId.trim();
+  // The authenticated shared workspace can use a legacy source namespace.
+  // Resolve it here rather than moving stored history or trusting a request-supplied source.
+  return sourceOrgId;
 }
 
 export async function loadTerritoryStores(input: {
