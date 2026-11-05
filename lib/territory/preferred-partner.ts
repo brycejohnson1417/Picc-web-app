@@ -1,5 +1,9 @@
-export const PREFERRED_PARTNER_HEADSET_CONNECTION = 'connected to picc headset';
 export const PREFERRED_PARTNER_PPP_STATUS = 'approved & connected';
+export const ACTIVE_PREFERRED_PARTNER_STATUSES = [
+  PREFERRED_PARTNER_PPP_STATUS,
+  'self-managed inventory ppp',
+  'self-reporting inventory ppp',
+] as const;
 
 export type PreferredPartnerFilter = 'all' | 'preferred' | 'not_preferred';
 
@@ -19,12 +23,11 @@ export function normalizeTerritoryOption(value: string | null | undefined) {
 
 export function isPreferredPartnerFromStatuses(
   pppStatus: string | null | undefined,
-  headsetConnectionStatus: string | null | undefined,
+  _legacyConnectionStatus?: string | null,
 ) {
-  return (
-    normalizeTerritoryOption(pppStatus) === PREFERRED_PARTNER_PPP_STATUS &&
-    normalizeTerritoryOption(headsetConnectionStatus) === PREFERRED_PARTNER_HEADSET_CONNECTION
-  );
+  // Keep the second argument compatible with existing adapters; enrollment is independent of external connectivity.
+  void _legacyConnectionStatus;
+  return ACTIVE_PREFERRED_PARTNER_STATUSES.some(status => status === normalizeTerritoryOption(pppStatus));
 }
 
 export function preferredPartnerLabel(isPreferredPartner: boolean | null | undefined) {

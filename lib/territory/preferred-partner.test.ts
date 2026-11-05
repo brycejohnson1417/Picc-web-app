@@ -34,10 +34,22 @@ function buildStore(overrides: Partial<TerritoryStorePin> = {}): TerritoryStoreP
 }
 
 describe('preferred partner territory rule', () => {
-  it('only marks accounts preferred when both CRM statuses match', () => {
+  it('marks approved PPP accounts independently of their external connection state', () => {
     expect(isPreferredPartnerFromStatuses('Approved & Connected', 'Connected to PICC Headset')).toBe(true);
-    expect(isPreferredPartnerFromStatuses('Approved & Connected', 'On Headset - Not Connected to PICC')).toBe(false);
+    expect(isPreferredPartnerFromStatuses('Approved & Connected', 'On Headset - Not Connected to PICC')).toBe(true);
+    expect(isPreferredPartnerFromStatuses('Approved & Connected', null)).toBe(true);
+    expect(isPreferredPartnerFromStatuses('Self-Managed Inventory PPP', null)).toBe(true);
+    expect(isPreferredPartnerFromStatuses('Self-Reporting Inventory PPP', null)).toBe(true);
+    expect(isPreferredPartnerFromStatuses('  self–managed inventory PPP  ', null)).toBe(true);
+  });
+
+  it('excludes pending, incomplete, removed and unknown PPP statuses', () => {
     expect(isPreferredPartnerFromStatuses('Onboarding Pending', 'Connected to PICC Headset')).toBe(false);
+    expect(isPreferredPartnerFromStatuses('API Key Needed to Complete', null)).toBe(false);
+    expect(isPreferredPartnerFromStatuses('Intro to PPP Only', null)).toBe(false);
+    expect(isPreferredPartnerFromStatuses('Removed from PPP', null)).toBe(false);
+    expect(isPreferredPartnerFromStatuses('Not Started', null)).toBe(false);
+    expect(isPreferredPartnerFromStatuses(null, 'Connected to PICC Headset')).toBe(false);
   });
 
   it('keeps the original pin color in status mode for preferred partners', () => {

@@ -1,6 +1,6 @@
 # PICC Design System
 
-This app is a field operating system for sales, ops, and vendor-day execution. Screens should be dense, fast, and calm. The UI should prioritize records, status, and next action over decorative layout.
+This app is a field-sales workspace. Screens should be dense, fast, and calm. Prioritize accounts, geography, sales evidence, and next actions.
 
 ## Principles
 
@@ -12,8 +12,10 @@ This app is a field operating system for sales, ops, and vendor-day execution. S
 
 ## Layout
 
-- Mobile shell max width is controlled by `--app-shell-max`.
-- Bottom navigation consumes the lower safe area; fixed action bars must sit above it.
+- Desktop uses a 152px navigation rail and the full remaining viewport, without a simulated mobile frame.
+- The map has one contextual work panel: 320px account browser or 396px Store Brief. Opening the brief replaces the browser rather than adding another panel. The map stays mounted.
+- Below 1024px, keep mobile bottom navigation and safe-area spacing. Fixed action bars sit above it.
+- Keep map tools in a 56px desktop toolbar and compact map controls. No page introduction or KPI wall over the geography.
 - Cards should use 8px to 12px radius for data records. Large rounded panels are reserved for shell-level containers.
 - Data-heavy pages should show at least one real row, skeleton row, or empty state in the first viewport.
 
@@ -27,7 +29,7 @@ This app is a field operating system for sales, ops, and vendor-day execution. S
 
 ## Color
 
-- PICC red `#c93412` is the brand/action accent.
+- PICC red `#c93412` is the brand/action accent. Graphite navigation `#242624`, warm-white surfaces `#fbfcf9`, quiet dividers `#dfe4d7`, and text `#30392a` support daylight use.
 - Blue is for route/navigation affordances.
 - Green is for success, selected, and active route state.
 - Amber/red banners are reserved for stale data, errors, and destructive actions.
@@ -38,6 +40,8 @@ This app is a field operating system for sales, ops, and vendor-day execution. S
 - Search inputs are 44px to 48px high on mobile.
 - Primary actions use icon plus text when the command may be unfamiliar.
 - Icon-only actions need accessible labels.
+- Account rows expose location and status with a separate route action. Never delay rows with an index-based animation.
+- Reporting charts and totals always name their actual period and value basis. Source details stay in a disclosure. Omit unverified attainment instead of substituting zero.
 - Destructive actions require either confirmation, undo, or a clearly reversible state.
 
 ## Data States

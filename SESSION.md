@@ -9,6 +9,10 @@
 
 Responsive desktop navigation, map/account browsing and contextual brief, with existing mobile and field-sales controls preserved. Source-aware reporting is reviewed using private, freshly acquired source data outside the repository.
 
+Reporting ownership includes `components/dashboard/sales-workspace.tsx`, `lib/dashboard/sales-report*`, and `app/(main)/reports/page.tsx`. Enrollment display/filter semantics have focused regression coverage. Current enrollment counts are separate from dated monthly attainment. Tenant-specific product groupings come from the report response and remain outside public source and documentation.
+
+Today ownership includes `components/home/sales-today.tsx`, `app/(main)/home/page.tsx`, `lib/follow-up/sales-today*`, and the existing `components/crm/account-follow-up-flow.tsx`. Today uses authenticated current account records for dated follow-ups, enrollment stages, and recorded payment conditions. Follow-up changes update existing account fields without creating a visit or duplicate note. Unverified sample conversion and enrollment age are omitted. Browser review uses the private local runtime; no production integration is claimed.
+
 ## Out of scope
 
 Production data writes, deployment, schema or access-policy changes, integration rollout, communication automation, and unrelated working branches.

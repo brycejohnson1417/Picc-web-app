@@ -13,12 +13,6 @@ type FollowUpContact = {
   phone: string;
 };
 
-function launchedActionLabel(action: ContactActionKind) {
-  if (action === 'email') return 'opening Gmail';
-  if (action === 'text') return 'opening the message app';
-  return 'opening the phone app';
-}
-
 export function buildCommunicationFollowUpPayload(input: {
   action: ContactActionKind;
   account: FollowUpAccount;
@@ -29,22 +23,9 @@ export function buildCommunicationFollowUpPayload(input: {
   const reason = input.reason.trim() || `Follow up after ${input.action} with ${input.contact.name}`;
 
   return {
-    store: {
-      id: input.account.id,
-      notionPageId: input.account.id,
-      name: input.account.name,
-    },
-    noteText: `Follow-up scheduled after ${launchedActionLabel(input.action)} for ${input.contact.name}.`,
     followUpDate: input.followUpDate,
     followUpNeeded: true,
     followUpReason: reason,
-    associatedContact: {
-      id: input.contact.id,
-      name: input.contact.name,
-      roleTitle: input.contact.roleTitle,
-      email: input.contact.email,
-      phone: input.contact.phone,
-    },
   };
 }
 

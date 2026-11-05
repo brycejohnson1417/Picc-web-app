@@ -8,6 +8,7 @@ import { buildContactActionHref, type ContactActionKind } from '@/lib/contacts/c
 import { buildCommunicationFollowUpPayload } from '@/lib/contacts/contact-follow-up';
 import { cn } from '@/lib/utils';
 import { defaultFollowUpDate, type FollowUpDefaults } from '@/lib/follow-up/follow-up-intelligence';
+import { notifyAccountUpdated } from '@/lib/territory/account-cache-events';
 
 export type ContactQuickActionContact = {
   id: string;
@@ -110,8 +111,8 @@ export function ContactQuickActions({
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch('/api/territory/check-in', {
-        method: 'POST',
+      const response = await fetch(`/api/territory/stores/${encodeURIComponent(account.id)}`, {
+        method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(
           buildCommunicationFollowUpPayload({
@@ -129,7 +130,11 @@ export function ContactQuickActions({
       toast.success('Follow-up set', {
         description: payload.syncWarning || `${contact.name} is scheduled for ${followUpDate}.`,
       });
-      closePrompt();
+      notifyAccountUpdated(account.id);
+      setPendingAction(null);
+      setFollowUpDate('');
+      setReason('');
+      setSelectedAccountId(accounts.length === 1 ? accounts[0]?.id ?? '' : '');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Follow-up could not be saved.');
     } finally {
