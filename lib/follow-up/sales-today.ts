@@ -9,7 +9,7 @@ const todayStoreSchema = z.object({
   sampleWithoutConversion: z.boolean().nullable().optional(), lastSampleDate: nullableText,
 });
 export type TodayStore = z.infer<typeof todayStoreSchema>;
-export type TodayQueueKey = 'due' | 'upcoming' | 'unscheduled' | 'ppp' | 'payments' | 'samples';
+export type TodayQueueKey = 'today' | 'overdue' | 'due' | 'upcoming' | 'unscheduled' | 'ppp' | 'payments' | 'samples';
 export type TodayRow = TodayStore & { dueDays: number | null; pppAgeDays: number | null };
 export type TodayPayload = {
   asOf: string;
@@ -58,6 +58,8 @@ export function buildTodayQueues(stores: TodayStore[], today: string, rep = '', 
   const followUps = rows.filter(row => row.followUpNeeded === true);
   const byDue = (a: TodayRow, b: TodayRow) => (a.dueDays ?? Infinity) - (b.dueDays ?? Infinity) || a.name.localeCompare(b.name);
   return {
+    today: followUps.filter(row => row.dueDays === 0).sort(byDue),
+    overdue: followUps.filter(row => row.dueDays !== null && row.dueDays < 0).sort(dueOrder === 'oldest' ? byDue : (a,b) => b.dueDays! - a.dueDays!),
     due: followUps.filter(row => row.dueDays !== null && row.dueDays <= 0).sort(dueOrder === 'oldest' ? byDue : (a, b) => b.dueDays! - a.dueDays! || a.name.localeCompare(b.name)),
     upcoming: followUps.filter(row => row.dueDays !== null && row.dueDays > 0).sort(byDue),
     unscheduled: followUps.filter(row => row.dueDays === null).sort((a, b) => a.name.localeCompare(b.name)),

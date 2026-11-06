@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { useAppAccess } from '@/components/auth/app-access-provider';
 import { ContactCreateFlow } from '@/components/crm/contact-create-flow';
 import { ContactQuickActions } from '@/components/crm/contact-quick-actions';
+import { GmailConversations } from '@/components/crm/gmail-conversations';
 import { StoreSalesContextPanel } from '@/components/crm/store-sales-context';
 import type { StoreSalesContext } from '@/lib/proposals/store-opportunities';
 import { DistruProposalPanel } from '@/components/crm/distru-proposal-panel';
@@ -161,6 +162,7 @@ function writeCachedStoreDetail(detail: AccountDetailResponse) {
 }
 
 interface AccountDetailSheetProps {
+  includeAccountEmail?: boolean;
   store: TerritoryStorePin | null;
   onClose: () => void;
   onAddToRoute: (storeId: string) => void;
@@ -170,7 +172,7 @@ interface AccountDetailSheetProps {
   presentation?: 'overlay' | 'docked';
 }
 
-export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterStore, accountFreshness, presentation = 'overlay' }: AccountDetailSheetProps) {
+export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterStore, accountFreshness, includeAccountEmail = false, presentation = 'overlay' }: AccountDetailSheetProps) {
   const appAccess = useAppAccess();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<DetailTab>('detail');
@@ -706,7 +708,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                 {orderHistory.map((order) => (
                   <div key={order.id} className="py-3">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0"><p className="text-sm font-semibold">{order.orderNumber}</p><p className="mt-1 text-xs text-[#74766f]">{formatDateLabel(order.createdDate, '')}{order.createdDate ? ' · ' : ''}{order.status}</p></div>
+                      <div className="min-w-0"><p className="text-sm font-semibold">{order.orderNumber}<span className="ml-2 text-[10px] font-normal text-[#74766f]">{'source' in order ? String(order.source) : 'Nabis'}</span></p><p className="mt-1 text-xs text-[#74766f]">{formatDateLabel(order.createdDate, '')}{order.createdDate ? ' · ' : ''}{order.status}</p></div>
                       <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(order.total)}</p>
                     </div>
                     {order.deliveryDate || order.salesRep ? <p className="mt-1 text-xs text-[#74766f]">{order.deliveryDate ? `Delivery ${formatDateLabel(order.deliveryDate, '')}` : ''}{order.deliveryDate && order.salesRep ? ' · ' : ''}{order.salesRep || ''}</p> : null}
@@ -718,6 +720,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
 
           {tab === 'history' ? (
             <div className="px-5 py-4">
+              {includeAccountEmail ? <GmailConversations kind="account" recordId={activeStore.notionPageId} /> : null}
               {activeStore.lastCheckIn ? <div className="mb-4"><SectionRow label="Last check-in" value={formatCheckInLabel(activeStore.lastCheckIn)} /></div> : null}
               {historyEntries.length === 0 ? <p className="text-sm text-[#74766f]">{loadingDetail ? 'Loading activity…' : detail?.history.availability === 'available' ? 'No recorded activity' : 'History unavailable'}</p> : null}
               <div className="divide-y divide-[#e5e6e1]">

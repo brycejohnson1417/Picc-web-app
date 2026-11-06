@@ -1,6 +1,8 @@
+import type { AccountSignals } from './account-signals';
 import type { ProposalProduct } from './distru-proposal';
 
 export type StoreSalesContext = {
+  signals?: AccountSignals;
   coverageStart: string | null;
   coverageEnd: string | null;
   completeCoverage: boolean;

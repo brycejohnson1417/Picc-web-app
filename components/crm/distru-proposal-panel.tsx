@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Download, Plus, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, Download, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAppAccess } from '@/components/auth/app-access-provider';
@@ -30,6 +30,8 @@ export function DistruProposalPanel({ accountId, focusProductId }: { accountId: 
   const [query, setQuery] = useState('');
   const [openBrand, setOpenBrand] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [inventoryAsOf, setInventoryAsOf] = useState<string | null>(null);
+  const [refreshingInventory, setRefreshingInventory] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -42,7 +44,7 @@ export function DistruProposalPanel({ accountId, focusProductId }: { accountId: 
     setPickerOpen(false);
     setQuery('');
     setOpenBrand(null);
-    void fetch(`/api/proposals/${encodeURIComponent(accountId)}`, { cache: 'no-store', signal: controller.signal })
+    void fetch(`/api/proposals/${encodeURIComponent(accountId)}?refresh=true`, { cache: 'no-store', signal: controller.signal })
       .then(async response => {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Proposal could not be loaded.');
@@ -50,8 +52,10 @@ export function DistruProposalPanel({ accountId, focusProductId }: { accountId: 
         if (controller.signal.aborted) return;
         const draft = canEdit ? drafts.get(accountId) : undefined;
         setSavedFingerprint(proposalFingerprint(result.proposal));
-        setProposal(draft?.revision === result.proposal.revision ? draft : result.proposal);
+        const loaded = draft?.revision === result.proposal.revision ? draft : result.proposal;
+        setProposal({ ...loaded, lines: loaded.lines.map(line => ({ ...line, availableUnits: result.catalog.find(product => product.productId === line.productId)?.availableUnits ?? 0 })) });
         setCatalog(result.catalog);
+        setInventoryAsOf(result.inventoryAsOf ?? null);
         if (focusProductId) {
           const focusedLine = (draft?.revision === result.proposal.revision ? draft : result.proposal).lines.find(line => line.productId === focusProductId);
           if (focusedLine) {
@@ -101,6 +105,22 @@ export function DistruProposalPanel({ accountId, focusProductId }: { accountId: 
     setOpenBrand(product.brand);
     setPickerOpen(false);
     setQuery('');
+  }
+
+  async function refreshInventory() {
+    setRefreshingInventory(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/proposals/${encodeURIComponent(accountId)}?refresh=true`, { cache: 'no-store' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Inventory could not be refreshed.');
+      const fresh = parseProposalResponse(payload);
+      if (activeAccountId.current !== accountId) return;
+      setCatalog(fresh.catalog);
+      setInventoryAsOf(fresh.inventoryAsOf ?? null);
+      setProposal(current => current ? { ...current, lines: current.lines.map(line => ({ ...line, availableUnits: fresh.catalog.find(product => product.productId === line.productId)?.availableUnits ?? 0 })) } : current);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Inventory unavailable'); }
+    finally { setRefreshingInventory(false); }
   }
 
   async function saveProposal(): Promise<DistruProposal | null> {
@@ -189,6 +209,10 @@ export function DistruProposalPanel({ accountId, focusProductId }: { accountId: 
         <span className="rounded border border-[#e3dfce] bg-[#f7f4e8] px-2 py-1 text-[10px] font-medium text-[#827039]">Proposal</span>
       </div>
 
+      <div className="flex items-center justify-between gap-2 border-y border-[#e5e6e1] py-2 text-xs text-[#74766f]">
+        <span>{inventoryAsOf ? `Stock checked ${new Date(inventoryAsOf).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : 'Stock check time unavailable'}</span>
+        <button type="button" onClick={() => void refreshInventory()} disabled={refreshingInventory || saving || downloading} className="inline-flex min-h-9 items-center gap-1.5 font-medium disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${refreshingInventory ? 'animate-spin' : ''}`} />Refresh stock</button>
+      </div>
       {proposal.lines.length && totals ? (
         <div className="border-y border-[#e5e6e1] py-3">
           <div className="flex items-baseline justify-between gap-3">

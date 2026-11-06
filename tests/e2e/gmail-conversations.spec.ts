@@ -129,7 +129,7 @@ for (const width of [390,1280]) {
   });
   await page.setViewportSize({width,height:900});await page.goto('/accounts');
   await page.getByRole('button',{name:/Example Store.*Customer.*Example Rep/s}).click();
-  await page.getByRole('button',{name:'Email',exact:true}).click();
+  await page.getByRole('tab',{name:'Activity',exact:true}).click();
   const section=page.getByRole('region',{name:'Gmail conversations'});
   await expect(section.getByText('September reorder',{exact:true})).toBeVisible();
   await section.getByRole('button',{name:/September reorder/}).click();
@@ -145,7 +145,7 @@ for (const width of [390,1280]) {
 test('Gmail error, retry, no matches and reconnect states are actionable',async({page})=>{
  let mode='error';
  await page.route('**/api/accounts/*/gmail?**',async route=>route.fulfill(mode==='error'?{status:502,json:{error:'Gmail could not load conversations.'}}:mode==='empty'?{json:{threads:[],nextPageToken:null,mailboxEmail:'rep@example.com',matchedContactCount:1,checkedAt:new Date().toISOString(),range:'2y'}}:{status:409,json:{error:'Connect your Gmail in Settings to view conversations.',needsConnection:true}}));
- await page.goto('/accounts');await page.getByRole('button',{name:/Example Store.*Customer.*Example Rep/s}).click();await page.getByRole('button',{name:'Email',exact:true}).click();
+ await page.goto('/accounts');await page.getByRole('button',{name:/Example Store.*Customer.*Example Rep/s}).click();await page.getByRole('tab',{name:'Activity',exact:true}).click();
  const section=page.getByRole('region',{name:'Gmail conversations'});
  await expect(section.getByRole('alert')).toContainText('could not load');mode='empty';await section.getByRole('button',{name:'Try again'}).click();await expect(section.getByText(/No matching conversations/)).toBeVisible();
  mode='disconnect';await section.getByRole('button',{name:'Refresh conversations'}).click();await expect(section.getByRole('link',{name:'Gmail Settings'})).toHaveAttribute('href','/settings#connected-services');

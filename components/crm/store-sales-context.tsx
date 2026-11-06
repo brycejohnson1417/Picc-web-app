@@ -1,5 +1,6 @@
 'use client';
 
+import { AccountSignals } from './account-signals';
 import { ChevronDown, ExternalLink, Plus } from 'lucide-react';
 import { buildStoreOpportunities, type StoreSalesContext } from '@/lib/proposals/store-opportunities';
 
@@ -12,9 +13,10 @@ export function StoreSalesContextPanel({ context, onSelectProduct }: { context: 
   const { suggestions, purchased } = buildStoreOpportunities(context);
   const payment = context.payment;
   const hasPayment = Boolean(payment?.creditStatus || typeof payment?.paymentDaysAvg === 'number' || payment?.overdueOrders);
-  if (!hasPayment && !suggestions.length && !purchased.length) return null;
+  if (!context.signals && !hasPayment && !suggestions.length && !purchased.length) return null;
   return (
     <>
+      {context.signals ? <AccountSignals data={context.signals} /> : null}
       {hasPayment ? (
         <details className="group border-b border-[#e5e6e1] px-5 py-3">
           <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">

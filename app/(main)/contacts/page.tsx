@@ -18,9 +18,10 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
   const visibleContacts = runtime.contacts.filter((contact) => archivedIds.has(contact.notionPageId.replace(/-/g, '').toLowerCase()) === showArchived);
 
   return (
-    <div className="min-h-full bg-[linear-gradient(180deg,#f7f9fc_0%,#eef2f7_100%)]">
+    <div className="min-h-full bg-[#fbfcf9]">
       <AccountsSectionTabs />
-      <div className="mx-auto max-w-[var(--app-shell-max)] space-y-3 px-4 pb-28 pt-4 md:px-6">
+      <div className="mx-auto max-w-[1200px] space-y-3 px-4 pb-28 pt-4 md:px-6">
+        <h1 className="text-[22px] font-semibold text-[#30392a]">Contacts</h1>
         <header className="flex items-center justify-between gap-3">
           <div className="flex rounded-lg border border-[#d4dbe5] bg-white p-1 text-sm font-semibold">
             <Link href="/contacts" className={showArchived ? 'rounded-md px-3 py-2 text-[#697486]' : 'rounded-md bg-[#edf2f8] px-3 py-2 text-[#18212d]'}>Active</Link>
@@ -32,7 +33,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
           <DataFreshnessBanner freshness={runtime.freshness.contacts} compact />
           <DataFreshnessBanner freshness={runtime.freshness.accounts} compact />
         </section>
-        {!showArchived ? <GmailSuggestedContacts /> : null}
+        {!showArchived ? <details className="border-b border-[#dfe4d7] pb-3"><summary className="cursor-pointer text-sm text-[#737c6b]">Find new contacts from Gmail</summary><div className="mt-3"><GmailSuggestedContacts /></div></details> : null}
         <ContactsTable rows={visibleContacts} accounts={runtime.accounts.map((account) => ({ id: account.notionPageId, name: account.name }))} />
       </div>
     </div>

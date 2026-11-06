@@ -61,3 +61,12 @@ describe('sales Today queues', () => {
     expect(buildTodayQueues(accounts, '2026-11-05').upcoming.map(row => row.id)).toEqual(['future-soon', 'future-late']);
   });
 });
+
+it('keeps today separate from the overdue backlog', () => {
+  const result = buildTodayQueues([
+    {id:'a',name:'Today',repNames:[],status:'Customer',followUpNeeded:true,followUpDate:'2026-11-05'},
+    {id:'b',name:'Old',repNames:[],status:'Customer',followUpNeeded:true,followUpDate:'2026-08-01'}
+  ], '2026-11-05');
+  expect(result.today.map(row => row.id)).toEqual(['a']);
+  expect(result.overdue.map(row => row.id)).toEqual(['b']);
+});

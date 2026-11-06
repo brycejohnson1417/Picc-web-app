@@ -52,3 +52,9 @@ describe('proposal arithmetic and validation', () => {
     expect(proposalFingerprint(a)).not.toBe(proposalFingerprint({ ...a, lines: [line({ paymentTerms: 'COD' }), a.lines[1]] }));
   });
 });
+
+ it('rejects proposals above available stock, including zero stock', () => {
+   expect(validateProposal([line({cases: 3, availableUnits: 10})]).join(' ')).toContain('available');
+   expect(validateProposal([line({availableUnits: 0})]).join(' ')).toContain('available');
+   expect(validateProposal([line({cases: 2, availableUnits: 10})])).toEqual([]);
+ });

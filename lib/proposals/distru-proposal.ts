@@ -15,7 +15,7 @@ const proposalSchema = z.object({
   orderNumber: z.string().nullable().optional(), revision: z.number().int().nonnegative(), updatedAt: z.string().nullable().optional(),
   terms: z.string().default(''), notes: z.string().default(''), lines: z.array(lineSchema),
 });
-const responseSchema = z.object({ proposal: proposalSchema, catalog: z.array(productSchema) });
+const responseSchema = z.object({ proposal: proposalSchema, catalog: z.array(productSchema), inventoryAsOf: z.string().optional() });
 export type ProposalLine = z.infer<typeof lineSchema>;
 export type ProposalProduct = z.infer<typeof productSchema>;
 export type DistruProposal = z.infer<typeof proposalSchema>;
@@ -69,6 +69,7 @@ export function validateProposal(lines: ProposalLine[]): string[] {
     if (!Number.isSafeInteger(line.unitsPerCase) || line.unitsPerCase < 1) errors.push(`Case size is missing for ${line.name}.`);
     if (!Number.isSafeInteger(line.unitPriceCents) || line.unitPriceCents < 0) errors.push(`Enter a valid price for ${line.name}.`);
     if (!Number.isSafeInteger(line.discountBps) || line.discountBps < 0 || line.discountBps > 10000) errors.push(`Discount must be 0–100% for ${line.name}.`);
+    if (typeof line.availableUnits === 'number' && line.cases * line.unitsPerCase > line.availableUnits) errors.push(`${line.name}: requested quantity exceeds available stock (${line.availableUnits} units).`);
     if (!line.paymentTerms?.trim()) errors.push(`Choose payment terms for ${line.name}.`);
     if (line.codOnly && line.paymentTerms !== 'COD') errors.push(`${line.name} is COD only.`);
     if (line.requiresConfirmation && !line.confirmed) errors.push(`Confirm ${line.name} before saving.`);

@@ -28,3 +28,14 @@ Run normal verify and relevant E2E. Add RED-first tests for deterministic change
 ## Safety
 
 Use an isolated local runtime with external writes disabled. Never seed invented sales records or reuse a production database URL. Existing issue181 checkout remains untouched. No claim of production integration follows from a successful local review.
+
+## November 5 continuation
+Continuing this draft review: non-map information hierarchy, source-separated historical order access, and store-specific proposals with refreshed inventory. Map implementation and controls are frozen.
+
+Owned paths: components/home/**, components/crm/distru-proposal-panel.tsx, components/dashboard/sales-workspace.tsx, components/mobile/accounts-mobile.tsx, components/crm/contacts-table.tsx, lib/proposals/**, lib/follow-up/**, SESSION.md, DESIGN-SYSTEM.md. Account-detail changes, if necessary, are limited to data display with map behavior preserved.
+
+Checked open PRs #211, #189, #135, #82. Integration #211 remains a dependency; do not duplicate its schema or merge it implicitly. Existing account detail overlap requires preserving navigation and sample actions.
+
+Validation: RED-first domain tests for inventory bounds, source continuity and day/backlog separation; visual-only layout verified through desktop/mobile browser interactions, screenshots, and repository verify/E2E. No production writes, migration, secrets changes or deployment in this review.
+
+Compact, source-labeled visuals support sales comparisons and account follow-up. Review data and business-specific mapping stay outside the repository.
