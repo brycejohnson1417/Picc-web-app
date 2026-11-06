@@ -39,3 +39,11 @@ Checked open PRs #211, #189, #135, #82. Integration #211 remains a dependency; d
 Validation: RED-first domain tests for inventory bounds, source continuity and day/backlog separation; visual-only layout verified through desktop/mobile browser interactions, screenshots, and repository verify/E2E. No production writes, migration, secrets changes or deployment in this review.
 
 Compact, source-labeled visuals support sales comparisons and account follow-up. Review data and business-specific mapping stay outside the repository.
+
+## Issue 218 — account order status
+
+Issue [#218](https://github.com/brycejohnson1417/Picc-web-app/issues/218) is stacked on draft #215. The Accounts overview will use the same records as its Orders tab to show order identity, source and recorded state, and will label the monthly aggregate as order value. A standalone invalid CRM field reference is hidden only in the rendered follow-up. The editor retains its source value.
+
+Owned paths are the Accounts entry point, its shared detail renderer, account signals labels and the focused order-overview display helper and tests. Map behavior, source adapters, proposals, production data and deployment are outside scope. Checked #215, #217, #211, #189, #135 and #82. The shared detail renderer overlaps #215, #189 and #135, so retain the default behavior of other entry points and recheck conflicts before release.
+
+Run the display regression tests red first, full verification, existing E2E checks, and private desktop/mobile browser proof through Accounts and its Orders tab.
