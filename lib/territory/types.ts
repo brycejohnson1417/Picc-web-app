@@ -154,6 +154,7 @@ export interface TerritoryStoreDetailResponse {
       customerName: string | null;
     }>;
     orders: Array<{
+      source?: string;
       id: string;
       orderNumber: string;
       createdDate: string | null;

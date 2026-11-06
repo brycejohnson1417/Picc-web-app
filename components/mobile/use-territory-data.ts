@@ -151,7 +151,8 @@ export function useTerritoryData(input: TerritoryStoreQueryInput) {
         }
       }
     },
-    initialData: cachedStores,
+    // A deliberate refresh must run even when this new nonce has a fresh session cache.
+    initialData: shouldForceRefresh ? undefined : cachedStores,
     staleTime: STORES_STALE_MS,
     gcTime: QUERY_GC_MS,
     refetchOnMount: false,

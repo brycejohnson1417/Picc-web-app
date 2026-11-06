@@ -18,22 +18,9 @@ describe('buildCommunicationFollowUpPayload', () => {
         reason: '',
       }),
     ).toEqual({
-      store: {
-        id: 'account-page',
-        notionPageId: 'account-page',
-        name: 'Harbor House',
-      },
-      noteText: 'Follow-up scheduled after opening Gmail for Mara Vega.',
       followUpDate: '2026-08-18',
       followUpNeeded: true,
       followUpReason: 'Follow up after email with Mara Vega',
-      associatedContact: {
-        id: 'contact-page',
-        name: 'Mara Vega',
-        roleTitle: 'Buyer',
-        email: 'mara@example.com',
-        phone: '+13475550198',
-      },
     });
   });
 
@@ -47,7 +34,8 @@ describe('buildCommunicationFollowUpPayload', () => {
     });
 
     expect(payload.followUpReason).toBe('Confirm fall menu placement');
-    expect(payload.noteText).toBe('Follow-up scheduled after opening the phone app for Mara Vega.');
+    expect(payload).not.toHaveProperty('noteText');
+    expect(payload).not.toHaveProperty('lastCheckIn');
   });
 });
 

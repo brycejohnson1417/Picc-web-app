@@ -33,9 +33,9 @@
   --muted: 127 130 137;
   --primary: 201 52 18;
   --border: 201 202 208;
-  --app-shell-max: 1120px;
-  --picc-bottom-nav-height: 84px;
-  --picc-bottom-nav-clearance: 92px;
+  --app-shell-max: 100%;
+  --picc-bottom-nav-height: 68px;
+  --picc-bottom-nav-clearance: 68px;
   --picc-motion-fast: 150ms;
   --picc-motion-normal: 240ms;
   --picc-motion-ease: cubic-bezier(0.2, 0, 0, 1);
@@ -116,9 +116,25 @@ body {
 
 @media (min-width: 768px) {
   :root {
-    --picc-bottom-nav-clearance: 80px;
+    --picc-bottom-nav-clearance: 68px;
   }
 }
+
+@media (min-width: 1024px) {
+  :root {
+    --picc-bottom-nav-height: 0px;
+    --picc-bottom-nav-clearance: 0px;
+  }
+  .picc-shell-enter { animation: none; }
+}
+
+.picc-app-shell :where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid #bd3d21;
+  outline-offset: 3px;
+}
+
+.picc-account-row:hover { background: #f1f3ed; }
+.picc-account-row[aria-selected="true"] { background: #edf1e7; }
 
 @media (prefers-reduced-motion: reduce) {
   .picc-shell-enter,

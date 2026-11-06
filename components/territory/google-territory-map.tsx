@@ -55,6 +55,18 @@ type RuntimeMapConfigResponse = {
   error?: string;
 };
 
+const WORKSPACE_MAP_STYLE: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#edf0e8' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#68735f' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#f7f8f3' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#cedde0' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#fafbf8' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#e1decf' }] },
+  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#dce6d3' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#c4cdbb' }] },
+];
+
 const FALLBACK_CENTER = { lat: 39.8283, lng: -98.5795 };
 let runtimeMapConfigCache: RuntimeMapConfigResponse | null = null;
 const MAP_CONFIG_STORAGE_KEY = 'picc:territory-map-config';
@@ -294,12 +306,11 @@ function FitController({
     if (lastFocusRequestRef.current === focusRequestToken) {
       return;
     }
-    lastFocusRequestRef.current = focusRequestToken;
-
     const focused = focusedStoreId ? stores.find((store) => store.id === focusedStoreId) : null;
     if (!map || !focused) {
       return;
     }
+    lastFocusRequestRef.current = focusRequestToken;
 
     map.panTo({ lat: focused.lat, lng: focused.lng });
     map.setZoom(Math.max(map.getZoom() ?? defaultZoom, 13));
@@ -651,6 +662,8 @@ export function GoogleTerritoryMap({
       >
         <GoogleMap
           mapId={mapId}
+          styles={mapId ? undefined : WORKSPACE_MAP_STYLE}
+          zoomControl
           defaultCenter={FALLBACK_CENTER}
           defaultZoom={defaultZoom}
           gestureHandling="greedy"
@@ -714,7 +727,7 @@ export function GoogleTerritoryMap({
             const preferredPartner = Boolean(store.isPreferredPartner);
             const glyph = pinGlyphForStore(store, pinColorMode);
             const glyphColor = pinGlyphColorForStore(store, pinColorMode);
-            const scale = markerScale({ focused, highlighted, selected, approximate });
+            const scale = markerScale({ focused, highlighted, selected, approximate }) * 0.85;
             const borderColor = preferredPartner ? '#111111' : approximate ? '#111827' : '#ffffff';
             const background = pinColorForStore(store, pinColorMode, repColorMap);
 

@@ -117,7 +117,8 @@ test.beforeEach(async ({ page }) => {
 
 test('accounts stay dense, keep the alphabet rail clear, and create a follow-up', async ({ page }) => {
   let followUpPayload: unknown;
-  await page.route('**/api/territory/check-in', async (route) => {
+  await page.route('**/api/territory/stores/store-1', async (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
     followUpPayload = route.request().postDataJSON();
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, syncWarning: null }) });
   });
@@ -129,8 +130,8 @@ test('accounts stay dense, keep the alphabet rail clear, and create a follow-up'
   await expect(accountCard).toBeVisible();
   await expect(accountCard).not.toContainText('88 Test Street');
   await expect(accountCard).toContainText('6 days');
-  await expect(accountCard).toContainText('Pay days avg.');
-  await expect(accountCard).toContainText('Nabis rank');
+  await expect(accountCard).toContainText('Last recorded order unavailable');
+  await expect(accountCard).toContainText('Follow up needs a date');
 
   const rail = page.getByRole('navigation', { name: 'Jump to account letter' });
   const [cardBox, railBox] = await Promise.all([accountCard.boundingBox(), rail.boundingBox()]);
@@ -151,7 +152,6 @@ test('accounts stay dense, keep the alphabet rail clear, and create a follow-up'
   await expect(page.getByText('Follow-up set')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'New follow-up' })).toBeHidden();
   expect(followUpPayload).toMatchObject({
-    store: { id: 'store-1', notionPageId: 'account-page-1', name: 'Example Store' },
     followUpNeeded: true,
     followUpReason: 'Review the next order',
   });
@@ -165,7 +165,7 @@ test('account details exposes direct actions and prompts for a follow-up after G
   await page.goto('/accounts');
   await page.getByRole('button', { name: /Example Store.*Customer.*Example Rep/s }).click();
 
-  await expect(page.getByText('Associated Contacts')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Contacts/ })).toBeVisible();
   const email = page.getByRole('link', { name: 'Email Example Buyer' });
   const text = page.getByRole('link', { name: 'Text Example Buyer' });
   const call = page.getByRole('link', { name: 'Call Example Buyer' });
@@ -267,6 +267,7 @@ test('reviews Gmail suggestions before quick-adding a prefilled contact', async 
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/contacts');
+  await page.getByText('Find new contacts from Gmail', { exact: true }).click();
   await page.getByRole('button', { name: 'Find suggested contacts in Gmail' }).click();
   await expect(page.getByText('Taylor Morgan')).toBeVisible();
   await expect(page.getByText('4 recent emails')).toBeVisible();

@@ -1,5 +1,6 @@
 'use client';
 
+import { isDormant } from '@/lib/proposals/account-signals';
 import { AlertTriangle, Filter, Loader2, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -9,9 +10,6 @@ import { AccountDetailSheet } from '@/components/mobile/account-detail-sheet';
 import { AccountFollowUpFlow } from '@/components/crm/account-follow-up-flow';
 import { ContactCreateFlow } from '@/components/crm/contact-create-flow';
 import { AlphabetRail } from '@/components/mobile/alphabet-rail';
-import { MobileHeader } from '@/components/mobile/mobile-header';
-import { MobileSearch } from '@/components/mobile/mobile-search';
-import { SegmentedControl } from '@/components/mobile/segmented-control';
 import { NotionOptionChip } from '@/components/shared/notion-option-chip';
 import { DataFreshnessBanner } from '@/components/shared/data-freshness';
 import { buildTerritoryFreshness } from '@/lib/runtime/account-contact-contract';
@@ -30,7 +28,7 @@ export function AccountsMobile() {
   const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [scope, setScope] = useState<'all' | 'recent' | 'follow-ups'>('all');
+  const [scope, setScope] = useState<'all' | 'recent' | 'follow-ups' | 'inactive'>('all');
   const [repFilter, setRepFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [pppStatusFilter, setPppStatusFilter] = useState('all');
@@ -83,6 +81,7 @@ export function AccountsMobile() {
     const source = allStores;
     const scoped = scope === 'all'
       ? source
+      : scope === 'inactive' ? source.filter(store => isDormant(store.lastOrderDate, new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date())))
       : scope === 'recent'
         ? source.filter((store) => {
         const editedAt = Date.parse(store.lastEditedTime);
@@ -157,7 +156,7 @@ export function AccountsMobile() {
 
   if (storesQuery.isLoading && !storesQuery.data) {
     return (
-      <div className="flex min-h-[calc(100dvh-92px)] items-center justify-center bg-[linear-gradient(180deg,#f7f9fc_0%,#eef2f7_100%)]">
+      <div className="flex min-h-[calc(100dvh-92px)] items-center justify-center bg-[#fbfcf9]">
         <Loader2 className="h-8 w-8 animate-spin text-[#5f636d]" />
       </div>
     );
@@ -165,7 +164,7 @@ export function AccountsMobile() {
 
   if (storesQuery.isError && !storesQuery.data) {
     return (
-      <div className="min-h-[calc(100dvh-92px)] bg-[linear-gradient(180deg,#f7f9fc_0%,#eef2f7_100%)] px-5 py-8">
+      <div className="min-h-[calc(100dvh-92px)] bg-[#fbfcf9] px-5 py-8">
         <div className="rounded-xl border border-[#e0b4ab] bg-[#fbe8e4] p-4 text-[#8f2410]">
           <div className="mb-2 flex items-center gap-2 text-[18px] font-semibold">
             <AlertTriangle className="h-5 w-5" />
@@ -192,30 +191,19 @@ export function AccountsMobile() {
   }
 
   return (
-    <div className="min-h-[calc(100dvh-92px)] bg-[linear-gradient(180deg,#f7f9fc_0%,#eef2f7_100%)]">
-      <MobileHeader
-        title="Accounts"
-        right={null}
-      >
-        <SegmentedControl
-          value={scope}
-          onChange={(value) => setScope(value as 'all' | 'recent' | 'follow-ups')}
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'recent', label: 'Recent' },
-            { value: 'follow-ups', label: 'Follow-Ups' },
-          ]}
-        />
-      </MobileHeader>
+    <div className="min-h-[calc(100dvh-92px)] bg-[#fbfcf9]">
+      <header className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3 px-4 pt-5 lg:px-6"><h1 className="text-[22px] font-semibold text-[#30392a]">Accounts</h1><div className="w-full sm:w-80">
+        <div className="flex gap-1">{([{value:'all',label:'All'},{value:'inactive',label:'90+ days'},{value:'recent',label:'Recent'},{value:'follow-ups',label:'Follow-ups'}] as const).map(option=><button type="button" key={option.value} aria-pressed={scope===option.value} onClick={()=>setScope(option.value)} className={`min-h-10 whitespace-nowrap rounded-md px-3 text-sm ${scope===option.value?'bg-[#e9ece3] font-semibold text-[#30392a]':'text-[#737c6b] hover:bg-[#f0f2eb]'}`}>{option.label}</button>)}</div>
+      </div></header>
 
-      <div className="mx-auto max-w-[var(--app-shell-max)] px-4 pb-28 pt-4 md:px-5 lg:px-6">
+      <div className="mx-auto max-w-[1200px] px-4 pb-28 pt-4 md:px-5 lg:px-6">
         <div className="mb-3 flex items-center justify-end gap-2">
           <AccountFollowUpFlow accounts={allStores.map((store) => ({ id: store.id, notionPageId: store.notionPageId, name: store.name, repNames: store.repNames }))} />
           <ContactCreateFlow accounts={contactAccounts} />
         </div>
-        <div className="sticky top-0 z-20 -mx-4 border-b border-[#dce2eb] bg-[#f7f9fc]/95 px-4 pb-3 pt-2 backdrop-blur md:-mx-5 md:px-5 lg:-mx-6 lg:px-6">
+        <div className="sticky top-0 z-20 -mx-4 border-b border-[#dce2eb] bg-[#fbfcf9] px-4 pb-3 pt-2 md:-mx-5 md:px-5 lg:-mx-6 lg:px-6">
           <div className="grid grid-cols-[minmax(0,1fr)_48px] gap-2">
-            <MobileSearch value={search} onChange={setSearch} placeholder="Search Accounts" />
+            <input aria-label="Search accounts" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search accounts" className="h-11 w-full rounded-lg border border-[#dfe4d7] bg-[#fdfdfb] px-3 text-sm outline-none focus:ring-2 focus:ring-[#c5cdbd]" />
             <button
               type="button"
               className="relative grid h-12 w-12 place-items-center rounded-xl border border-[#d6dce7] bg-white text-[#243041] shadow-sm active:scale-[0.98]"
@@ -243,8 +231,8 @@ export function AccountsMobile() {
             ) : null}
           </div>
 
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-            <ScopeChip label={scope === 'all' ? 'All accounts' : scope === 'recent' ? 'Recent' : 'Follow-ups'} active />
+          <div className="flex gap-2 overflow-x-auto">
+            {scope !== 'all' ? <ScopeChip label={scope === 'recent' ? 'Recent' : scope === 'inactive' ? 'Last recorded order 90+ days ago' : 'Follow-ups'} active /> : null}
             {repFilter !== 'all' ? <ScopeChip label={repFilter} onClear={() => setRepFilter('all')} /> : null}
             {statusFilter !== 'all' ? <ScopeChip label={statusFilter} onClear={() => setStatusFilter('all')} /> : null}
             {pppStatusFilter !== 'all' ? <ScopeChip label={`PPP: ${pppStatusFilter}`} onClear={() => setPppStatusFilter('all')} /> : null}
@@ -262,7 +250,7 @@ export function AccountsMobile() {
             </div>
           ) : null}
 
-          {accountFreshness ? (
+          {accountFreshness ? (<details className="mb-3 text-xs text-[#737c6b]"><summary className="cursor-pointer">Account data · {accountFreshness.syncedAt ? new Date(accountFreshness.syncedAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : 'Sync time unavailable'}</summary>
             <DataFreshnessBanner
               freshness={{
                 ...accountFreshness,
@@ -288,7 +276,7 @@ export function AccountsMobile() {
                   Refresh
                 </button>
               }
-            />
+            /></details>
           ) : null}
 
           {grouped.length === 0 ? (
@@ -326,17 +314,17 @@ export function AccountsMobile() {
                   sectionRefs.current[letter] = element;
                 }}
               >
-                <div className="sticky top-[134px] z-10 border-b border-[#dce2eb] bg-[#eef2f7]/95 px-1 py-1 text-[18px] font-semibold text-[#6a7583] backdrop-blur">{letter}</div>
-                <div className="mt-2 space-y-2">
+                <div className="sticky top-[134px] z-10 border-b border-[#dce2eb] bg-[#fbfcf9] px-1 py-1 text-[11px] font-semibold text-[#6a7583]">{letter}</div>
+                <div className="divide-y divide-[#e5e6e1]">
                   {list.map((store) => (
                     <button
                       key={store.id}
                       type="button"
                       onClick={() => setDetailStoreId(store.id)}
-                      className="w-full rounded-xl border border-[#dce2eb] bg-white px-3.5 py-3 text-left shadow-[0_4px_16px_rgba(24,33,45,0.04)] transition hover:border-[#9db8f7] hover:bg-[#f5f9ff] active:scale-[0.995]"
+                      className="w-full bg-transparent px-2 py-3 text-left transition hover:bg-[#f0f2eb]"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <p className="min-w-0 truncate text-[18px] font-semibold leading-6 text-[#15171c]">{store.name}</p>
+                        <p className="min-w-0 truncate text-[15px] font-semibold leading-6 text-[#15171c]">{store.name}</p>
                         <NotionOptionChip
                           label={store.status || 'Status unknown'}
                           colorName={store.statusColorName}
@@ -344,7 +332,7 @@ export function AccountsMobile() {
                         />
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        <span className="rounded-full bg-[#eef3fb] px-2.5 py-1 text-[12px] font-semibold text-[#304153]">
+                        <span className="text-[12px] text-[#737c6b]">
                           Rep: {store.repNames.length > 0 ? store.repNames.join(', ') : 'Unassigned'}
                         </span>
                         {store.isPreferredPartner ? (
@@ -353,22 +341,13 @@ export function AccountsMobile() {
                           </span>
                         ) : null}
                       </div>
-                      <dl className="mt-3 grid grid-cols-3 divide-x divide-[#e4e8ee] border-t border-[#e4e8ee] pt-2 text-[11px]">
-                        <div className="pr-2">
-                          <dt className="text-[#7a8492]">Overdue</dt>
-                          <dd className={store.daysOverdue && store.daysOverdue > 0 ? 'mt-0.5 font-semibold text-[#b43118]' : 'mt-0.5 font-semibold text-[#344052]'}>
-                            {typeof store.daysOverdue === 'number' ? (store.daysOverdue > 0 ? `${store.daysOverdue} days` : store.daysOverdue === 0 ? 'Due today' : 'Current') : 'Unavailable'}
-                          </dd>
-                        </div>
-                        <div className="px-2">
-                          <dt className="text-[#7a8492]">Pay days avg.</dt>
-                          <dd className="mt-0.5 font-semibold text-[#667183]">Unavailable</dd>
-                        </div>
-                        <div className="pl-2">
-                          <dt className="text-[#7a8492]">Nabis rank</dt>
-                          <dd className="mt-0.5 font-semibold text-[#344052]">{store.nabisRank ? `#${store.nabisRank}` : 'Unavailable'}</dd>
-                        </div>
-                      </dl>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-[#737c6b]">
+                        <span>{store.city || store.locationAddress || 'Location unavailable'}</span>
+                        <span>Last recorded order {store.lastOrderDate ? new Date(store.lastOrderDate.slice(0,10)+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}) : 'unavailable'}</span>
+                        {store.followUpNeeded&&<span className="font-medium text-[#a36b2b]">Follow up {store.followUpDate?.slice(0,10)||'needs a date'}</span>}
+                        {typeof store.daysOverdue === 'number' && store.daysOverdue > 0 ? <span className="text-[#a36b2b]">Recorded overdue: {store.daysOverdue} days</span> : null}
+                        {store.nabisRank ? <span>Nabis #{store.nabisRank}</span> : null}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -401,6 +380,7 @@ export function AccountsMobile() {
       ) : null}
 
       <AccountDetailSheet
+        includeAccountEmail
         store={detailStoreId ? allStoreById.get(detailStoreId) ?? null : null}
         accountFreshness={accountFreshness}
         onClose={() => {
@@ -468,9 +448,9 @@ function AccountFiltersSheet({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[5200] bg-black/35 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-[5200] bg-black/35-[2px]">
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close account filters" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 mx-auto max-h-[86dvh] max-w-[var(--app-shell-max)] overflow-hidden rounded-t-2xl border border-[#d9dee8] bg-white shadow-[0_-18px_50px_rgba(15,23,42,0.22)]">
+      <div className="absolute inset-x-0 bottom-0 mx-auto max-h-[86dvh] max-w-[1200px] overflow-hidden rounded-t-2xl border border-[#d9dee8] bg-white shadow-[0_-18px_50px_rgba(15,23,42,0.22)]">
         <div className="flex items-center justify-between border-b border-[#e0e5ed] px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#eef3fb] text-[#276fd3]">

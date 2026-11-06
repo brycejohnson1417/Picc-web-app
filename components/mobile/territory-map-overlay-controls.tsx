@@ -20,6 +20,7 @@ interface TerritoryMapOverlayControlsProps {
   lassoActive: boolean;
   lassoDrawingMode: boolean;
   onToggleLassoMode: () => void;
+  onToggleLassoDrawingMode: () => void;
   onFinishLasso: () => void;
   showMapSearch: boolean;
   mapSearch: string;
@@ -55,6 +56,7 @@ export function TerritoryMapOverlayControls({
   lassoActive,
   lassoDrawingMode,
   onToggleLassoMode,
+  onToggleLassoDrawingMode,
   onFinishLasso,
   showMapSearch,
   mapSearch,
@@ -84,7 +86,7 @@ export function TerritoryMapOverlayControls({
 }: TerritoryMapOverlayControlsProps) {
   return (
     <>
-      <div className="absolute left-1/2 top-3 z-[1500] -translate-x-1/2">
+      <div className={cn("absolute left-1/2 top-3 z-[1500] -translate-x-1/2", !canVisualizeRoute && !lassoActive ? "hidden" : "")}>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -109,7 +111,7 @@ export function TerritoryMapOverlayControls({
                   'picc-soft-transition rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow transition hover:bg-white/95 active:scale-[0.985]',
                   lassoDrawingMode ? 'border-[#2563eb] bg-[#2563eb] text-white' : 'border-white/70 bg-white/92 text-[#25313d]',
                 )}
-                onClick={onToggleLassoMode}
+                onClick={onToggleLassoDrawingMode}
               >
                 {lassoDrawingMode ? 'Pause Lasso' : 'Resume Lasso'}
               </button>
@@ -231,12 +233,12 @@ export function TerritoryMapOverlayControls({
         </div>
       ) : null}
 
-      <div className="absolute left-2 top-3 z-[1500] flex flex-col gap-2">
+      <div className="absolute left-2 top-3 z-[1500] flex flex-col gap-2 lg:left-3 lg:top-3 lg:gap-1">
         <button
           type="button"
           aria-label="Center on your current location"
           title="Current location"
-          className="picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]"
+          className="picc-soft-transition grid h-10 w-10 place-items-center rounded-lg border border-[#dfe4d7] bg-white/95 shadow-sm hover:bg-white active:scale-[0.94]"
           onClick={onCenterCurrentLocation}
         >
           <Crosshair className="h-5 w-5 text-[#7f828a]" />
@@ -245,7 +247,7 @@ export function TerritoryMapOverlayControls({
           type="button"
           aria-label="Refresh territory data"
           title="Refresh territory data"
-          className="picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]"
+          className="picc-soft-transition grid h-10 w-10 place-items-center rounded-lg border border-[#dfe4d7] bg-white/95 shadow-sm hover:bg-white active:scale-[0.94]"
           onClick={onRefreshData}
         >
           <RefreshCw className="h-5 w-5 text-[#7f828a]" />
@@ -255,7 +257,7 @@ export function TerritoryMapOverlayControls({
           aria-label={lassoActive ? 'Clear lasso selection' : 'Start lasso selection'}
           title={lassoActive ? 'Clear lasso selection' : 'Lasso accounts'}
             className={cn(
-            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]',
+            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg border border-[#dfe4d7] bg-white/95 shadow-sm hover:bg-white active:scale-[0.94]',
             lassoActive ? 'ring-2 ring-[#2563eb]' : '',
           )}
           onClick={onToggleLassoMode}
@@ -280,20 +282,20 @@ export function TerritoryMapOverlayControls({
           type="button"
           aria-label="Open territory export options"
           title="Export"
-          className="picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]"
+          className="picc-soft-transition grid h-10 w-10 place-items-center rounded-lg border border-[#dfe4d7] bg-white/95 shadow-sm hover:bg-white active:scale-[0.94]"
           onClick={onOpenMyMapsExport}
         >
           <Download className="h-5 w-5 text-[#7f828a]" />
         </button>
       </div>
 
-      <div className="absolute right-2 top-3 z-[1500] flex flex-col gap-2">
+      <div className="absolute right-2 top-3 z-[1500] flex flex-col gap-2 lg:right-3 lg:gap-1">
         <button
           type="button"
           aria-label="Search dispensaries on the map"
           title="Search map"
           className={cn(
-            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]',
+            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg border border-[#dfe4d7] bg-white/95 shadow-sm hover:bg-white active:scale-[0.94]',
             showMapSearch || mapSearch.trim().length > 0 ? 'ring-2 ring-[#cd3814]' : '',
           )}
           onClick={onToggleMapSearch}
@@ -305,7 +307,7 @@ export function TerritoryMapOverlayControls({
           aria-label="Open territory layers"
           title="Territory layers"
           className={cn(
-            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]',
+            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg border border-[#dfe4d7] bg-white/95 shadow-sm hover:bg-white active:scale-[0.94]',
             showBoundaries ? 'ring-2 ring-[#cd3814]' : '',
           )}
           onClick={onOpenBoundarySheet}
@@ -317,7 +319,7 @@ export function TerritoryMapOverlayControls({
           aria-label="Open filters"
           title="Filters"
           className={cn(
-            'picc-soft-transition relative grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]',
+            'picc-soft-transition relative grid h-10 w-10 place-items-center rounded-lg border border-[#dfe4d7] bg-white/95 shadow-sm hover:bg-white active:scale-[0.94]',
             activeFiltersCount > 0 ? 'ring-2 ring-[#cd3814]' : '',
           )}
           onClick={onOpenFilters}
@@ -331,7 +333,7 @@ export function TerritoryMapOverlayControls({
           title={showSubwayLines ? 'Hide subway lines' : 'Show subway lines'}
           aria-pressed={showSubwayLines}
           className={cn(
-            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg bg-white/90 shadow hover:bg-white active:scale-[0.94]',
+            'picc-soft-transition grid h-10 w-10 place-items-center rounded-lg border border-[#dfe4d7] bg-white/95 shadow-sm hover:bg-white active:scale-[0.94]',
             showSubwayLines ? 'ring-2 ring-[#cd3814]' : '',
           )}
           onClick={onToggleSubwayLines}

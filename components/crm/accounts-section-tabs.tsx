@@ -16,9 +16,9 @@ export function AccountsSectionTabs() {
   return (
     <nav
       aria-label="Accounts sections"
-      className="border-b border-[#d7dde7] bg-[#f7f9fc] px-3 py-2 md:px-5"
+      className="lg:hidden border-b border-[#d7dde7] bg-[#fbfcf9] px-3 py-2 md:px-5"
     >
-      <div className="mx-auto grid max-w-md grid-cols-2 rounded-xl bg-[#e1e5eb] p-1">
+      <div className="mx-auto flex max-w-[1200px] gap-2">
         {tabs.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           const Icon = tab.icon;
@@ -30,7 +30,7 @@ export function AccountsSectionTabs() {
               className={cn(
                 'flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors',
                 active
-                  ? 'bg-white text-[#18212d] shadow-[0_1px_3px_rgba(31,35,43,0.12)]'
+                  ? 'bg-[#e9ece3] text-[#18212d]'
                   : 'text-[#687384] hover:text-[#2f3947]',
               )}
             >

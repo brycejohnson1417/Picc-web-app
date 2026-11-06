@@ -1,31 +1,40 @@
 'use client';
 
 import Link from 'next/link';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, ChevronDown, Clock3, Copy, MapPinned, Navigation, PencilLine, PhoneCall, X } from 'lucide-react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ChevronDown, Copy, ExternalLink, MapPinned, Navigation, PencilLine, PhoneCall, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAppAccess } from '@/components/auth/app-access-provider';
-import { GmailConversations } from '@/components/crm/gmail-conversations';
 import { ContactCreateFlow } from '@/components/crm/contact-create-flow';
 import { ContactQuickActions } from '@/components/crm/contact-quick-actions';
-import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-panel';
-import { PreferredPartnerProposalPanel } from '@/components/crm/preferred-partner-proposal-panel';
-import { PreferredPartnerSavingsPanel } from '@/components/crm/preferred-partner-savings-panel';
-import { SegmentedControl } from '@/components/mobile/segmented-control';
+import { GmailConversations } from '@/components/crm/gmail-conversations';
+import { StoreSalesContextPanel } from '@/components/crm/store-sales-context';
+import type { StoreSalesContext } from '@/lib/proposals/store-opportunities';
+import { DistruProposalPanel } from '@/components/crm/distru-proposal-panel';
 import { NotionOptionChip } from '@/components/shared/notion-option-chip';
 import { Button, Textarea } from '@/components/ui';
+import { getContactEmailDeliveryStatus, type ContactEmailDeliveryFields } from '@/lib/contacts/email-delivery-status';
 import type { RuntimeFreshness } from '@/lib/runtime/account-contact-contract';
+import { getAccountUpdateVersion, notifyAccountUpdated } from '@/lib/territory/account-cache-events';
 import type { TerritoryStoreContact, TerritoryStoreDetailResponse, TerritoryStorePin } from '@/lib/territory/types';
 import { cn } from '@/lib/utils';
 
-type DetailTab = 'detail' | 'location' | 'ai' | 'orders' | 'history' | 'email';
+type StoreDetailContact = TerritoryStoreContact & ContactEmailDeliveryFields;
+type AccountDetailResponse = Omit<TerritoryStoreDetailResponse, 'contacts'> & {
+  contacts: StoreDetailContact[];
+  salesContext?: StoreSalesContext;
+  history: TerritoryStoreDetailResponse['history'] & { availability?: 'available' | 'unavailable' };
+};
+
+type DetailTab = 'detail' | 'location' | 'proposal' | 'orders' | 'history';
 const STORE_DETAIL_CACHE_PREFIX = 'territory-store-detail:';
 const STORE_DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type StoreDetailCacheEntry = {
   fetchedAt: number;
-  detail: TerritoryStoreDetailResponse;
+  updateVersion?: number;
+  detail: AccountDetailResponse;
 };
 
 type HistoryEntry = {
@@ -89,13 +98,15 @@ function toDialablePhone(value: string | null | undefined) {
 }
 
 function readCachedStoreDetail(storeId: string) {
+  const updateVersion = getAccountUpdateVersion(storeId);
   const memoryValue = storeDetailMemoryCache.get(storeId);
-  if (memoryValue) {
+  if (memoryValue && (memoryValue.updateVersion ?? 0) >= updateVersion) {
     return {
       detail: memoryValue.detail,
       isFresh: Date.now() - memoryValue.fetchedAt < STORE_DETAIL_CACHE_TTL_MS,
     };
   }
+  if (memoryValue) storeDetailMemoryCache.delete(storeId);
 
   if (typeof window === 'undefined') {
     return null;
@@ -107,7 +118,7 @@ function readCachedStoreDetail(storeId: string) {
       return null;
     }
 
-    const parsed = JSON.parse(raw) as StoreDetailCacheEntry | TerritoryStoreDetailResponse;
+    const parsed = JSON.parse(raw) as StoreDetailCacheEntry | AccountDetailResponse;
     const entry: StoreDetailCacheEntry =
       'detail' in parsed
         ? parsed
@@ -116,7 +127,8 @@ function readCachedStoreDetail(storeId: string) {
             fetchedAt: 0,
           };
 
-    if (entry.detail?.store?.id !== storeId) {
+    if (entry.detail?.store?.id !== storeId || (entry.updateVersion ?? 0) < updateVersion) {
+      window.sessionStorage.removeItem(`${STORE_DETAIL_CACHE_PREFIX}${storeId}`);
       return null;
     }
 
@@ -130,10 +142,11 @@ function readCachedStoreDetail(storeId: string) {
   }
 }
 
-function writeCachedStoreDetail(detail: TerritoryStoreDetailResponse) {
+function writeCachedStoreDetail(detail: AccountDetailResponse) {
   const entry = {
     detail,
     fetchedAt: Date.now(),
+    updateVersion: getAccountUpdateVersion(detail.store.id),
   };
   storeDetailMemoryCache.set(detail.store.id, entry);
 
@@ -149,19 +162,23 @@ function writeCachedStoreDetail(detail: TerritoryStoreDetailResponse) {
 }
 
 interface AccountDetailSheetProps {
+  includeAccountEmail?: boolean;
   store: TerritoryStorePin | null;
   onClose: () => void;
   onAddToRoute: (storeId: string) => void;
   routeSelected: boolean;
   onCenterStore?: (store: TerritoryStorePin) => void;
   accountFreshness?: RuntimeFreshness | null;
+  presentation?: 'overlay' | 'docked';
 }
 
-export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterStore, accountFreshness }: AccountDetailSheetProps) {
+export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected, onCenterStore, accountFreshness, includeAccountEmail = false, presentation = 'overlay' }: AccountDetailSheetProps) {
   const appAccess = useAppAccess();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<DetailTab>('detail');
-  const [detail, setDetail] = useState<TerritoryStoreDetailResponse | null>(null);
+  const [proposalProductId, setProposalProductId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<AccountDetailResponse | null>(null);
+  const [detailRevision, setDetailRevision] = useState(0);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkInModalOpen, setCheckInModalOpen] = useState(false);
@@ -172,20 +189,13 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   const [checkInContact, setCheckInContact] = useState<TerritoryStoreContact | null>(null);
   const [streetViewLoadError, setStreetViewLoadError] = useState(false);
 
-  useEffect(() => {
-    if (!store) {
-      setDetail(null);
-      setCheckInModalOpen(false);
-      setCheckInDraft('');
-      setCheckInFollowUpDateDraft('');
-      setCheckInFollowUpNeededDraft(null);
-      setCheckInFollowUpReasonDraft('');
-      setCheckInContact(null);
-      setStreetViewLoadError(false);
-      return;
-    }
+  const selectedStoreId = store?.id;
+  const selectedStoreIdRef = useRef(selectedStoreId);
+  selectedStoreIdRef.current = selectedStoreId;
 
+  useEffect(() => {
     setTab('detail');
+    setProposalProductId(null);
     setCheckInModalOpen(false);
     setCheckInDraft('');
     setCheckInFollowUpDateDraft('');
@@ -193,9 +203,33 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
     setCheckInFollowUpReasonDraft('');
     setCheckInContact(null);
     setStreetViewLoadError(false);
+  }, [selectedStoreId]);
+
+  useEffect(() => {
+    const handleAccountUpdated = (event: Event) => {
+      const storeId = (event as CustomEvent<{ storeId?: string }>).detail?.storeId;
+      if (!storeId) return;
+      storeDetailMemoryCache.delete(storeId);
+      try {
+        window.sessionStorage.removeItem(`${STORE_DETAIL_CACHE_PREFIX}${storeId}`);
+      } catch {
+        // The memory cache is still invalidated when session storage is unavailable.
+      }
+      if (storeId === selectedStoreId) setDetailRevision((revision) => revision + 1);
+    };
+    window.addEventListener('picc:account-updated', handleAccountUpdated);
+    return () => window.removeEventListener('picc:account-updated', handleAccountUpdated);
+  }, [selectedStoreId]);
+
+  useEffect(() => {
+    if (!store) {
+      setDetail(null);
+      setLoadingDetail(false);
+      return;
+    }
 
     const cachedDetail = readCachedStoreDetail(store.id);
-    setDetail(cachedDetail?.detail ?? null);
+    setDetail((previous) => cachedDetail?.detail ?? (previous?.store.id === store.id ? previous : null));
 
     if (cachedDetail?.isFresh) {
       setLoadingDetail(false);
@@ -215,7 +249,8 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           throw new Error(payload?.error ?? 'Failed to load account detail');
         }
 
-        const payload = (await response.json()) as TerritoryStoreDetailResponse;
+        const payload = (await response.json()) as AccountDetailResponse;
+        if (controller.signal.aborted) return;
         setDetail(payload);
         writeCachedStoreDetail(payload);
 
@@ -244,7 +279,21 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
     void loadDetail();
 
     return () => controller.abort();
-  }, [queryClient, store]);
+  }, [queryClient, store, detailRevision]);
+
+  useEffect(() => {
+    if (!store) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (checkInModalOpen) {
+        if (!checkingIn) setCheckInModalOpen(false);
+      } else {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [store, onClose, checkInModalOpen, checkingIn]);
 
   const historyEntries = useMemo<HistoryEntry[]>(() => {
     const entries: HistoryEntry[] = [];
@@ -279,38 +328,42 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   const activeStore = detail?.store ?? store;
   const contacts = detail?.contacts ?? [];
   const crm = detail?.crm;
-  const isPreferredPartner = Boolean(activeStore.isPreferredPartner);
-  const navigateUrl = `https://www.google.com/maps/dir/?api=1&destination=${activeStore.lat},${activeStore.lng}`;
+  const primaryEmailRestriction = contacts.find((contact) =>
+    Boolean(crm?.contactEmail) && contact.email.trim().toLowerCase() === crm?.contactEmail?.trim().toLowerCase() && getContactEmailDeliveryStatus(contact).blocked,
+  );
+  const hasCoordinates = activeStore.locationPrecision !== 'unavailable' && Number.isFinite(activeStore.lat) && Number.isFinite(activeStore.lng);
+  const addressValue = activeStore.locationAddress ?? activeStore.locationLabel ?? '';
+  const destination = hasCoordinates ? `${activeStore.lat},${activeStore.lng}` : addressValue;
+  const navigateUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
   const notionUrl = `https://www.notion.so/${activeStore.notionPageId.replace(/-/g, '')}`;
-  const addressValue = activeStore.locationAddress ?? activeStore.locationLabel ?? 'No address';
   const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${activeStore.lat},${activeStore.lng}`;
   const streetViewPreviewUrl = `https://maps.googleapis.com/maps/api/streetview?size=900x420&location=${activeStore.lat},${activeStore.lng}&fov=85&pitch=0`;
-  const latestVendorDay = detail?.vendorDays.recent[0] ?? null;
-  const followUpDateLabel = formatDateLabel(activeStore.followUpDate, 'No follow-up set');
-  const followUpReasonLabel = activeStore.followUpReason?.trim() || 'No follow-up reason logged';
-  const followUpNeededLabel =
-    typeof activeStore.followUpNeeded === 'boolean' ? (activeStore.followUpNeeded ? 'Yes' : 'No') : 'Not set';
-  const combinedLastTouchpoints = [
-    `Last Contacted: ${formatDateLabel(crm?.lastContacted ?? null, '—')}`,
-    `Last Check-in: ${formatDateTimeLabel(activeStore.lastCheckIn, 'No check-ins')}`,
-  ].join(' · ');
-  const lastVendorDayLabel = latestVendorDay
-    ? `${formatDateLabel(latestVendorDay.eventDate, '—')}${latestVendorDay.repName || latestVendorDay.ambassadorName ? ` · ${latestVendorDay.repName || latestVendorDay.ambassadorName}` : ''}`
-    : 'No vendor days logged';
-  const customerSinceLabel = crm?.customerSince ? formatDateLabel(crm.customerSince, crm.customerSince) : '—';
-  const contactLabel = crm?.contact || contacts.map((contact) => contact.name).join(', ') || '—';
-  const contactEmailLabel = crm?.contactEmail || crm?.primaryContactEmail || contacts[0]?.email || '—';
-  const contactPhoneLabel = crm?.contactPhone || crm?.primaryContactPhone || contacts[0]?.phone || '—';
+  const followUpDateLabel = formatDateLabel(activeStore.followUpDate, '');
+  const followUpReasonLabel = (activeStore.followUpReason?.trim() || '')
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1');
+  const hasActiveFollowUp = activeStore.followUpNeeded !== false && Boolean(activeStore.followUpDate || activeStore.followUpReason);
   const orderHistory = detail?.analytics.orders ?? detail?.analytics.recentOrders ?? [];
-  const orderCount = orderHistory.length;
-  const orderSourceLabel =
-    detail?.analytics.matchedBy === 'account'
-      ? 'Matched to CRM account'
-      : detail?.analytics.matchedBy === 'name'
-        ? 'Matched by store name'
-        : 'Matched by identifier';
-  const savingsYear = new Date().getFullYear();
-  const aiAccountId = detail?.analytics.matchedAccountId ?? activeStore.notionPageId;
+  const activeContacts = contacts.filter((contact) => contact.status !== 'INACTIVE');
+  const otherContacts = contacts.filter((contact) => contact.status === 'INACTIVE');
+  const overviewFields = [
+    ['Sales rep', crm?.rep || activeStore.repNames.join(', ')],
+    ['Account manager', crm?.accountManager],
+    ['Credit', crm?.piccCreditStatus],
+    ['Last contacted', crm?.lastContacted ? formatDateLabel(crm.lastContacted, '') : null],
+    ['Last check-in', activeStore.lastCheckIn ? formatDateTimeLabel(activeStore.lastCheckIn, '') : null],
+    ['Last sample', crm?.lastSampleOrderDate ? formatDateLabel(crm.lastSampleOrderDate, '') : null],
+    ['Last order', crm?.lastOrderDate ? formatDateLabel(crm.lastOrderDate, '') : null],
+    ['Last order amount', typeof crm?.lastOrderAmount === 'number' ? formatCurrency(crm.lastOrderAmount) : null],
+    ['Referral', crm?.referralSource],
+    ['Customer since', crm?.customerSince ? formatDateLabel(crm.customerSince, '') : null],
+    ['License', activeStore.licenseNumber],
+    ['Products', crm?.productTracking],
+    ['Displays', crm?.displayTracking],
+    ['Previous follow-up date', activeStore.followUpNeeded === false && activeStore.followUpDate ? formatDateLabel(activeStore.followUpDate, '') : null],
+    ['Previous follow-up', activeStore.followUpNeeded === false ? followUpReasonLabel : null],
+  ].filter((field): field is [string, string] => typeof field[1] === 'string' && Boolean(field[1].trim()));
+
   const persistedFollowUpDate = (activeStore.followUpDate ?? '').slice(0, 10);
   const persistedFollowUpNeeded = typeof activeStore.followUpNeeded === 'boolean' ? activeStore.followUpNeeded : null;
   const persistedFollowUpReason = (activeStore.followUpReason ?? '').trim();
@@ -332,8 +385,8 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
       throw new Error(payload?.error ?? 'Failed to refresh account detail');
     }
 
-    const payload = (await response.json()) as TerritoryStoreDetailResponse;
-    setDetail(payload);
+    const payload = (await response.json()) as AccountDetailResponse;
+    if (selectedStoreIdRef.current === storeId) setDetail(payload);
     writeCachedStoreDetail(payload);
     return payload;
   }
@@ -383,10 +436,15 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
 
     setCheckingIn(true);
     try {
-      const response = await fetch('/api/territory/check-in', {
-        method: 'POST',
+      const followUpOnly = !normalizedCheckInNote && checkInFollowUpChanged;
+      const response = await fetch(followUpOnly ? `/api/territory/stores/${activeStore.id}` : '/api/territory/check-in', {
+        method: followUpOnly ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(followUpOnly ? {
+          followUpDate: normalizedCheckInFollowUpDate || null,
+          followUpNeeded: checkInFollowUpNeededDraft,
+          followUpReason: normalizedCheckInFollowUpReason || null,
+        } : {
           store: {
             id: activeStore.id,
             name: activeStore.name,
@@ -425,8 +483,8 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
         await refreshDetailFromServer(activeStore.id);
       } catch {
         setDetail((previousDetail) => {
-          if (!previousDetail) return previousDetail;
-          const checkedInAt = typeof payload?.checkedInAt === 'string' ? payload.checkedInAt : previousDetail.store.lastCheckIn;
+          if (!previousDetail || previousDetail.store.id !== activeStore.id) return previousDetail;
+          const checkedInAt = !followUpOnly && typeof payload?.checkedInAt === 'string' ? payload.checkedInAt : null;
           const nextDetail = {
             ...previousDetail,
             store: {
@@ -463,9 +521,11 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
       }
 
       void queryClient.invalidateQueries({ queryKey: ['territory-mobile'] });
+      notifyAccountUpdated(activeStore.id);
 
       const contactLabelSuffix = checkInContact ? ` with ${checkInContact.name}` : '';
-      toast.success(`Check-in saved${contactLabelSuffix}`);
+      toast.success(normalizedCheckInNote ? `Note saved${contactLabelSuffix}` : 'Follow-up saved');
+      if (selectedStoreIdRef.current !== activeStore.id) return;
       setCheckInModalOpen(false);
       setCheckInContact(null);
       setCheckInDraft('');
@@ -482,332 +542,208 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
   function handleCenter() {
     if (onCenterStore) {
       onCenterStore(activeStore);
-      onClose();
+      if (presentation !== 'docked' || !window.matchMedia('(min-width: 1024px)').matches) onClose();
       return;
     }
     window.open(`https://www.google.com/maps/search/?api=1&query=${activeStore.lat},${activeStore.lng}`, '_blank', 'noopener,noreferrer');
   }
 
-  return (
-    <div className="fixed inset-0 z-[5000] bg-black/35">
-      <div className="mx-auto flex h-full max-w-[720px] flex-col bg-[#e6e6e9]">
-        <div className="bg-[#c93412] px-4 pb-2 pt-[max(8px,env(safe-area-inset-top))] text-white">
-          <div className="grid grid-cols-[48px_1fr_56px] items-center gap-2 py-1">
-            <button onClick={onClose} className="inline-flex h-10 w-10 items-center justify-start" aria-label="Close">
-              <X className="h-6 w-6" />
-            </button>
-            <h1 className="truncate text-center text-[18px] font-semibold leading-tight">Account Details</h1>
-            <button
-              type="button"
-              onClick={() => window.open(notionUrl, '_blank', 'noopener,noreferrer')}
-              className="text-right text-[16px] font-medium"
-              aria-label="Open account in Notion"
-            >
-              Open
-            </button>
-          </div>
-          <SegmentedControl
-            value={tab}
-            onChange={(value) => setTab(value as DetailTab)}
-            options={[
-              { value: 'detail', label: 'Detail' },
-              { value: 'location', label: 'Location' },
-              { value: 'ai', label: 'AI' },
-              { value: 'orders', label: 'Orders' },
-              { value: 'history', label: 'History' },
-              { value: 'email', label: 'Email' },
-            ]}
-            className="bg-[#d4d4d8] [&_button]:py-1.5 [&_button]:text-[13px]"
-          />
+  const renderContact = (contact: StoreDetailContact) => {
+    const emailStatus = getContactEmailDeliveryStatus(contact);
+    return (
+    <div key={contact.id} className="py-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <Link href={`/contacts/${encodeURIComponent(contact.id)}`} className="text-sm font-semibold text-[#252724] underline-offset-4 hover:underline">
+            {contact.name}
+          </Link>
+          {contact.roleTitle ? <p className="mt-0.5 text-xs text-[#74766f]">{contact.roleTitle}</p> : null}
+          {contact.status === 'INACTIVE' ? <p className="mt-0.5 text-xs text-[#74766f]">Archived</p> : null}
         </div>
+        {appAccess.canEdit ? (
+          <button type="button" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-[#74766f] hover:bg-[#f2f2ef] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#c93412]" aria-label={`Add note for ${contact.name}`} onClick={() => openCheckInModal(contact)} disabled={checkingIn}>
+            <PencilLine className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+      {contact.email ? <p className="mt-1 break-all text-xs text-[#74766f]">{contact.email}</p> : null}
+      {contact.phone ? <p className="mt-0.5 text-xs tabular-nums text-[#74766f]">{contact.phone}</p> : null}
+      {emailStatus.labels.length ? <p className={cn('mt-1 text-[10px] leading-relaxed', emailStatus.blocked ? 'text-[#a7321b]' : 'text-[#8a8d84]')}>Email: {emailStatus.labels.join(' · ')}</p> : null}
+      <ContactQuickActions contact={emailStatus.blocked ? { ...contact, email: '' } : contact} accounts={[{ id: activeStore.notionPageId, name: activeStore.name }]} className="mt-2 [&_a]:h-8 [&_a]:min-w-8 [&_a]:rounded-md [&_a]:px-2 [&_a_span]:inline [&_a_span]:text-xs" />
+    </div>
+  );
+  };
 
-        <div className="flex-1 overflow-y-auto pb-[calc(132px+var(--picc-bottom-nav-clearance))]">
-          <div className="border-y border-[#c6c7cb] bg-[#e6e6e9] px-5 py-4">
-            <h2 className="text-[24px] font-semibold leading-tight text-[#111217]">{activeStore.name}</h2>
-            <div className="mt-3 flex flex-wrap gap-3">
-              <StatusField
-                label="Account Status"
-                value={crm?.accountStatus || activeStore.status}
-                colorName={crm?.accountStatusColorName}
-                fallbackHex={activeStore.statusColor}
-              />
-              <StatusField
-                label="PPP Status"
-                value={crm?.pppStatus || activeStore.pppStatus || '—'}
-                colorName={crm?.pppStatusColorName ?? activeStore.pppStatusColorName}
-              />
-              <StatusField
-                label="Headset Connection"
-                value={crm?.headsetConnectionStatus || activeStore.headsetConnectionStatus || '—'}
-                colorName={crm?.headsetConnectionStatusColorName ?? activeStore.headsetConnectionStatusColorName}
-              />
-              {isPreferredPartner ? (
-                <div className="space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8c9098]">Program</p>
-                  <span className="inline-flex rounded-full border border-black bg-black px-3 py-1 text-[12px] font-semibold text-white">
-                    Preferred Partner
-                  </span>
-                </div>
-              ) : null}
-            </div>
-            <p className="mt-2 text-[15px] text-[#7c8089]">{addressValue}</p>
-            <AccountDetailConfidence
-              store={activeStore}
-              detail={detail}
-              loadingDetail={loadingDetail}
-              accountFreshness={accountFreshness}
-            />
+  return (
+    <div className={cn(
+      'fixed inset-x-0 top-0 bottom-[var(--picc-bottom-nav-clearance)] z-[5000] bg-[#20231f]/35',
+      presentation === 'docked' && 'lg:absolute lg:inset-x-auto lg:bottom-0 lg:left-0 lg:top-14 lg:z-[2000] lg:w-[396px] lg:bg-transparent',
+    )}>
+      <section className="mx-auto flex h-full min-h-0 w-full max-w-[720px] flex-col border-r border-[#e5e6e1] bg-[#fdfdfb] text-[#252724]" aria-label={`Store brief: ${activeStore.name}`}>
+        <header className="shrink-0 border-b border-[#e5e6e1] px-5 pt-[max(12px,env(safe-area-inset-top))]">
+          <div className="mb-4 flex items-center justify-between">
+            <button type="button" onClick={onClose} className="inline-flex min-h-8 items-center gap-1.5 text-xs font-medium text-[#74766f] hover:text-[#252724] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#c93412]">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to accounts
+            </button>
+            <a href={notionUrl} target="_blank" rel="noreferrer" className="grid h-8 w-8 place-items-center rounded-md text-[#74766f] hover:bg-[#f2f2ef]" aria-label="Open account in Notion">
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
           </div>
+          <h2 className="text-[21px] font-semibold leading-tight">{activeStore.name}</h2>
+          {addressValue ? <button type="button" onClick={() => setTab('location')} className="mt-1.5 block text-left text-xs leading-relaxed text-[#74766f] hover:text-[#252724]">{addressValue}</button> : null}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <NotionOptionChip label={crm?.accountStatus || activeStore.status} colorName={crm?.accountStatusColorName ?? activeStore.statusColorName} fallbackHex={activeStore.statusColor} />
+            {(crm?.pppStatus || activeStore.pppStatus) ? <NotionOptionChip label={crm?.pppStatus || activeStore.pppStatus || ''} colorName={crm?.pppStatusColorName ?? activeStore.pppStatusColorName} /> : null}
+          </div>
+          <div className="-mx-1 mt-4 flex items-center gap-0.5 overflow-x-auto" role="tablist" aria-label="Account sections">
+            {([
+              ['detail', 'Overview'],
+              ['orders', 'Orders'],
+              ['history', 'Activity'],
+              ['location', 'Location'],
+              ['proposal', 'Proposal'],
+            ] as const).map(([value, label]) => (
+              <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)} className={cn('min-h-10 shrink-0 border-b-2 px-2 text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#c93412]', tab === value ? 'border-[#c93412] text-[#252724]' : 'border-transparent text-[#74766f] hover:text-[#252724]')}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </header>
 
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {loadingDetail && !detail ? <div className="space-y-3 p-5" aria-label="Loading account"><div className="h-4 w-24 animate-pulse rounded bg-[#eeefea]" /><div className="h-10 animate-pulse rounded bg-[#eeefea]" /><div className="h-4 w-2/3 animate-pulse rounded bg-[#eeefea]" /></div> : null}
           {tab === 'detail' ? (
             <>
-              <FollowUpSection>
-                <SectionRow label="Date" value={followUpDateLabel} strong />
-                <SectionRow label="Needed" value={followUpNeededLabel} />
-                <SectionRow label="Reason" value={followUpReasonLabel} />
-              </FollowUpSection>
-
-              <DetailSection title="Account Overview">
-                <SectionRow label="Sales Rep" value={crm?.rep || activeStore.repNames.join(', ') || '—'} strong />
-                <SectionRow label="Account Manager" value={crm?.accountManager || '—'} />
-                <SectionRow label="Credit Status" value={crm?.piccCreditStatus || '—'} />
-                <SectionRow label="Last Contacted / Last Check-in" value={combinedLastTouchpoints} />
-                <SectionRow label="Last Sample Order Date" value={formatDateLabel(crm?.lastSampleOrderDate ?? null, '—')} />
-                <SectionRow label="Last Order Date" value={formatDateLabel(crm?.lastOrderDate ?? null, '—')} />
-                <SectionRow label="Last Order Amount" value={formatCurrency(crm?.lastOrderAmount)} />
-                <SectionRow label="Referral Source" value={crm?.referralSource || '—'} />
-                <SectionRow label="Contact" value={contactLabel} />
-                <SectionRow label="Contact Email" value={contactEmailLabel} />
-                <SectionRow label="Contact Phone" value={contactPhoneLabel} />
-                <SectionRow label="Last Vendor Day" value={lastVendorDayLabel} />
-                <SectionRow label="Penny Bundle Promo Status" value={crm?.pennyBundlePromoStatus || crm?.pppStatus || '—'} />
-                <SectionRow label="PPP Status" value={crm?.pppStatus || '—'} />
-                <SectionRow label="Headset Connection Status" value={crm?.headsetConnectionStatus || '—'} />
-                <SectionRow label="License #" value={activeStore.licenseNumber ?? '—'} />
-                <SectionRow label="Address" value={addressValue} />
-                <SectionRow label="Display Tracking" value={crm?.displayTracking || '—'} />
-                <SectionRow label="Product Tracking" value={crm?.productTracking || '—'} />
-                <SectionRow label="Customer Since" value={customerSinceLabel} />
-              </DetailSection>
-
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
+              <div className="border-b border-[#e5e6e1] px-5 py-4">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">Associated Contacts</p>
-                  {appAccess.canEdit ? (
-                    <ContactCreateFlow
-                      accounts={[{
-                        notionPageId: activeStore.notionPageId,
-                        name: activeStore.name,
-                        city: activeStore.city ?? null,
-                        state: activeStore.state ?? null,
-                      }]}
-                    />
-                  ) : null}
+                  <h3 className="text-xs font-semibold text-[#74766f]">Next action</h3>
+                  {appAccess.canEdit ? <button type="button" onClick={() => {
+                    openCheckInModal();
+                    if (!hasActiveFollowUp) {
+                      setCheckInFollowUpDateDraft('');
+                      setCheckInFollowUpNeededDraft(true);
+                      setCheckInFollowUpReasonDraft('');
+                    }
+                  }} className="text-xs font-medium text-[#a7321b] hover:underline">{hasActiveFollowUp ? 'Edit' : 'Set follow-up'}</button> : null}
                 </div>
-                {contacts.length === 0 ? <p className="mt-1 text-[16px] text-[#1d1f23]">No contacts linked.</p> : null}
-                {contacts.map((contact) => (
-                  <div key={contact.id} className="mt-2 rounded-lg border border-[#d5dae3] bg-white px-3 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <Link href={`/contacts/${encodeURIComponent(contact.id)}`} className="text-[16px] font-semibold text-[#1f4e9f] underline-offset-2 hover:underline">
-                          {contact.name}
-                        </Link>
-                        <p className="text-[13px] text-[#697281]">{contact.roleTitle || 'Role not set'}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <ContactQuickActions
-                          contact={contact}
-                          accounts={[{ id: activeStore.notionPageId, name: activeStore.name }]}
-                        />
-                        {appAccess.canEdit ? (
-                          <button
-                            type="button"
-                            className="rounded-md border border-[#b4b7bf] px-2.5 py-1 text-[13px] font-medium text-[#27303f] hover:bg-[#e8eaf0]"
-                            onClick={() => openCheckInModal(contact)}
-                            disabled={checkingIn}
-                          >
-                            Check-in
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="mt-2 grid gap-1 text-[14px] text-[#5e6169] sm:grid-cols-2">
-                      <p className="break-all">{contact.email || 'No email'}</p>
-                      <p>{contact.phone || 'No phone'}</p>
-                    </div>
-                  </div>
-                ))}
+                {hasActiveFollowUp && followUpReasonLabel ? <p className="mt-2 text-sm font-medium leading-relaxed">{followUpReasonLabel}</p> : null}
+                {hasActiveFollowUp && followUpDateLabel ? <p className={cn('mt-1.5 text-xs tabular-nums', activeStore.followUpDate && activeStore.followUpDate.slice(0, 10) < new Date().toLocaleDateString('en-CA') ? 'text-[#a7321b]' : 'text-[#74766f]')}>{followUpDateLabel}</p> : null}
               </div>
 
-              <div className="border-b border-[#c6c7cb] px-5 py-5">
-                <Button
-                  type="button"
-                  className="h-12 w-full text-[16px]"
-                  onClick={() => window.open(notionUrl, '_blank', 'noopener,noreferrer')}
-                >
-                  Open Full Record in Notion
-                </Button>
+              {detail?.salesContext ? <StoreSalesContextPanel context={detail.salesContext} onSelectProduct={(productId) => { setProposalProductId(productId); setTab('proposal'); }} /> : null}
+
+              <div className="border-b border-[#e5e6e1] px-5 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-semibold text-[#74766f]">Contacts{contacts.length ? <span className="ml-1.5 tabular-nums text-[#a0a199]">{contacts.length}</span> : null}</h3>
+                  {appAccess.canEdit ? <ContactCreateFlow triggerVariant="compact" accounts={[{ notionPageId: activeStore.notionPageId, name: activeStore.name, city: activeStore.city ?? null, state: activeStore.state ?? null }]} /> : null}
+                </div>
+                <div className="divide-y divide-[#eeefea]">{activeContacts.slice(0, 2).map(renderContact)}</div>
+                {!activeContacts.length && crm?.contact ? (
+                  <div className="py-3">
+                    <p className="text-sm font-medium">{crm.contact}</p>
+                    {crm.contactEmail ? primaryEmailRestriction ? <><p className="mt-1 break-all text-xs text-[#74766f]">{crm.contactEmail}</p><p className="mt-1 text-[10px] text-[#a7321b]">Email: {getContactEmailDeliveryStatus(primaryEmailRestriction).labels.join(' · ')}</p></> : <a href={`mailto:${crm.contactEmail}`} className="mt-1 block break-all text-xs text-[#74766f] hover:underline">{crm.contactEmail}</a> : null}
+                    {crm.contactPhone ? <a href={`tel:${toDialablePhone(crm.contactPhone)}`} className="mt-1 block text-xs text-[#74766f] hover:underline">{crm.contactPhone}</a> : null}
+                  </div>
+                ) : null}
+                {activeContacts.length > 2 || otherContacts.length ? (
+                  <details className="group border-t border-[#eeefea]">
+                    <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between text-xs font-medium text-[#74766f] [&::-webkit-details-marker]:hidden">
+                      {activeContacts.length > 2 ? `All ${contacts.length} contacts` : `${otherContacts.length} archived ${otherContacts.length === 1 ? 'contact' : 'contacts'}`}
+                      <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="divide-y divide-[#eeefea]">{activeContacts.slice(2).map(renderContact)}{otherContacts.map(renderContact)}</div>
+                  </details>
+                ) : null}
               </div>
+
+              {(crm?.lastOrderDate || typeof crm?.lastOrderAmount === 'number') ? (
+                <div className="border-b border-[#e5e6e1] px-5 py-4">
+                  <div className="flex items-center justify-between"><h3 className="text-xs font-semibold text-[#74766f]">Latest order</h3><button type="button" onClick={() => setTab('orders')} className="text-xs font-medium text-[#a7321b] hover:underline">View orders</button></div>
+                  <div className="mt-2 flex items-baseline justify-between gap-3">
+                    {typeof crm?.lastOrderAmount === 'number' ? <span className="text-xl font-semibold tabular-nums">{formatCurrency(crm.lastOrderAmount)}</span> : null}
+                    {crm?.lastOrderDate ? <span className="text-xs tabular-nums text-[#74766f]">{formatDateLabel(crm.lastOrderDate, '')}</span> : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {activeStore.notes?.trim() ? <DetailSection title="Notes"><p className="whitespace-pre-wrap text-sm leading-relaxed">{activeStore.notes.trim()}</p></DetailSection> : null}
+              {overviewFields.length ? (
+                <details className="group border-b border-[#e5e6e1] px-5 py-1">
+                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between text-xs font-semibold text-[#74766f] [&::-webkit-details-marker]:hidden">Account details<ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" /></summary>
+                  <div className="space-y-3 pb-4">{overviewFields.map(([label, value]) => <SectionRow key={label} label={label} value={value} />)}</div>
+                </details>
+              ) : null}
             </>
           ) : null}
 
           {tab === 'location' ? (
-            <>
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">Address</p>
-                    <p className="mt-1 text-[16px] font-medium text-[#1d1f23]">{addressValue}</p>
+            <div className="space-y-4 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm leading-relaxed">{addressValue || 'Address unavailable'}</p>
+                {addressValue ? <button type="button" onClick={copyAddress} aria-label="Copy address" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[#e5e6e1] hover:bg-[#f2f2ef]"><Copy className="h-3.5 w-3.5" /></button> : null}
+              </div>
+              {hasCoordinates ? (
+                <>
+                  <div className="overflow-hidden rounded-lg border border-[#e5e6e1] bg-[#f2f2ef]">
+                    {streetViewLoadError ? <a href={streetViewUrl} target="_blank" rel="noreferrer" className="flex min-h-24 items-center justify-center gap-2 px-4 text-sm text-[#74766f]"><ExternalLink className="h-4 w-4" />Open Street View</a> : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={streetViewPreviewUrl} alt={`Street view near ${activeStore.name}`} className="h-44 w-full object-cover" loading="lazy" onError={() => setStreetViewLoadError(true)} />
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={copyAddress}
-                    className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg border border-[#9ab9ea] px-3 text-[15px] font-medium text-[#2872d1]"
-                  >
-                    <Copy className="h-4 w-4" />
-                    Copy
-                  </button>
-                </div>
-              </div>
-
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
-                <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">Street View</p>
-                <div className="mt-2 overflow-hidden rounded-xl border border-[#c4c6cc] bg-[#dfe2e8]">
-                  {streetViewLoadError ? (
-                    <button
-                      type="button"
-                      className="grid h-[210px] w-full place-items-center bg-[#eef0f5] px-5 text-center text-[15px] text-[#4d515b]"
-                      onClick={() => window.open(streetViewUrl, '_blank', 'noopener,noreferrer')}
-                    >
-                      Street View preview unavailable. Tap to open Street View.
-                    </button>
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={streetViewPreviewUrl}
-                      alt={`Street view near ${activeStore.name}`}
-                      className="h-[210px] w-full object-cover"
-                      loading="lazy"
-                      onError={() => setStreetViewLoadError(true)}
-                    />
-                  )}
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Button type="button" className="h-11" onClick={() => window.open(streetViewUrl, '_blank', 'noopener,noreferrer')}>
-                    Open Street View
-                  </Button>
-                  <Button type="button" variant="secondary" className="h-11" onClick={callStore}>
-                    <PhoneCall className="mr-1 h-4 w-4" />
-                    Call Store
-                  </Button>
-                </div>
-              </div>
-
-              <DetailRow label="Coordinates" value={`${activeStore.lat.toFixed(5)}, ${activeStore.lng.toFixed(5)}`} />
-              <DetailRow label="City / State" value={activeStore.city && activeStore.state ? `${activeStore.city}, ${activeStore.state}` : 'Not available'} />
-              <DetailRow label="Location Source" value={activeStore.locationSource} />
-              <DetailRow label="Location Precision" value={activeStore.locationPrecision} />
-            </>
+                  <a href={streetViewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-[#74766f] hover:underline">Street View<ExternalLink className="h-3 w-3" /></a>
+                  <SectionRow label="Coordinates" value={`${activeStore.lat.toFixed(5)}, ${activeStore.lng.toFixed(5)}`} />
+                </>
+              ) : null}
+              {activeStore.phoneNumber ? <Button type="button" variant="secondary" className="h-10 w-full" onClick={callStore}><PhoneCall className="mr-2 h-4 w-4" />Call store</Button> : null}
+            </div>
           ) : null}
 
-          {tab === 'ai' ? (
-            <div className="border-b border-[#c6c7cb] px-5 py-5">
-              <div className="space-y-4">
-                <PreferredPartnerProposalPanel accountId={aiAccountId} />
-                <PreferredPartnerSavingsPanel accountId={aiAccountId} year={savingsYear} />
-                <MockOrderProposalPanel accountId={aiAccountId} />
+          {tab === 'proposal' ? <div className="p-5"><DistruProposalPanel accountId={activeStore.notionPageId} focusProductId={proposalProductId} /></div> : null}
+
+          {tab === 'orders' ? (
+            <div className="px-5 py-4">
+              {orderHistory.length > 0 ? <p className="mb-1 text-xs font-semibold text-[#74766f]">{orderHistory.length} orders</p> : <p className="text-sm text-[#74766f]">{loadingDetail ? 'Loading orders…' : 'No linked orders available'}</p>}
+              <div className="divide-y divide-[#e5e6e1]">
+                {orderHistory.map((order) => (
+                  <div key={order.id} className="py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0"><p className="text-sm font-semibold">{order.orderNumber}<span className="ml-2 text-[10px] font-normal text-[#74766f]">{'source' in order ? String(order.source) : 'Nabis'}</span></p><p className="mt-1 text-xs text-[#74766f]">{formatDateLabel(order.createdDate, '')}{order.createdDate ? ' · ' : ''}{order.status}</p></div>
+                      <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(order.total)}</p>
+                    </div>
+                    {order.deliveryDate || order.salesRep ? <p className="mt-1 text-xs text-[#74766f]">{order.deliveryDate ? `Delivery ${formatDateLabel(order.deliveryDate, '')}` : ''}{order.deliveryDate && order.salesRep ? ' · ' : ''}{order.salesRep || ''}</p> : null}
+                  </div>
+                ))}
               </div>
             </div>
           ) : null}
 
-          {tab === 'orders' ? (
-            <>
-              <DetailRow label="Linked Orders" value={String(orderCount)} strong />
-              <DetailRow label="Match Method" value={orderSourceLabel} />
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
-                <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">Nabis Orders</p>
-                {orderHistory.length === 0 ? <p className="mt-1 text-[16px] text-[#1d1f23]">No linked Nabis orders found.</p> : null}
-                {orderHistory.map((order) => (
-                  <div key={order.id} className="mt-2 rounded-lg border border-[#c7c8cd] bg-[#f3f3f6] px-3 py-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-[15px] font-semibold text-[#1d1f23]">Order {order.orderNumber}</p>
-                        <p className="text-[13px] text-[#5e6169]">
-                          {formatDateLabel(order.createdDate, 'No order date')} · {order.status}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-[15px] font-semibold text-[#1d1f23]">{formatCurrency(order.total)}</p>
-                    </div>
-                    <p className="mt-1 text-[13px] text-[#5e6169]">
-                      {order.deliveryDate ? `Delivery ${formatDateLabel(order.deliveryDate, '—')}` : 'Delivery date unavailable'}
-                      {order.salesRep ? ` · ${order.salesRep}` : ''}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          {tab === 'email' ? <div className="p-4"><GmailConversations kind="account" recordId={activeStore.notionPageId} /></div> : null}
-
           {tab === 'history' ? (
-            <>
-              <DetailRow label="Last edited" value={formatDateTimeLabel(activeStore.lastEditedTime, 'No edit history')} />
-              <DetailRow label="Last check-in" value={formatCheckInLabel(activeStore.lastCheckIn)} strong />
-              <DetailRow label="Route status" value={routeSelected ? 'In current route' : 'Not in current route'} />
-              <DetailRow label="Sync source" value="Notion live cache" />
-
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
-                <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">Current Follow-up</p>
-                <div className="mt-2 rounded-lg border border-[#c7c8cd] bg-[#f3f3f6] px-3 py-3">
-                  <p className="text-[14px] font-medium text-[#1d1f23]">Date: {followUpDateLabel}</p>
-                  <p className="mt-1 text-[14px] text-[#5e6169]">Needed: {followUpNeededLabel}</p>
-                  <p className="mt-1 text-[14px] text-[#5e6169]">Reason: {followUpReasonLabel}</p>
-                </div>
-                {activeStore.notes?.trim() ? (
-                  <div className="mt-3 rounded-lg border border-[#c7c8cd] bg-[#f3f3f6] px-3 py-3">
-                    <p className="text-[14px] font-medium text-[#1d1f23]">Legacy Note Snapshot</p>
-                    <p className="mt-1 whitespace-pre-wrap text-[14px] text-[#5e6169]">{activeStore.notes.trim()}</p>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
-                <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">Activity Timeline</p>
-                {historyEntries.length === 0 ? <p className="mt-1 text-[16px] text-[#1d1f23]">No history yet.</p> : null}
+            <div className="px-5 py-4">
+              {includeAccountEmail ? <GmailConversations kind="account" recordId={activeStore.notionPageId} /> : null}
+              {activeStore.lastCheckIn ? <div className="mb-4"><SectionRow label="Last check-in" value={formatCheckInLabel(activeStore.lastCheckIn)} /></div> : null}
+              {historyEntries.length === 0 ? <p className="text-sm text-[#74766f]">{loadingDetail ? 'Loading activity…' : detail?.history.availability === 'available' ? 'No recorded activity' : 'History unavailable'}</p> : null}
+              <div className="divide-y divide-[#e5e6e1]">
                 {historyEntries.slice(0, 40).map((entry) => (
-                  <div key={entry.id} className="mt-2 rounded-lg border border-[#c7c8cd] bg-[#f3f3f6] px-3 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[15px] font-semibold text-[#1d1f23]">{entry.title}</p>
-                        <p className="text-[13px] text-[#5e6169]">{formatDateTimeLabel(entry.occurredAt, 'Unknown time')}</p>
-                      </div>
-                      <span className="shrink-0 rounded-full border border-[#d6d8de] bg-white px-2 py-0.5 text-[12px] font-medium text-[#4f5561]">
-                        {entry.badge}
-                      </span>
-                    </div>
-                    {entry.description ? <p className="mt-2 whitespace-pre-wrap text-[14px] text-[#5e6169]">{entry.description}</p> : null}
+                  <div key={entry.id} className="py-3">
+                    <div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold">{entry.title}</p><span className="text-xs text-[#74766f]">{entry.badge}</span></div>
+                    <p className="mt-1 text-xs tabular-nums text-[#74766f]">{formatDateTimeLabel(entry.occurredAt, '')}</p>
+                    {entry.description ? <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{entry.description}</p> : null}
                   </div>
                 ))}
               </div>
-
-              <div className="border-b border-[#c6c7cb] px-5 py-4">
-                <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">Vendor Days</p>
-                <p className="mt-1 text-[16px] text-[#1d1f23]">
-                  Total: {detail?.vendorDays.total ?? 0} · Upcoming: {detail?.vendorDays.upcomingCount ?? 0}
-                </p>
-              </div>
-            </>
+              {activeStore.notes?.trim() ? <div className="mt-4 border-t border-[#e5e6e1] pt-4"><p className="text-xs font-semibold text-[#74766f]">Account notes</p><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{activeStore.notes.trim()}</p></div> : null}
+            </div>
           ) : null}
+          <AccountDetailConfidence store={activeStore} detail={detail} loadingDetail={loadingDetail} accountFreshness={accountFreshness} />
         </div>
 
         {checkInModalOpen && appAccess.canEdit ? (
           <div className="fixed inset-0 z-[5200] bg-black/40" onClick={() => !checkingIn && setCheckInModalOpen(false)}>
-            <div className="absolute inset-x-0 bottom-[var(--picc-bottom-nav-clearance)] mx-auto max-h-[calc(100dvh-var(--picc-bottom-nav-clearance)-24px)] max-w-[720px] overflow-y-auto rounded-t-2xl bg-[#f8f8fb] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4" onClick={(event) => event.stopPropagation()}>
+            <div className="absolute inset-x-3 bottom-[calc(var(--picc-bottom-nav-clearance)+12px)] mx-auto max-h-[calc(100dvh-var(--picc-bottom-nav-clearance)-24px)] max-w-[480px] overflow-y-auto rounded-xl bg-[#fdfdfb] lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4" onClick={(event) => event.stopPropagation()}>
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-[20px] font-semibold text-[#1d1f23]">Create Check-in</h3>
+                  <h3 className="text-lg font-semibold text-[#252724]">Update account</h3>
                   <p className="text-[14px] text-[#5f6269]">
                     {checkInContact ? `${checkInContact.name} · ${activeStore.name}` : activeStore.name}
                   </p>
@@ -831,7 +767,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                   placeholder={
                     checkInContact
                       ? `Capture notes from your check-in with ${checkInContact.name}...`
-                      : 'Capture notes from this check-in...'
+                      : 'Add a note (optional)'
                   }
                 />
               </div>
@@ -886,171 +822,57 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                   onClick={handleCheckInSubmit}
                   disabled={checkingIn || !canSubmitCheckIn}
                 >
-                  {checkingIn ? 'Saving...' : 'Save Check-in'}
+                  {checkingIn ? 'Saving...' : 'Save'}
                 </Button>
               </div>
             </div>
           </div>
         ) : null}
 
-        <div className="absolute inset-x-0 bottom-[var(--picc-bottom-nav-clearance)] z-[5100]">
-          <div className={cn('mx-auto grid max-w-[720px] border-t border-[#c6c7cb] bg-[#f2f2f5] py-2 pb-[max(8px,env(safe-area-inset-bottom))] text-[#5a96e8]', appAccess.canEdit ? 'grid-cols-4' : 'grid-cols-3')}>
-            <ActionButton label={routeSelected ? 'remove' : 'add to...'} onClick={() => onAddToRoute(activeStore.id)} icon={<MapPinned className="h-5 w-5" />} />
-            {appAccess.canEdit ? <ActionButton label={checkingIn ? 'saving...' : 'check-in'} onClick={() => openCheckInModal()} icon={<PencilLine className="h-5 w-5" />} disabled={checkingIn} /> : null}
-            <ActionButton label="center" onClick={handleCenter} icon={<MapPinned className="h-5 w-5" />} />
-            <a href={navigateUrl} target="_blank" rel="noreferrer" className={cn(actionBaseClass, 'text-center')}>
-              <Navigation className="h-5 w-5" />
-              <span>navigate</span>
-            </a>
-          </div>
-        </div>
-      </div>
+        <footer className={cn('grid shrink-0 gap-1 border-t border-[#e5e6e1] bg-[#fdfdfb] px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))]', appAccess.canEdit ? 'grid-cols-4' : 'grid-cols-3')}>
+          <ActionButton label={routeSelected ? 'In route' : 'Add to route'} onClick={() => onAddToRoute(activeStore.id)} icon={<MapPinned className="h-4 w-4" />} selected={routeSelected} />
+          {appAccess.canEdit ? <ActionButton label="Add note" onClick={() => openCheckInModal()} icon={<PencilLine className="h-4 w-4" />} disabled={checkingIn} /> : null}
+          <ActionButton label="Locate" onClick={handleCenter} icon={<MapPinned className="h-4 w-4" />} disabled={!hasCoordinates} />
+          {destination ? <a href={navigateUrl} target="_blank" rel="noreferrer" className={actionBaseClass}><Navigation className="h-4 w-4" /><span>Navigate</span></a> : <ActionButton label="Navigate" onClick={() => undefined} icon={<Navigation className="h-4 w-4" />} disabled />}
+        </footer>
+      </section>
     </div>
   );
 }
 
-function DetailRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div className="border-b border-[#c6c7cb] px-5 py-4">
-      <p className="text-[13px] uppercase tracking-wide text-[#8c9098]">{label}</p>
-      <p className={cn('mt-1 text-[16px] text-[#1d1f23]', strong ? 'font-semibold' : '')}>{value || ' '}</p>
-    </div>
-  );
-}
-
-function sourceLabel(source: RuntimeFreshness['source'] | undefined) {
-  if (source === 'postgres-read-model') return 'Postgres read model';
-  if (source === 'notion-territory') return 'Notion territory cache';
-  if (source === 'notion-contacts') return 'Notion contacts cache';
-  return 'Account detail API';
-}
-
-function confidenceTone(state: RuntimeFreshness['state'] | undefined, loadingDetail: boolean, hasDetail: boolean) {
-  if (loadingDetail) {
-    return {
-      Icon: Clock3,
-      label: hasDetail ? 'Updating detail' : 'Loading detail',
-      className: 'border-[#d8c999] bg-[#fff8e6] text-[#5e4514]',
-    };
-  }
-
-  if (state === 'error') {
-    return {
-      Icon: AlertCircle,
-      label: 'Sync issue',
-      className: 'border-[#e4b1a7] bg-[#fff0ed] text-[#8f2410]',
-    };
-  }
-
-  if (state === 'stale' || state === 'syncing' || state === 'unknown') {
-    return {
-      Icon: Clock3,
-      label: state === 'syncing' ? 'Syncing' : state === 'stale' ? 'Stale' : 'Unverified',
-      className: 'border-[#d2d7e0] bg-[#f7f9fc] text-[#3a4352]',
-    };
-  }
-
-  return {
-    Icon: CheckCircle2,
-    label: 'Detail ready',
-    className: 'border-[#b8dec9] bg-[#effaf3] text-[#1f5538]',
-  };
-}
-
-function AccountDetailConfidence({
-  store,
-  detail,
-  loadingDetail,
-  accountFreshness,
-}: {
+function AccountDetailConfidence({ store, detail, loadingDetail, accountFreshness }: {
   store: TerritoryStorePin;
   detail: TerritoryStoreDetailResponse | null;
   loadingDetail: boolean;
   accountFreshness?: RuntimeFreshness | null;
 }) {
-  const tone = confidenceTone(accountFreshness?.state, loadingDetail, Boolean(detail));
-  const contactCount = detail?.contacts.length;
-  const contactLabel = contactCount === undefined
-    ? 'Contacts loading'
-    : contactCount === 0
-      ? 'No linked contacts'
-      : `${contactCount} linked ${contactCount === 1 ? 'contact' : 'contacts'}`;
-  const source = sourceLabel(accountFreshness?.source);
-  const syncedAt = accountFreshness?.syncedAt ? formatDateTimeLabel(accountFreshness.syncedAt, 'No sync recorded') : 'No sync recorded';
-  const editedAt = formatDateTimeLabel(store.lastEditedTime, 'No edit time');
-  const Icon = tone.Icon;
-
+  const status = loadingDetail ? 'Updating' : accountFreshness?.state === 'error' ? 'Sync issue' : accountFreshness?.state === 'stale' ? 'Stale data' : null;
   return (
-    <details className={cn('group mt-4 rounded-xl border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]', tone.className)}>
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#276fd3] focus-visible:ring-inset [&::-webkit-details-marker]:hidden">
-        <Icon className="h-4 w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">Last sync: {syncedAt}</span>
-        <span className="hidden rounded-full border border-current/15 bg-white/55 px-2 py-0.5 text-[11px] font-semibold sm:inline">{tone.label}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-open:rotate-180" />
+    <details className="group mx-5 border-t border-[#eeefea] py-2 text-[11px] text-[#8a8d84]">
+      <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+        <span>{status || 'Record details'}</span>
+        <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
       </summary>
-      <div className="border-t border-current/15 px-3 py-2 text-[12px] leading-5 opacity-85">
-        <p>{contactLabel}</p>
-        <p>Source: {source}. Last edit: {editedAt}.</p>
-        {accountFreshness?.error ? <p className="mt-1 font-medium opacity-90">{accountFreshness.error}</p> : null}
+      <div className="space-y-1 pb-2">
+        <p>Updated {formatDateTimeLabel(store.lastEditedTime, 'date unavailable')}</p>
+        {accountFreshness?.syncedAt ? <p>Synced {formatDateTimeLabel(accountFreshness.syncedAt, '')}</p> : null}
+        {detail ? <p>{detail.contacts.length} linked contacts</p> : null}
+        {accountFreshness?.error ? <p className="text-[#a7321b]">{accountFreshness.error}</p> : null}
       </div>
     </details>
   );
 }
 
 function DetailSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="border-b border-[#c6c7cb] px-5 py-4">
-      <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">{title}</p>
-      <div className="mt-3 space-y-3">{children}</div>
-    </div>
-  );
+  return <section className="border-b border-[#e5e6e1] px-5 py-4"><h3 className="text-xs font-semibold text-[#74766f]">{title}</h3><div className="mt-2">{children}</div></section>;
 }
 
-function FollowUpSection({ children }: { children: ReactNode }) {
-  return (
-    <div className="border-b border-[#c6c7cb] px-5 py-4">
-      <div className="rounded-2xl border border-[#d7a79a] bg-[#fff4f0] px-4 py-4 shadow-[inset_0_0_0_1px_rgba(205,56,20,0.04)]">
-        <div className="space-y-3">{children}</div>
-      </div>
-    </div>
-  );
+function SectionRow({ label, value }: { label: string; value: string }) {
+  return <dl className="grid grid-cols-[110px_1fr] gap-3 text-xs leading-relaxed"><dt className="text-[#74766f]">{label}</dt><dd className="min-w-0 break-words text-[#252724]">{value}</dd></dl>;
 }
 
-function SectionRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div>
-      <p className="text-[13px] uppercase tracking-wide text-[#8c9098]">{label}</p>
-      <p className={cn('mt-1 text-[16px] leading-snug text-[#1d1f23]', strong ? 'font-semibold' : '')}>{value || '—'}</p>
-    </div>
-  );
-}
+const actionBaseClass = 'flex min-h-11 flex-col items-center justify-center gap-1.5 rounded-md px-1 text-center text-[10px] font-medium text-[#63675d] transition-colors hover:bg-[#f2f2ef] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#c93412]';
 
-function StatusField({
-  label,
-  value,
-  colorName,
-  fallbackHex,
-}: {
-  label: string;
-  value: string;
-  colorName?: string | null;
-  fallbackHex?: string | null;
-}) {
-  return (
-    <div className="space-y-1">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8c9098]">{label}</p>
-      <NotionOptionChip label={value} colorName={colorName} fallbackHex={fallbackHex} />
-    </div>
-  );
-}
-
-const actionBaseClass = 'flex flex-col items-center justify-center gap-1 text-[12px] font-medium';
-
-function ActionButton({ label, icon, onClick, disabled = false }: { label: string; icon: ReactNode; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button type="button" onClick={onClick} className={cn(actionBaseClass, disabled ? 'opacity-60' : '')} disabled={disabled}>
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
+function ActionButton({ label, icon, onClick, disabled = false, selected = false }: { label: string; icon: ReactNode; onClick: () => void; disabled?: boolean; selected?: boolean }) {
+  return <button type="button" onClick={onClick} className={cn(actionBaseClass, selected && 'bg-[#edf3ed] text-[#346a3c]', disabled && 'opacity-40')} disabled={disabled}>{icon}<span>{label}</span></button>;
 }

@@ -57,10 +57,8 @@ export function StoreFilterSheet({
   statuses,
   reps,
   pppStatuses,
-  headsetConnectionStatuses,
   preferredPartners,
   referralSources,
-  vendorDayStatuses,
   locationAvailabilityOptions,
   selectedStatuses,
   selectedReps,
@@ -78,11 +76,9 @@ export function StoreFilterSheet({
   onToggleStatus,
   onToggleRep,
   onTogglePppStatus,
-  onToggleHeadsetConnectionStatus,
   onSetPreferredPartnerFilter,
   onToggleReferralSource,
   onSetIncludeNoReferralSource,
-  onToggleVendorDayStatus,
   onSetLocationAvailability,
   onSetHasSampleOrderDate,
   onSetNoLastSampleDeliveryDate,
@@ -119,9 +115,9 @@ export function StoreFilterSheet({
 
   return (
     <div className="fixed inset-0 z-[5400] bg-black/35">
-      <div className="mx-auto flex h-full max-w-[var(--app-shell-max)] flex-col bg-[#e6e6e9]">
-        <div className="flex items-center justify-between border-b border-[#c8c9cf] bg-[#c93412] px-4 py-3 text-white">
-          <h2 className="text-[17px] font-semibold">Filters & Visualization</h2>
+      <div className="ml-auto flex h-full w-full max-w-[480px] flex-col bg-[#fbfcf9] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#c8c9cf] bg-[#fbfcf9] px-5 py-4 text-[#30392a]">
+          <h2 className="text-[17px] font-semibold">Filters</h2>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-black/10" aria-label="Close filters">
             <X className="h-5 w-5" />
           </button>
@@ -160,9 +156,7 @@ export function StoreFilterSheet({
                 </div>
               </div>
             ) : null}
-            <p className="mt-2 text-[12px] text-[#72757d]">
-              Filter results are still applied. Follow Up Date mode shows days until follow-up inside pins; Preferred Partner pins keep the bold outline but hide the P.
-            </p>
+
           </section>
 
           <FilterSection
@@ -183,12 +177,7 @@ export function StoreFilterSheet({
             selected={selectedPppStatuses}
             onToggle={onTogglePppStatus}
           />
-          <FilterSection
-            title="Headset Connection"
-            options={headsetConnectionStatuses.map((entry) => ({ label: entry.value, value: entry.value, count: entry.count }))}
-            selected={selectedHeadsetConnectionStatuses}
-            onToggle={onToggleHeadsetConnectionStatus}
-          />
+
           <section className="mb-4">
             <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Preferred Partner</h3>
             <div className="flex flex-wrap gap-2">
@@ -236,14 +225,9 @@ export function StoreFilterSheet({
                 No referral source
               </button>
             </div>
-            <p className="mt-2 text-[12px] text-[#72757d]">Use this to show stores where the CRM referral source is blank.</p>
+
           </section>
-          <FilterSection
-            title="Vendor Day Status"
-            options={vendorDayStatuses.map((entry) => ({ label: entry.value, value: entry.value, count: entry.count }))}
-            selected={selectedVendorDayStatuses}
-            onToggle={onToggleVendorDayStatus}
-          />
+
 
           <section className="mb-4">
             <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#7b7e87]">Location Availability</h3>
@@ -319,7 +303,7 @@ export function StoreFilterSheet({
                 );
               })}
             </div>
-            <p className="mt-2 text-[12px] text-[#72757d]">Sampled non-customers excludes Customer and Customer Overdue.</p>
+
           </section>
 
           <section className="mb-4">
@@ -353,7 +337,7 @@ export function StoreFilterSheet({
           </section>
         </div>
 
-        <div className="border-t border-[#c8c9cf] bg-[#f2f2f5] px-4 pb-[calc(96px+env(safe-area-inset-bottom))] pt-3 md:pb-[calc(108px+env(safe-area-inset-bottom))]">
+        <div className="border-t border-[#c8c9cf] bg-[#f7f8f4] px-4 pb-[calc(76px+env(safe-area-inset-bottom))] pt-3 lg:pb-4">
           <div className="grid grid-cols-3 gap-2">
             <button
               type="button"

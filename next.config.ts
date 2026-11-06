@@ -22,6 +22,7 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
 
   images: {
     remotePatterns: [

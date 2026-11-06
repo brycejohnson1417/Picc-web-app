@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
-import { BarChart3, House, LogOut, MapPinned, Route, Settings, UserRound } from 'lucide-react';
+import { BarChart3, CalendarDays, ContactRound, House, LogOut, MapPinned, Route, Search, Settings, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AppAccessProvider, type AppAccessState } from '@/components/auth/app-access-provider';
 import { InteractionTracker } from '@/components/layout/interaction-tracker';
@@ -30,7 +30,7 @@ const defaultTabs: NavTab[] = [
   { href: '/territory', label: 'Map', icon: MapPinned },
   { href: '/accounts', label: 'Accounts', icon: UserRound },
   { href: '/route', label: 'Route', icon: Route },
-  { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
+  { href: '/reports', label: 'Reports', icon: BarChart3 },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -71,77 +71,87 @@ export function AppShell({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  const desktopTabs: NavTab[] = [
+    { href: '/territory', label: 'Map', icon: MapPinned },
+    { href: '/accounts', label: 'Accounts', icon: UserRound },
+    { href: '/contacts', label: 'Contacts', icon: ContactRound },
+    { href: '/route', label: 'Routes', icon: Route },
+    { href: '/calendar', label: 'Follow-ups', icon: CalendarDays },
+    { href: '/home', label: 'Today', icon: House },
+    { href: '/reports', label: 'Reports', icon: BarChart3 },
+  ];
+
+  const openSearch = () => { setCommandMounted(true); setCommandOpen(true); };
+
   return (
     <AppAccessProvider value={access}>
       <InteractionTracker />
-      <div className="h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_34%),linear-gradient(180deg,#d7d8dc_0%,#c9cacf_100%)] px-0 md:px-3 md:py-3 lg:px-5">
-        {commandMounted ? <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} /> : null}
-        <div className="mx-auto flex h-full max-w-[var(--app-shell-max)] flex-col overflow-hidden bg-[#e6e6e9] shadow-[0_0_0_1px_rgba(0,0,0,0.12)] md:rounded-[28px] md:shadow-[0_20px_60px_rgba(31,35,43,0.18)]">
-          <header className="z-[3000] flex items-center justify-between gap-3 border-b border-[#d7dde7] bg-[linear-gradient(180deg,rgba(249,251,255,0.96)_0%,rgba(241,245,250,0.94)_100%)] px-3 py-2 text-[#1f232b] backdrop-blur-xl">
-            <div className="flex items-center gap-2">
-              <div className="rounded-2xl border border-[#d7dde7] bg-white px-3 py-2 shadow-[0_8px_24px_rgba(31,35,43,0.06)]">
-                <p className="text-[13px] font-semibold tracking-[0.01em] text-[#18212d]">PiCC New York</p>
+      {commandMounted ? <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} /> : null}
+      <div className="picc-app-shell flex h-[100dvh] overflow-hidden bg-[#f7f7f5]">
+        <aside className="picc-desktop-nav hidden w-[152px] shrink-0 flex-col bg-[#242624] text-[#d8dcd7] lg:flex">
+          <Link href="/territory" className="flex h-[72px] items-center gap-2 px-5" aria-label="PICC New York map">
+            <span className="text-[28px] font-black tracking-[-1.4px] text-[#fafbf8]">PICC<span className="text-[#ef5636]">.</span></span>
+            <span className="mt-1 text-[10px] font-medium leading-[1.2] text-[#a4aca2]">NEW<br />YORK</span>
+          </Link>
+          <button type="button" onClick={openSearch} className="mx-3 mb-5 flex h-9 items-center gap-2 rounded-md border border-[#454943] px-2.5 text-[12px] text-[#b9c0b6] hover:border-[#737b6f] hover:text-white">
+            <Search className="h-3.5 w-3.5" /> Search <kbd className="ml-auto text-[10px]">⌘K</kbd>
+          </button>
+          <nav aria-label="Primary navigation" className="space-y-1 px-2.5">
+            {desktopTabs.map((item) => {
+              const active = item.href === '/accounts' ? pathname === '/accounts' : isActive(pathname, item.href);
+              const Icon = item.icon;
+              return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined}
+                className={cn('flex h-[42px] items-center gap-3 rounded-md px-3 text-[13px] font-medium transition-colors', active ? 'bg-[#454a42] text-[#fafbf8]' : 'hover:bg-[#343833] hover:text-[#fafbf8]')}>
+                <Icon className="h-[18px] w-[18px]" strokeWidth={1.7} />
+                {item.label}
+                {item.href === '/route' && routePlan.selectedCount > 0 ? <span className="ml-auto rounded bg-[#626d5b] px-1.5 py-0.5 text-[10px] tabular-nums text-white">{routePlan.selectedCount}</span> : null}
+              </Link>;
+            })}
+          </nav>
+          <div className="mt-auto border-t border-[#3e433c] px-3 py-4">
+            <Link href="/settings" className="flex h-10 items-center gap-3 rounded-md px-2 text-[13px] hover:bg-[#343833]"><Settings className="h-[18px] w-[18px]" />Settings</Link>
+            <details className="relative mt-3">
+              <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-2 py-1 hover:bg-[#343833]">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#e9ede4] text-[10px] font-bold text-[#394333]">P</span>
+                <span className="min-w-0 text-[11px]"><span className="block text-[#e0e5db]">PICC workspace</span><span className="text-[#9aa493]">{access.isGuestViewer ? 'Read only' : access.testModeEnabled ? 'Test Mode' : roleLabel(access.role)}</span></span>
+              </summary>
+              <div className="absolute bottom-[calc(100%+8px)] left-0 z-[6000] w-56 rounded-lg border border-[#dfe4d7] bg-[#fbfcf9] p-2 text-[#30392a] shadow-xl">
+                <div className="px-3 py-2"><RoleSwitcher activeRole={access.role} availableRoles={access.availableRoles} /></div>
+                <SignOutAction />
               </div>
-              <RoleSwitcher activeRole={access.role} availableRoles={access.availableRoles} />
-              {access.testModeEnabled ? (
-                <span className="rounded-full border border-[#d9a696] bg-[#fff2ec] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#b33a1d]">
-                  Test Mode
-                </span>
-              ) : null}
-              {access.isGuestViewer ? (
-                <span className="rounded-full border border-[#b7c3dc] bg-[#edf3ff] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#3559a9]">
-                  Read Only
-                </span>
-              ) : null}
-            </div>
+            </details>
+          </div>
+        </aside>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="z-[3000] flex h-12 shrink-0 items-center justify-between border-b border-[#e2e5df] bg-[#fbfcf9] px-4 lg:hidden">
+            <Link href="/territory" className="text-[18px] font-black tracking-tight text-[#292d27]">PICC<span className="text-[#c93412]">.</span></Link>
             <div className="flex items-center gap-2">
+              <RoleSwitcher activeRole={access.role} availableRoles={access.availableRoles} />
+              {access.testModeEnabled ? <span className="text-[10px] font-semibold text-[#b33a1d]">Test Mode</span> : null}
+              {access.isGuestViewer ? <span className="text-[10px] font-semibold text-[#3559a9]">Read only</span> : null}
               <details className="relative">
-                <summary className="flex list-none cursor-pointer items-center gap-1 rounded-md border border-[#c5c8ce] bg-white px-2 py-1 text-[11px] font-semibold text-[#2f3640]">
-                  Profile
-                </summary>
-                <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[170px] rounded-xl border border-[#d3d9e2] bg-white p-1.5 shadow-[0_18px_45px_rgba(31,35,43,0.18)]">
-                  <div className="rounded-lg px-3 py-2 text-[11px] font-medium text-[#5c6674]">
-                    Current Role
-                    <div className="mt-1 text-sm font-semibold text-[#18212d]">{roleLabel(access.role)}</div>
-                  </div>
-                  <Link href="/home" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
-                    <House className="h-4 w-4" />
-                    Home
-                  </Link>
-                  <Link href="/settings" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#243040] hover:bg-[#f3f6fb]">
-                    <Settings className="h-4 w-4" />
-                    Settings
-                  </Link>
+                <summary className="cursor-pointer list-none rounded-md px-2 py-1 text-[12px] text-[#596251]">Profile</summary>
+                <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[180px] rounded-lg border bg-white p-2 shadow-lg">
+                  <Link href="/settings" className="flex items-center gap-2 rounded-md px-3 py-2 text-sm"><Settings className="h-4 w-4" />Settings</Link>
                   <SignOutAction />
                 </div>
               </details>
             </div>
           </header>
-          <main className={cn('min-h-0 flex-1', isTerritoryRoute ? 'overflow-hidden pb-0' : 'overflow-y-auto pb-[var(--picc-bottom-nav-height)]')}>
+          <main className={cn('relative min-h-0 flex-1', isTerritoryRoute ? 'overflow-hidden pb-0' : 'overflow-y-auto pb-[var(--picc-bottom-nav-height)]')}>
             {children}
           </main>
         </div>
-
-        <nav className="fixed bottom-0 left-0 right-0 z-[4000] text-white" aria-label="Primary navigation">
-          <div className="mx-auto grid h-[var(--picc-bottom-nav-height)] max-w-[var(--app-shell-max)] grid-cols-5 border-t border-[#243041] bg-[linear-gradient(180deg,#1f2631_0%,#171d26_100%)] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1.5 md:mb-3 md:rounded-[22px] md:border md:shadow-[0_16px_40px_rgba(0,0,0,0.24)]">
+        <nav className="fixed inset-x-0 bottom-0 z-[4000] border-t border-[#3b4238] bg-[#242624] text-white lg:hidden" aria-label="Mobile navigation">
+          <div className="grid h-[var(--picc-bottom-nav-height)] grid-cols-5 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-1">
             {tabs.map((item) => {
-              const active = isActive(pathname, item.matchHref ?? item.href);
+              const active = isActive(pathname, item.href);
               const Icon = item.icon;
-              const showBadge = item.href === '/route' && routePlan.selectedCount > 0;
-
-              return (
-                <Link key={item.href} href={item.href} className="relative flex min-h-[40px] flex-col items-center justify-center gap-1" aria-current={active ? 'page' : undefined}>
-                  <div className={cn('relative rounded-full p-1.5', active ? 'text-white' : 'text-[#7f8691]')}>
-                    <Icon className="h-6 w-6" strokeWidth={2.2} />
-                    {showBadge ? (
-                      <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#ff4d4f] px-1 text-[11px] font-bold leading-none text-white">
-                        {Math.min(99, routePlan.selectedCount)}
-                      </span>
-                    ) : null}
-                  </div>
-                  <span className={cn('text-[11px] font-medium', active ? 'text-white' : 'text-[#8f949e]')}>{item.label}</span>
-                </Link>
-              );
+              return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className="relative flex min-h-11 flex-col items-center justify-center gap-1">
+                <span className={cn('relative rounded-md px-3 py-1', active ? 'bg-[#454a42] text-white' : 'text-[#a0a99a]')}><Icon className="h-5 w-5" />
+                  {item.href === '/route' && routePlan.selectedCount > 0 ? <span className="absolute -right-0.5 -top-1 rounded-full bg-[#d74121] px-1.5 text-[10px] text-white">{routePlan.selectedCount}</span> : null}
+                </span><span className={cn('text-[10px]',active ? 'text-white' : 'text-[#a0a99a]')}>{item.label}</span>
+              </Link>;
             })}
           </div>
         </nav>

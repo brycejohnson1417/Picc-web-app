@@ -36,7 +36,7 @@ const emptyDraft = {
   roles: [] as ContactRole[],
 };
 
-export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { accounts: ContactAccountOption[]; triggerVariant?: 'default' | 'icon' }) {
+export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { accounts: ContactAccountOption[]; triggerVariant?: 'default' | 'icon' | 'compact' }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedOpen = searchParams.get('new') === '1';
@@ -183,14 +183,17 @@ export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { ac
           aria-label={triggerVariant === 'icon' ? 'Add contact' : undefined}
           title={triggerVariant === 'icon' ? 'Add contact' : undefined}
           className={cn(
-            'inline-flex items-center justify-center bg-[#c93412] font-semibold text-white transition hover:bg-[#ad2d0e] active:scale-[0.98]',
+            'inline-flex items-center justify-center font-semibold transition active:scale-[0.98]',
+            triggerVariant === 'compact'
+              ? 'h-8 gap-1 rounded-md border border-[#dedfd8] bg-[#fdfdfb] px-2 text-[11px] text-[#4e5849] hover:bg-[#f2f3ee]'
+              : 'bg-[#c93412] text-white hover:bg-[#ad2d0e]',
             triggerVariant === 'icon'
               ? 'h-10 w-10 rounded-lg shadow'
-              : 'min-h-11 gap-2 whitespace-nowrap rounded-xl px-4 text-sm shadow-[0_8px_18px_rgba(201,52,18,0.22)]',
+              : triggerVariant === 'default' ? 'min-h-11 gap-2 whitespace-nowrap rounded-xl px-4 text-sm shadow-[0_8px_18px_rgba(201,52,18,0.22)]' : '',
           )}
         >
           <Plus className="h-4 w-4" />
-          {triggerVariant === 'default' ? 'Add contact' : null}
+          {triggerVariant !== 'icon' ? 'Add contact' : null}
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>

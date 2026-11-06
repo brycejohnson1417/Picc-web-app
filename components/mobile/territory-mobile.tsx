@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Filter, Layers3, List, Loader2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -81,7 +81,11 @@ export function TerritoryMobile() {
   const appAccess = useAppAccess();
   const queryClient = useQueryClient();
   const routePlan = useRoutePlan();
+  const [hydrated, setHydrated] = useState(false);
+  const [deepLinkedStore, setDeepLinkedStore] = useState<TerritoryStorePin | null>(null);
   const [view, setView] = useState<'map' | 'list'>('map');
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [listArea, setListArea] = useState<'all' | 'visible'>('all');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [mapSearch, setMapSearch] = useState('');
@@ -132,6 +136,45 @@ export function TerritoryMobile() {
   const [lassoDrawingMode, setLassoDrawingMode] = useState(false);
   const [lassoSelectedIds, setLassoSelectedIds] = useState<string[]>([]);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const pendingDeepLinkRef = useRef<AbortController | null>(null);
+
+  function cancelPendingDeepLink() {
+    pendingDeepLinkRef.current?.abort();
+    pendingDeepLinkRef.current = null;
+  }
+
+  function selectFocusedStore(storeId: string | null) {
+    cancelPendingDeepLink();
+    setFocusedId(storeId);
+  }
+
+  function selectDetailStore(storeId: string | null) {
+    cancelPendingDeepLink();
+    setDetailStoreId(storeId);
+  }
+
+  useEffect(() => { setHydrated(true); }, []);
+
+  useEffect(() => {
+    const storeId = new URLSearchParams(window.location.search).get('focus') ?? new URLSearchParams(window.location.search).get('store');
+    if (!storeId) return;
+    const controller = new AbortController();
+    pendingDeepLinkRef.current = controller;
+    void fetch(`/api/territory/stores/${encodeURIComponent(storeId)}`, { signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error('Account could not be opened.'); return response.json(); })
+      .then(payload => {
+        if (controller.signal.aborted) return;
+        if (!payload.store?.id) throw new Error('Account could not be opened.');
+        pendingDeepLinkRef.current = null;
+        setDeepLinkedStore(payload.store);
+        setFocusedId(payload.store.id);
+        setDetailStoreId(payload.store.id);
+        setDrawerOpen(true);
+        setFocusRequestToken(value => value + 1);
+      })
+      .catch(error => { if (!controller.signal.aborted) toast.error(error.message); });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     setShowSubwayLines(loadSubwayLinesPreference(getBrowserLocalStorage(window)));
@@ -164,10 +207,12 @@ export function TerritoryMobile() {
       if (saved.view === 'map' || saved.view === 'list') {
         setView(saved.view);
       }
-      if (typeof saved.focusedId === 'string') {
+      const params = new URLSearchParams(window.location.search);
+      const hasExplicitAccount = params.has('focus') || params.has('store');
+      if (!hasExplicitAccount && typeof saved.focusedId === 'string') {
         setFocusedId(saved.focusedId);
       }
-      if (typeof saved.detailStoreId === 'string') {
+      if (!hasExplicitAccount && typeof saved.detailStoreId === 'string') {
         setDetailStoreId(saved.detailStoreId);
       }
       if (typeof saved.mapSearch === 'string') {
@@ -226,11 +271,7 @@ export function TerritoryMobile() {
         ? parsed.selectedPppStatuses.filter((value): value is string => typeof value === 'string')
         : [],
     );
-    setSelectedHeadsetConnectionStatuses(
-      Array.isArray(parsed.selectedHeadsetConnectionStatuses)
-        ? parsed.selectedHeadsetConnectionStatuses.filter((value): value is string => typeof value === 'string')
-        : [],
-    );
+    setSelectedHeadsetConnectionStatuses([]);
     setPreferredPartnerFilter(
       parsed.preferredPartnerFilter === 'preferred' || parsed.preferredPartnerFilter === 'not_preferred'
         ? parsed.preferredPartnerFilter
@@ -242,11 +283,7 @@ export function TerritoryMobile() {
         : [],
     );
     setIncludeNoReferralSource(Boolean(parsed.includeNoReferralSource));
-    setSelectedVendorDayStatuses(
-      Array.isArray(parsed.selectedVendorDayStatuses)
-        ? parsed.selectedVendorDayStatuses.filter((value): value is string => typeof value === 'string')
-        : [],
-    );
+    setSelectedVendorDayStatuses([]);
     setLocationAvailability(parsed.locationAvailability === 'available' || parsed.locationAvailability === 'unavailable' ? parsed.locationAvailability : 'all');
     setHasSampleOrderDate(Boolean(parsed.hasSampleOrderDate));
     setNoLastSampleDeliveryDate(Boolean(parsed.noLastSampleDeliveryDate));
@@ -268,6 +305,22 @@ export function TerritoryMobile() {
     toast.success('Loaded saved territory filters');
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('rep') && !params.has('ppp') && !params.has('status')) return;
+    // A report cohort is an explicit scope. Keep the user's saved view intact,
+    // but don't silently intersect this cohort with unrelated persisted filters.
+    setSelectedReps(params.getAll('rep').filter(Boolean));
+    setSelectedPppStatuses(params.getAll('ppp').filter(Boolean));
+    setSelectedStatuses(params.getAll('status').filter(Boolean));
+    setSelectedHeadsetConnectionStatuses([]); setSelectedVendorDayStatuses([]);
+    setPreferredPartnerFilter('all'); setSelectedReferralSources([]); setIncludeNoReferralSource(false);
+    setLocationAvailability('all'); setHasSampleOrderDate(false); setNoLastSampleDeliveryDate(false);
+    setSampleAccountTypeFilter('all'); setLastOrderDateFilter('all'); setShowRouteOnly(false);
+    setLassoSelection(null); setLassoDrawingMode(false); setLassoSelectedIds([]);
+    setSearch(''); setDebouncedSearch(''); setView('map'); setSavedFiltersAt(null);
+  }, []);
+
   const { storesQuery, boundariesQuery, markersQuery } = useTerritoryData({
     search: debouncedSearch,
     selectedStatuses,
@@ -286,25 +339,37 @@ export function TerritoryMobile() {
     refreshNonce,
   });
 
+  function refreshTerritoryData() {
+    setRefreshNonce((value) => value + 1);
+    void Promise.all([boundariesQuery.refetch(), markersQuery.refetch()]).then((results) => {
+      if (results.some((result) => result.isError)) toast.error('Some map layers could not be refreshed. Try again.');
+    });
+  }
+
   const stores = useMemo(() => storesQuery.data?.stores ?? [], [storesQuery.data?.stores]);
   const boundaries = useMemo(() => boundariesQuery.data?.boundaries ?? [], [boundariesQuery.data?.boundaries]);
   const markers = useMemo(() => markersQuery.data?.markers ?? [], [markersQuery.data?.markers]);
-  const storeById = useMemo(() => new Map(stores.map((store) => [store.id, store])), [stores]);
+  const storeById = useMemo(() => {
+    const index = new Map(stores.map((store) => [store.id, store]));
+    if (deepLinkedStore && !index.has(deepLinkedStore.id)) index.set(deepLinkedStore.id, deepLinkedStore);
+    return index;
+  }, [stores, deepLinkedStore]);
   const mapStores = useMemo(() => {
     let nextStores = stores;
     if (showRouteOnly) {
       nextStores = nextStores.filter((store) => routePlan.selectedStopIds.includes(store.id));
     }
+    if (deepLinkedStore && focusedId === deepLinkedStore.id && !nextStores.some(store => store.id === deepLinkedStore.id)) return [...nextStores, deepLinkedStore];
     return nextStores;
-  }, [showRouteOnly, stores, routePlan.selectedStopIds]);
+  }, [showRouteOnly, stores, routePlan.selectedStopIds, deepLinkedStore, focusedId]);
 
   const listStores = useMemo(() => {
-    if (lassoSelectedIds.length === 0) {
-      return mapStores;
-    }
+    const matchingStores = deepLinkedStore && !stores.some(store => store.id === deepLinkedStore.id)
+      ? mapStores.filter(store => store.id !== deepLinkedStore.id) : mapStores;
+    if (lassoSelectedIds.length === 0) return matchingStores;
     const selectedSet = new Set(lassoSelectedIds);
-    return mapStores.filter((store) => selectedSet.has(store.id));
-  }, [lassoSelectedIds, mapStores]);
+    return matchingStores.filter((store) => selectedSet.has(store.id));
+  }, [lassoSelectedIds, mapStores, deepLinkedStore, stores]);
 
   useEffect(() => {
     if (showRouteOnly && routePlan.selectedStopIds.length === 0) {
@@ -392,13 +457,15 @@ export function TerritoryMobile() {
   const grouped = useMemo(() => {
     const groups = new Map<string, TerritoryStorePin[]>();
     for (const store of listStores) {
+      if (listArea === 'visible' && mapViewportBounds && (store.lat < mapViewportBounds.south || store.lat > mapViewportBounds.north || store.lng < mapViewportBounds.west || store.lng > mapViewportBounds.east)) continue;
       const letter = firstLetter(store.name);
       const list = groups.get(letter) ?? [];
       list.push(store);
+      list.sort((a, b) => a.name.localeCompare(b.name));
       groups.set(letter, list);
     }
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [listStores]);
+  }, [listStores, listArea, mapViewportBounds]);
 
   const repLegend = useMemo(() => {
     if (pinColorMode !== 'rep') {
@@ -436,7 +503,7 @@ export function TerritoryMobile() {
 
   const selectedOnCard = focusedStore ? routePlan.selectedStopIds.includes(focusedStore.id) : false;
   const isInitialLoading = storesQuery.isLoading && !storesQuery.data;
-  const isRefreshing = storesQuery.isFetching && Boolean(storesQuery.data);
+  const isRefreshing = Boolean(storesQuery.data) && (storesQuery.isFetching || boundariesQuery.isFetching || markersQuery.isFetching);
   const activeFiltersCount = countActiveTerritoryFilters({
     selectedStatuses,
     selectedReps,
@@ -598,7 +665,7 @@ export function TerritoryMobile() {
     setShowRouteOnly((value) => !value);
 
     if (!showRouteOnly && orderedStops[0]) {
-      setFocusedId(orderedStops[0].id);
+      selectFocusedStore(orderedStops[0].id);
       setFocusRequestToken((current) => current + 1);
     }
   }
@@ -649,10 +716,10 @@ export function TerritoryMobile() {
     );
   }
 
-  if (isInitialLoading) {
+  if (!hydrated || isInitialLoading) {
     return (
       <div className="relative flex min-h-[calc(100dvh-76px)] flex-col overflow-hidden bg-[#e6e6e9]">
-        <MobileHeader className="z-[2600]">
+        <MobileHeader className="z-[2600] lg:hidden">
           <div className="mx-auto flex w-full max-w-[560px]">
             <div className="h-9 w-full rounded-full bg-white/95 picc-shimmer" />
           </div>
@@ -690,9 +757,7 @@ export function TerritoryMobile() {
           <button
             type="button"
             className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[#ce6f5c] bg-white px-3 py-2 text-[14px] font-medium text-[#8f2410]"
-            onClick={() => {
-              void storesQuery.refetch();
-            }}
+            onClick={refreshTerritoryData}
           >
             <RefreshCw className="h-4 w-4" />
             Retry
@@ -704,7 +769,7 @@ export function TerritoryMobile() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-[#e6e6e9] picc-shell-enter">
-      <MobileHeader className="z-[2600]">
+      <MobileHeader className="z-[2600] lg:hidden">
         <div className="mx-auto flex w-full max-w-[560px] items-center gap-2">
           <SegmentedControl
             value={view}
@@ -718,8 +783,22 @@ export function TerritoryMobile() {
         </div>
       </MobileHeader>
 
+      <div className="hidden h-14 shrink-0 items-center justify-between border-b border-[#dfe4d7] bg-[#fbfcf9] px-4 lg:flex">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => { setDrawerOpen(value => !value); selectDetailStore(null); }} aria-label={drawerOpen ? 'Collapse account panel' : 'Show account panel'} aria-pressed={drawerOpen} className="grid h-8 w-8 place-items-center rounded-md border border-[#dce1d5] text-[#5e6c53] hover:bg-[#edf1e6]">{drawerOpen ? <ChevronLeft className="h-4 w-4" /> : <List className="h-4 w-4" />}</button>
+          <span className="text-[14px] font-semibold text-[#30392a]">New York</span>
+          <span className="text-[11px] tabular-nums text-[#7a856f]">{stores.length.toLocaleString()} accounts</span>
+          {deepLinkedStore && focusedId === deepLinkedStore.id && !stores.some(store => store.id === deepLinkedStore.id) ? <span className="text-[10px] text-[#a65b27]">Selected outside filters</span> : null}
+          {isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7a856f]" /> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-[11px] text-[#6d7960]">Color by<select aria-label="Color map pins by" value={pinColorMode} onChange={e=>setPinColorMode(e.target.value as PinColorMode)} className="h-8 rounded-md border border-[#dce1d5] px-2 text-[11px]"><option value="status">Account status</option><option value="rep">Sales rep</option><option value="follow-up-date">Follow-up date</option></select></label>
+          <button type="button" onClick={()=>setShowBoundarySheet(true)} className="flex h-8 items-center gap-1.5 rounded-md border border-[#dce1d5] px-2.5 text-[11px] text-[#526348]"><Layers3 className="h-3.5 w-3.5" />Layers</button>
+          <button type="button" onClick={openFiltersSheet} className="flex h-8 items-center gap-1.5 rounded-md border border-[#dce1d5] px-2.5 text-[11px] text-[#526348]"><Filter className="h-3.5 w-3.5" />Filters{activeFiltersCount ? ` (${activeFiltersCount})` : ''}</button>
+        </div>
+      </div>
       {isRefreshing ? (
-        <div className="pointer-events-none absolute left-3 right-3 top-[66px] z-[2500] px-1">
+        <div className="pointer-events-none absolute left-3 right-3 top-[66px] z-[2500] px-1 lg:hidden">
           <div className="mx-auto flex max-w-[560px] items-center justify-center rounded-full border border-[#d4d7de] bg-white/95 px-3 py-1 text-[11px] font-medium text-[#5f6672] shadow">
             <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             Syncing territory data
@@ -727,9 +806,22 @@ export function TerritoryMobile() {
         </div>
       ) : null}
 
-      {view === 'map' ? (
-        <div className="relative min-h-0 flex-1">
-          <MapRenderBoundary onReset={() => setRefreshNonce((value) => value + 1)}>
+      <div className="relative flex min-h-0 flex-1">
+        <aside className={detailStoreId ? 'hidden w-[396px] shrink-0 lg:block' : drawerOpen ? 'hidden w-[320px] shrink-0 border-r border-[#dfe4d7] lg:block' : 'hidden'} aria-label="Map account panel">
+          <div className={detailStoreId ? 'hidden' : 'h-full'}>
+            <TerritoryListPane compact
+              storesQueryError={storesQuery.isError ? new Error('Could not refresh accounts') : null}
+              search={search} onSearchChange={setSearch} activeFiltersCount={activeFiltersCount} onOpenFilters={openFiltersSheet}
+              lassoSelectedCount={lassoSelectedIds.length} onClearLassoSelection={() => { setLassoSelection(null); setLassoDrawingMode(false); setLassoSelectedIds([]); }}
+              groupedStores={grouped} sectionRefs={sectionRefs} routeSelectedIds={routePlan.selectedStopIds}
+              pinColorMode={pinColorMode} repColorMap={repColorMap} selectedId={detailStoreId ?? focusedId}
+              onOpenStore={(id) => { selectFocusedStore(id); selectDetailStore(id); setFocusRequestToken(value=>value+1); }}
+              onToggleRouteStop={routePlan.toggleStop} area={listArea} onAreaChange={setListArea}
+            />
+          </div>
+        </aside>
+        <div className={view === 'map' ? 'relative min-w-0 flex-1' : 'relative hidden min-w-0 flex-1 lg:block'}>
+          <MapRenderBoundary onReset={refreshTerritoryData}>
             <TerritoryMapMobile
               stores={mapStores}
               boundaries={boundaries}
@@ -754,7 +846,7 @@ export function TerritoryMobile() {
               showSubwayLines={showSubwayLines}
               onSubwayLinesUnavailable={handleSubwayLinesUnavailable}
               repColorMap={repColorMap}
-              onSelectStore={setFocusedId}
+              onSelectStore={(id) => { selectFocusedStore(id); if (window.matchMedia('(min-width: 1024px)').matches) selectDetailStore(id); }}
               onDraftBoundaryChange={(coordinates) =>
                 setBoundaryEditor((current) => (current ? { ...current, coordinates } : current))
               }
@@ -772,22 +864,24 @@ export function TerritoryMobile() {
             lassoActive={Boolean(lassoSelection)}
             lassoDrawingMode={lassoDrawingMode}
             onToggleLassoMode={toggleLassoMode}
+            onToggleLassoDrawingMode={() => setLassoDrawingMode((value) => !value)}
             onFinishLasso={finishLasso}
             showMapSearch={showMapSearch}
             mapSearch={mapSearch}
             onMapSearchChange={(value) => {
               setMapSearch(value);
-              setFocusedId(null);
+              selectFocusedStore(null);
             }}
             onClearMapSearch={() => {
               setMapSearch('');
               setDebouncedMapSearch('');
               setShowMapSearch(false);
-              setFocusedId(null);
+              selectFocusedStore(null);
             }}
             searchSuggestions={mapSearchSuggestions}
             onSelectSearchSuggestion={(storeId) => {
-              setFocusedId(storeId);
+              selectFocusedStore(storeId);
+              if (window.matchMedia('(min-width: 1024px)').matches) selectDetailStore(storeId);
               setMapSearch('');
               setDebouncedMapSearch('');
               setShowMapSearch(false);
@@ -808,7 +902,7 @@ export function TerritoryMobile() {
             onToggleRepLegend={() => setShowRepLegend((current) => !current)}
             focusedStoreVisible={Boolean(focusedStore)}
             onCenterCurrentLocation={centerOnCurrentLocation}
-            onRefreshData={() => setRefreshNonce((value) => value + 1)}
+            onRefreshData={refreshTerritoryData}
             onToggleMapSearch={() => setShowMapSearch((current) => !current)}
             showSubwayLines={showSubwayLines}
             onToggleSubwayLines={toggleSubwayLines}
@@ -832,7 +926,7 @@ export function TerritoryMobile() {
             }
           />
         </div>
-      ) : (
+        <div className={view === 'list' ? 'min-w-0 flex-1 lg:hidden' : 'hidden'}>
         <TerritoryListPane
           storesQueryError={storesQuery.isError ? (storesQuery.error instanceof Error ? storesQuery.error : new Error('Failed to refresh territory')) : null}
           search={search}
@@ -850,21 +944,25 @@ export function TerritoryMobile() {
           routeSelectedIds={routePlan.selectedStopIds}
           pinColorMode={pinColorMode}
           repColorMap={repColorMap}
-          onOpenStore={setDetailStoreId}
+          onOpenStore={selectDetailStore}
+          onToggleRouteStop={routePlan.toggleStop}
         />
-      )}
+        </div>
+      </div>
 
       {view === 'map' && focusedStore ? (
+        <div className="lg:hidden">
         <TerritoryFocusedCard
           store={focusedStore}
           selectedOnRoute={selectedOnCard}
           pinColorMode={pinColorMode}
           repColorMap={repColorMap}
-          onOpenDetails={setDetailStoreId}
+          onOpenDetails={selectDetailStore}
           onMessageRep={messageRep}
           onToggleRouteStop={routePlan.toggleStop}
           notionPageUrl={notionPageUrl(focusedStore.notionPageId)}
         />
+        </div>
       ) : null}
 
       <StoreFilterSheet
@@ -999,12 +1097,13 @@ export function TerritoryMobile() {
       />
 
       <AccountDetailSheet
+        presentation="docked"
         store={detailStoreId ? storeById.get(detailStoreId) ?? null : null}
-        onClose={() => setDetailStoreId(null)}
+        onClose={() => selectDetailStore(null)}
         onAddToRoute={(id) => routePlan.toggleStop(id)}
         routeSelected={detailStoreId ? routePlan.selectedStopIds.includes(detailStoreId) : false}
         onCenterStore={(store) => {
-          setFocusedId(store.id);
+          selectFocusedStore(store.id);
           setView('map');
           setFocusRequestToken((current) => current + 1);
         }}

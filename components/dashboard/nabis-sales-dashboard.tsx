@@ -266,7 +266,7 @@ export function NabisSalesDashboard() {
 
   if (!metadata && error) {
     return (
-      <div className="mx-auto max-w-2xl rounded-[28px] border border-red-100 bg-white p-8 shadow-sm">
+      <div className="mx-auto max-w-2xl rounded-lg border border-red-100 bg-white p-8 shadow-sm">
         <div className="mb-4 inline-flex rounded-full bg-red-50 p-3">
           <AlertCircle className="h-6 w-6 text-red-600" />
         </div>
@@ -285,9 +285,9 @@ export function NabisSalesDashboard() {
   }
 
   return (
-    <div className={`space-y-6 pb-8 ${isGeneratingPDF ? 'pointer-events-none' : ''}`}>
-      <section className="overflow-hidden rounded-[28px] border border-[#d9dce2] bg-white shadow-sm">
-        <div className="border-b border-[#e3e7ee] bg-[linear-gradient(135deg,#edf4ff_0%,#ffffff_55%,#f5f8ff_100%)] px-4 py-5 sm:px-6">
+    <div className={`mx-auto max-w-[1200px] space-y-5 px-4 py-5 sm:px-6 ${isGeneratingPDF ? 'pointer-events-none' : ''}`}>
+      <section className="overflow-hidden rounded-lg border border-[#d9dce2] bg-white shadow-sm">
+        <div className="border-b border-[#e3e7ee] bg-[#fbfcf9] px-4 py-5 sm:px-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
@@ -295,7 +295,7 @@ export function NabisSalesDashboard() {
                   <TrendingUp className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-semibold text-[#18212d]">Nabis Sales Dashboard</h1>
+                  <h1 className="text-xl font-semibold text-[#18212d]">Nabis history</h1>
                   <details className="group mt-1 text-sm text-[#5f6773]">
                     <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-2 rounded-lg px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#276fd3] [&::-webkit-details-marker]:hidden">
                       <Wifi className="h-3.5 w-3.5 text-emerald-700" />

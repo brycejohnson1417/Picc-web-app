@@ -1,27 +1,33 @@
 # Product
 
 ## Register
+
 product
 
 ## Users
-Field sales staff using a mobile browser between account visits, often outdoors in daylight.
+
+Field sales representatives planning visits on a laptop and accessing account context on a phone between stops, often outdoors in daylight. They need fast location scanning, buyer access, route planning and follow-up continuity.
 
 ## Product Purpose
-Support account lookup and route planning with complete records, visible status, and usable next actions.
+
+A map-centered account workspace. Help representatives find the right account, understand current activity and take the next sales action without losing territory context.
 
 ## Brand Personality
-Direct, calm, dependable.
+
+Direct, calm, practical. Concise field labels and recognizable controls.
 
 ## Anti-references
-Decorative dashboards, oversized marketing cards, fake success states and hidden configuration.
+
+Presentation-like dashboards, oversized header cards, explanatory product copy, simulated phone frames on desktop, decorative animation, unpopulated metrics, and permanently competing account panels.
 
 ## Design Principles
-- Preserve the existing mobile shell and familiar controls.
-- Keep every selected record accounted for.
-- Explain missing data and estimates honestly.
-- Make configuration available in the interface.
+
+- Preserve useful workflows and record identity.
+- Give the map usable space.
+- Show real values with clear periods and optional source details.
+- Keep account browsing and selection continuous.
+- Use one contextual work panel and progressive detail.
 
 ## Accessibility & Inclusion
-Text accompanies status colors. Controls need readable contrast, accessible names, keyboard focus and comfortable touch targets. Respect reduced motion.
 
-Visual rules are maintained in DESIGN-SYSTEM.md.
+Keyboard access, visible focus, labeled icon controls, adequate contrast, reduced-motion support and touch targets appropriate for field use.
