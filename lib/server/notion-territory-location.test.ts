@@ -151,4 +151,25 @@ describe('territory canonical address location', () => {
     expect(result.stores[0]).toMatchObject({ lat: 42.65, lng: -73.75,
       locationAddress: fullAddress, locationSource: 'google-address-cache', locationPrecision: 'address' });
   });
+
+  it('marks a cached city-only answer as approximate instead of a verified address pin', async () => {
+    mocks.cachedGeocode.mockResolvedValue({ lat: 42.65, lng: -73.75, formattedAddress: 'Albany, NY 12207, USA' });
+    const { getCachedTerritoryStores } = await import('./notion-territory');
+    const result = await getCachedTerritoryStores({ refresh: true });
+    expect(result.stores[0]).toMatchObject({ locationPrecision: 'city', isApproximate: true });
+  });
+
+  it('does not mark a live street-only geocoder response as an address pin', async () => {
+    mocks.cachedGeocode.mockResolvedValue(null);
+    process.env.GOOGLE_GEOCODING_API_KEY = 'test-geocoding-key';
+    const prior = mocks.fetch.getMockImplementation()!;
+    mocks.fetch.mockImplementation(async (url: string) => url.includes('/geocode/json') ? Response.json({
+      status: 'OK', results: [{ formatted_address: 'Main St, Albany, NY 12207, USA',
+        address_components: [{ short_name: 'NY', types: ['administrative_area_level_1'] }],
+        geometry: { location: { lat: 42.65, lng: -73.75 } } }],
+    }) : prior(url));
+    const { getCachedTerritoryStores } = await import('./notion-territory');
+    const result = await getCachedTerritoryStores({ refresh: true });
+    expect(result.stores[0]).toMatchObject({ locationPrecision: 'city', isApproximate: true });
+  });
 });

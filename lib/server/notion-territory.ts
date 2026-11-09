@@ -950,12 +950,15 @@ async function geocodeAddressWithCache(
   }
 
   if (cached) {
+    // Older cache entries may contain a street/city centroid for an address query.
+    // Only a returned numbered street address supports address-level precision.
+    const hasStreetNumber = /(?:^|,\s*)\d+[A-Za-z]?(?:[-–]\d+[A-Za-z]?)?\s+[A-Za-z0-9]/.test(cached.formattedAddress ?? '');
     const cachedResult: GeocodeResult = {
       lat: cached.lat,
       lng: cached.lng,
       formattedAddress: cached.formattedAddress ?? address,
       source: precision === 'city' ? 'google-city-cache' : 'google-address-cache',
-      precision,
+      precision: precision === 'address' && hasStreetNumber ? 'address' : 'city',
     };
     memoryGeocodeCache.set(cacheKey, cachedResult);
     return cachedResult;
@@ -1047,7 +1050,9 @@ async function geocodeAddressWithCache(
     lng,
     formattedAddress: result?.formatted_address ?? address,
     source: precision === 'city' ? 'google-city-live' : 'google-address-live',
-    precision,
+    precision: precision === 'address' && result?.address_components?.some((component) => component.types?.includes('street_number'))
+      ? 'address'
+      : 'city',
   };
 
   memoryGeocodeCache.set(cacheKey, geocoded);
@@ -1238,8 +1243,8 @@ async function mapNotionPageToTerritoryStore(
       lat = addressGeocode.lat;
       lng = addressGeocode.lng;
       locationSource = addressGeocode.source;
-      locationPrecision = 'address';
-      isApproximate = false;
+      locationPrecision = addressGeocode.precision;
+      isApproximate = addressGeocode.precision !== 'address';
     }
   }
 
