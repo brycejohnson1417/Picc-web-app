@@ -35,12 +35,12 @@ import {
   type TerritoryStoresResponse,
 } from '@/lib/territory/types';
 import { isPreferredPartnerFromStatuses } from '@/lib/territory/preferred-partner';
+import { TERRITORY_SNAPSHOT_KEY } from '@/lib/territory/cache-keys';
 
 const NOTION_API_BASE = 'https://api.notion.com/v1';
 const NOTION_VERSION = '2022-06-28';
 const GOOGLE_GEOCODING_BASE = 'https://maps.googleapis.com/maps/api/geocode/json';
 const GEOCODE_THROTTLE_MS = 110;
-const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v3';
 const DEFAULT_SYNC_TTL_MINUTES = 5;
 const DEFAULT_STALE_SYNC_GEOCODE_LOOKUPS = 12;
 const DEFAULT_FORCE_SYNC_GEOCODE_LOOKUPS = 80;
@@ -49,7 +49,7 @@ const SCHEMA_OPTIONS_TTL_MS = 5 * 60 * 1000;
 
 const REQUIRED_PROPERTIES = [
   { name: 'Dispensary Name', type: 'title' },
-  { name: 'Map Location', type: 'place' },
+  { name: 'Full Address', type: 'rich_text' },
   { name: 'Account Status', type: 'status' },
   { name: 'Rep', type: 'people' },
 ] as const;
@@ -873,7 +873,7 @@ function parseCityFromAddress(address: string | null | undefined) {
     return null;
   }
 
-  const withState = address.match(/,\s*([^,]+?),\s*[A-Za-z]{2}\s+\d{5}(?:-\d{4})?\b/);
+  const withState = address.match(/,\s*([^,]+?),\s*[A-Za-z]{2}\s*,?\s*\d{5}(?:-\d{4})?\b/);
   if (withState?.[1]) {
     return withState[1].trim();
   }
@@ -1171,19 +1171,7 @@ async function mapNotionPageToTerritoryStore(
   const repNames = repValues.names;
   const repEmails = repValues.emails;
 
-  const place = properties['Map Location']?.place;
-  const notionLat = typeof place?.lat === 'number' ? place.lat : null;
-  const notionLng = typeof place?.lon === 'number' ? place.lon : null;
-  const hasPlaceCoords = notionLat !== null && notionLng !== null;
-
-  const placeName = typeof place?.name === 'string' ? place.name.trim() : '';
-  const placeAddress = typeof place?.address === 'string' ? place.address.trim() : '';
-
-  const fullAddress = textFromRichTextProperty((propertyByCandidates('full address', 'address') as NotionPropertyValue | undefined) ?? properties['Full Address']);
-  const address1 = textFromRichTextProperty((propertyByCandidates('address 1', 'street address') as NotionPropertyValue | undefined) ?? properties['Address 1']);
-  const city = textFromRichTextProperty((propertyByCandidates('city') as NotionPropertyValue | undefined) ?? properties['City']);
-  const stateField = textFromRichTextProperty((propertyByCandidates('state') as NotionPropertyValue | undefined) ?? properties.State);
-  const zipcode = textFromRichTextProperty((propertyByCandidates('zipcode', 'zip code') as NotionPropertyValue | undefined) ?? properties['Zipcode']);
+  const fullAddress = textFromRichTextProperty(properties['Full Address']);
   const licenseNumber = textFromRichTextProperty((propertyByCandidates('license number', 'license') as NotionPropertyValue | undefined) ?? properties['License Number']);
   const daysOverdue = readFormulaNumber((propertyByCandidates('days overdue') as NotionPropertyValue | undefined) ?? properties['Days Overdue']);
   const phoneNumber = readPhoneNumberProperty((propertyByCandidates('phone number', 'phone') as NotionPropertyValue | undefined) ?? properties['Phone Number']) || null;
@@ -1223,23 +1211,22 @@ async function mapNotionPageToTerritoryStore(
   const lastCheckIn = readDateStartProperty((propertyByCandidates('last check-in', 'last check in', 'last visit') as NotionPropertyValue | undefined) ?? properties['Last Check-in']) || null;
   const isPreferredPartner = isPreferredPartnerFromStatuses(pppStatus, headsetConnectionStatus);
 
-  const fallbackAddress = firstNonEmpty([fullAddress, placeAddress, [address1, city, stateField, zipcode].filter(Boolean).join(', '), placeName]);
-  const inferredCity = firstNonEmpty([city, parseCityFromAddress(fallbackAddress)]);
+  const fallbackAddress = fullAddress || null;
+  const inferredCity = parseCityFromAddress(fallbackAddress);
   const inferredState = firstNonEmpty([
-    normalizeStateCode(stateField),
     parseStateFromAddress(fallbackAddress),
-    inferStateFromZip(parseZipCode(zipcode)),
+    inferStateFromZip(parseZipCode(fullAddress)),
   ]);
   const cityStateQuery = firstNonEmpty([[inferredCity, inferredState].filter(Boolean).join(', '), inferredCity, inferredState]);
 
-  let lat: number | null = hasPlaceCoords ? notionLat : null;
-  let lng: number | null = hasPlaceCoords ? notionLng : null;
-  let locationSource: TerritoryStorePin['locationSource'] = hasPlaceCoords ? 'notion-place' : 'google-address-cache';
-  let locationPrecision: TerritoryStorePin['locationPrecision'] = hasPlaceCoords ? 'exact' : 'address';
-  let resolvedAddress = firstNonEmpty([placeAddress, fullAddress, placeName]);
-  let isApproximate = !hasPlaceCoords;
+  let lat: number | null = null;
+  let lng: number | null = null;
+  let locationSource: TerritoryStorePin['locationSource'] = 'unavailable';
+  let locationPrecision: TerritoryStorePin['locationPrecision'] = 'unavailable';
+  let resolvedAddress = fallbackAddress;
+  let isApproximate = true;
 
-  if (!hasPlaceCoords && fallbackAddress) {
+  if (fallbackAddress) {
     const addressGeocode = await geocodeAddressWithCache(
       fallbackAddress,
       budget,
@@ -1250,7 +1237,6 @@ async function mapNotionPageToTerritoryStore(
     if (addressGeocode) {
       lat = addressGeocode.lat;
       lng = addressGeocode.lng;
-      resolvedAddress = addressGeocode.formattedAddress;
       locationSource = addressGeocode.source;
       locationPrecision = 'address';
       isApproximate = false;
@@ -1297,7 +1283,7 @@ async function mapNotionPageToTerritoryStore(
     repEmails,
     lat,
     lng,
-    locationLabel: firstNonEmpty([placeName, fallbackAddress]),
+    locationLabel: fallbackAddress,
     locationAddress: resolvedAddress,
     locationSource,
     locationPrecision,
@@ -2288,6 +2274,15 @@ export async function loadTerritoryStores(input: {
       pinKind: snapshotStore?.pinKind ?? store.pinKind,
       repNames: snapshotStore?.repNames ?? store.repNames,
       repEmails: snapshotStore?.repEmails ?? store.repEmails,
+      lat: snapshotStore?.lat ?? store.lat,
+      lng: snapshotStore?.lng ?? store.lng,
+      locationLabel: snapshotStore ? snapshotStore.locationLabel : store.locationLabel,
+      locationAddress: snapshotStore ? snapshotStore.locationAddress : store.locationAddress,
+      locationSource: snapshotStore?.locationSource ?? store.locationSource,
+      locationPrecision: snapshotStore?.locationPrecision ?? store.locationPrecision,
+      isApproximate: snapshotStore?.isApproximate ?? store.isApproximate,
+      city: snapshotStore ? snapshotStore.city : store.city,
+      state: snapshotStore ? snapshotStore.state : store.state,
       lastEditedTime: snapshotStore?.lastEditedTime ?? store.lastEditedTime,
       licenseNumber: snapshotStore?.licenseNumber ?? store.licenseNumber,
       phoneNumber: snapshotStore?.phoneNumber ?? store.phoneNumber,

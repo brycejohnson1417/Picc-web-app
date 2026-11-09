@@ -6,7 +6,7 @@ Branch: `codex/220-full-address-pins`, based on current `origin/main`.
 
 Scope: use Full Address as the sole territory location input; reuse existing geocoding/cache boundary; require the canonical address schema; add focused regressions and verify the browser map.
 
-Owned paths: `lib/server/notion-territory.ts`, focused `lib/server/notion-territory*.test.ts`, `SESSION.md`, and focused verification tests/scripts if needed.
+Owned paths: `lib/server/notion-territory.ts`, focused `lib/server/notion-territory*.test.ts`, `lib/territory/cache-keys.ts`, `lib/dashboard/nabis-server.ts`, `SESSION.md`, and focused verification tests/scripts if needed. The dashboard shares the territory snapshot key; keep its reader aligned when versioning location semantics.
 
 Out of scope: map redesign, other product repos, provider/auth changes, database migrations, unrelated integrations. Source field removal is a separate conditional step after complete production coverage and private source preservation.
 
