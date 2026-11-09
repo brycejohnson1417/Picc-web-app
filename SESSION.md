@@ -1,10 +1,19 @@
-# Session: territory workspace repair (#212)
+# Territory address source change
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/212
+Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/220
 
-Scope: explicit authorized-workspace to configured territory source resolution at the existing server boundary. Own lib/server/notion-territory.ts and territory organization regression tests.
-Non-goals: data migration, environment edits, distributor work, UI redesign, authentication bypass.
-Plan: reproduce shared/source mismatch with a failing test; resolve only trusted configured identities; retain missing/foreign context refusal and source cache namespace. Run npm run verify and focused route tests.
-Architecture: current Next.js server adapter; preserve existing source records and caller authentication. Source namespace is server controlled.
-Concurrency: checked PRs #211, #189, #135, #82; no overlapping owned paths. Keep separate from #211.
-Release: access-boundary change requires explicit approval before merge/deployment. Current browser session stops at sign-in; production signed-in proof is outstanding.
+Branch: `codex/220-full-address-pins`, based on current `origin/main`.
+
+Scope: use Full Address as the sole territory location input; reuse existing geocoding/cache boundary; require the canonical address schema; add focused regressions and verify the browser map.
+
+Owned paths: `lib/server/notion-territory.ts`, `lib/server/notion-territory-store-detail.ts`, focused `lib/server/notion-territory*.test.ts`, `lib/territory/cache-keys.ts`, `lib/dashboard/nabis-server.ts`, `SESSION.md`, and focused verification tests/scripts if needed. The dashboard shares the territory snapshot key; keep its reader aligned when versioning location semantics. Store detail must use the same canonical location as the list even when its read model is stale.
+
+Out of scope: map redesign, other product repos, provider/auth changes, database migrations, unrelated integrations. Source field removal is a separate conditional step after complete production coverage and private source preservation.
+
+Plan: failing schema/location behavior tests first, minimal adapter change, full `npm run verify`, browser verification and read-only production reconciliation. Never equate city-only or unavailable coordinates with a verified store pin.
+
+Architecture check: keep the existing thin UI and server-side provider/cache adapter. No new settings or parallel location source.
+
+Overlap reviewed: open PRs #219, #217, #215, #211, #189, #135, #82. Avoid shared UI owned by the design-review PR; recheck changed paths before merge. This slice is exclusive while the shared location adapter is changing.
+
+Source schema/data retirement is conditional on complete live pin verification. No private records or screenshots belong in this repository.

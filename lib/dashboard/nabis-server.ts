@@ -13,9 +13,9 @@ import { readNotionCacheSnapshot } from '@/lib/server/notion-cache-store';
 import { excludedInternalTransferRetailers } from '@/lib/nabis/internal-transfers';
 import type { NabisDashboardMetadata, NabisDashboardResponse, SerializedNabisOrder } from '@/lib/dashboard/nabis-types';
 import type { TerritoryStorePin } from '@/lib/territory/types';
+import { TERRITORY_SNAPSHOT_KEY } from '@/lib/territory/cache-keys';
 
 const CANCELED_STATUSES = new Set(['CANCELED', 'CANCELLED', 'VOID', 'VOIDED', 'REJECTED', 'REFUNDED']);
-const TERRITORY_SNAPSHOT_KEY = 'territory-stores-v3';
 
 export function isIsoDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);

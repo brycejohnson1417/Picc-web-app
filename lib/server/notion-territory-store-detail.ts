@@ -401,6 +401,15 @@ export function createTerritoryStoreDetailService(deps: TerritoryStoreDetailServ
     const snapshotStore = await deps.resolveStoreByIdentifier(snapshot.stores, foundStore.id).catch(() => null);
     const store: TerritoryStorePin = {
       ...foundStore,
+      lat: snapshotStore?.lat ?? foundStore.lat,
+      lng: snapshotStore?.lng ?? foundStore.lng,
+      locationLabel: snapshotStore ? snapshotStore.locationLabel : foundStore.locationLabel,
+      locationAddress: snapshotStore ? snapshotStore.locationAddress : foundStore.locationAddress,
+      locationSource: snapshotStore?.locationSource ?? foundStore.locationSource,
+      locationPrecision: snapshotStore?.locationPrecision ?? foundStore.locationPrecision,
+      isApproximate: snapshotStore?.isApproximate ?? foundStore.isApproximate,
+      city: snapshotStore ? snapshotStore.city : foundStore.city,
+      state: snapshotStore ? snapshotStore.state : foundStore.state,
       pppStatus: snapshotStore?.pppStatus ?? foundStore.pppStatus ?? null,
       pppStatusColorName: snapshotStore?.pppStatusColorName ?? foundStore.pppStatusColorName ?? null,
       headsetConnectionStatus: snapshotStore?.headsetConnectionStatus ?? foundStore.headsetConnectionStatus ?? null,
