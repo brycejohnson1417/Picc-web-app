@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { Navigation, Plus } from 'lucide-react';
+import { NavigationChooser } from '@/components/territory/navigation-chooser';
 import { cn } from '@/lib/utils';
 import type { TerritoryStorePin } from '@/lib/territory/types';
 import type { PinColorMode } from '@/lib/territory/pin-colors';
@@ -28,6 +30,8 @@ export function TerritoryFocusedCard({
   onToggleRouteStop,
   notionPageUrl,
 }: TerritoryFocusedCardProps) {
+  const [navChooserOpen, setNavChooserOpen] = useState(false);
+
   return (
     <div className="fixed bottom-[var(--picc-bottom-nav-clearance)] left-0 right-0 z-[2500]">
       <div className="mx-auto max-w-[720px] picc-shell-enter bg-[#1d1f24]/95 text-white shadow-[0_-2px_8px_rgba(0,0,0,0.35)] backdrop-blur-sm">
@@ -77,16 +81,27 @@ export function TerritoryFocusedCard({
           <button type="button" onClick={() => onToggleRouteStop(store.id)} className="grid place-items-center border-l border-[#30333b]">
             <Plus className={cn('h-6 w-6', selectedOnRoute ? 'text-[#4fb649]' : 'text-[#d8dde6]')} />
           </button>
-          <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${store.lat},${store.lng}`}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
+            onClick={() => setNavChooserOpen(true)}
             className="grid place-items-center border-l border-[#30333b]"
+            aria-label="Get directions"
+            title="Get directions"
           >
             <Navigation className="h-5 w-5 text-[#d8dde6]" />
-          </a>
+          </button>
         </div>
       </div>
+      <NavigationChooser
+        open={navChooserOpen}
+        onClose={() => setNavChooserOpen(false)}
+        destination={{
+          lat: store.lat,
+          lng: store.lng,
+          address: store.locationAddress ?? store.locationLabel ?? null,
+          label: store.name,
+        }}
+      />
     </div>
   );
 }
