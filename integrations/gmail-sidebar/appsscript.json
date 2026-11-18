@@ -1,0 +1,26 @@
+{
+  "timeZone": "America/New_York",
+  "runtimeVersion": "V8",
+  "exceptionLogging": "NONE",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/gmail.addons.execute",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/userinfo.email"
+  ],
+  "urlFetchWhitelist": [
+    "https://api.notion.com/v1/",
+    "https://app.distru.com/public/v1/",
+    "https://gmail.googleapis.com/gmail/v1/users/me"
+  ],
+  "addOns": {
+    "common": {
+      "name": "PICC Store Brief",
+      "logoUrl": "https://piccnewyork.org/icon-192.png",
+      "layoutProperties": {"primaryColor": "#c93412", "secondaryColor": "#334155"},
+      "homepageTrigger": {"runFunction": "onHomepage"},
+      "openLinkUrlPrefixes": ["https://www.notion.so/", "https://app.distru.com/", "https://mail.google.com/"]
+    },
+    "gmail": {"contextualTriggers": [{"unconditional": {}, "onTriggerFunction": "onGmailMessage"}]}
+  }
+}
