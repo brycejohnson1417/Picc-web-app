@@ -1,3 +1,4 @@
+import { PrimaryContactChangedError, readPrimaryContact, primaryContactPatch, samePrimaryContact } from '@/lib/contacts/primary-contact';
 import 'server-only';
 
 import type {
@@ -16,11 +17,14 @@ const MAX_ATTEMPTS = 3;
 type NotionPage = {
   id: string;
   in_trash?: boolean;
+  last_edited_time?: string;
   parent?: { type?: string; data_source_id?: string };
   properties?: Record<string, unknown>;
 };
 
 type RelationProperty = {
+  id?: string;
+  has_more?: boolean;
   type?: string;
   relation?: Array<{ id?: string }>;
 };
@@ -73,7 +77,7 @@ async function delay(milliseconds: number) {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function notionRequest<T>(path: string, init?: RequestInit, attempt = 1): Promise<T> {
+async function notionRequest<T>(path: string, init?: RequestInit, attempt = 1, retryTransient = true): Promise<T> {
   const response = await fetch(`${NOTION_API_BASE}${path}`, {
     ...init,
     headers: {
@@ -85,11 +89,11 @@ async function notionRequest<T>(path: string, init?: RequestInit, attempt = 1): 
     cache: 'no-store',
   });
 
-  if ((response.status === 429 || response.status >= 500) && attempt < MAX_ATTEMPTS) {
+  if (retryTransient && (response.status === 429 || response.status >= 500) && attempt < MAX_ATTEMPTS) {
     const retryAfter = Number(response.headers.get('retry-after'));
     const waitMs = Number.isFinite(retryAfter) ? Math.max(0, retryAfter * 1_000) : attempt * 500;
     await delay(waitMs);
-    return notionRequest<T>(path, init, attempt + 1);
+    return notionRequest<T>(path, init, attempt + 1, retryTransient);
   }
 
   const payload = (await response.json().catch(() => ({}))) as T & { code?: string };
@@ -98,6 +102,44 @@ async function notionRequest<T>(path: string, init?: RequestInit, attempt = 1): 
     throw new Error(`Notion request failed (${response.status}:${code})`);
   }
   return payload;
+}
+
+async function completePageRelation(page: NotionPage, propertyName: string): Promise<string[]> {
+  const property = page.properties?.[propertyName] as RelationProperty | undefined;
+  if (property?.type !== 'relation' || !Array.isArray(property.relation) || property.relation.some(item => !item.id)) {
+    throw new Error('The contact relationship is unavailable.');
+  }
+  const inlineIds = relationIds(property);
+  if (!property.has_more) return inlineIds;
+  if (!property.id) throw new Error('The full contact relationship could not be read.');
+  // Notion returns short property IDs in URL-encoded form.
+  const path = `/pages/${page.id}/properties/${encodeURIComponent(decodeURIComponent(property.id))}`;
+  const ids = new Map<string, string>();
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const query = new URLSearchParams({ page_size: '100', ...(cursor ? { start_cursor: cursor } : {}) });
+    const result = await notionRequest<{
+      results?: Array<{ type?: string; relation?: { id?: string } }>;
+      has_more?: boolean;
+      next_cursor?: string | null;
+    }>(`${path}?${query}`);
+    if (!Array.isArray(result.results) || typeof result.has_more !== 'boolean') {
+      throw new Error('The full contact relationship could not be read.');
+    }
+    for (const item of result.results) {
+      if (item.type !== 'relation' || !item.relation?.id) throw new Error('The full contact relationship could not be read.');
+      ids.set(normalizeId(item.relation.id), item.relation.id);
+    }
+    const next = result.has_more ? result.next_cursor : null;
+    if (result.has_more && (!next || seen.has(next))) throw new Error('The full contact relationship could not be read.');
+    if (next) seen.add(next);
+    cursor = next ?? undefined;
+  } while (cursor);
+  if (ids.size <= inlineIds.length || inlineIds.some(id => !ids.has(normalizeId(id)))) {
+    throw new Error('The contact relationship changed while reading it. Try again.');
+  }
+  return [...ids.values()];
 }
 
 export function createNotionContactCreationAdapter(): ContactCreationAdapter {
@@ -179,7 +221,7 @@ export function createNotionContactCreationAdapter(): ContactCreationAdapter {
       const sourceId = await resolveDataSource(requiredEnv('NOTION_CONTACTS_DATABASE_ID'));
       const properties: Record<string, unknown> = {
         'Contact Name': { title: [{ text: { content: input.name } }] },
-        'Contact Position': { rich_text: [{ text: { content: input.position } }] },
+        'Contact Position': { rich_text: input.position ? [{ text: { content: input.position } }] : [] },
         Dispensary: { relation: [{ id: input.accountPageId }] },
         'Where Contact Info Came From': { multi_select: [{ name: 'CRM Contact' }] },
       };
@@ -198,8 +240,9 @@ export function createNotionContactCreationAdapter(): ContactCreationAdapter {
 
     async ensureAccountContact(accountPageId, contactPageId) {
       const account = await getAccount(accountPageId);
-      const existing = relationIds(account.properties?.['Associated Contacts']);
+      const existing = await completePageRelation(account, 'Associated Contacts');
       if (existing.some((id) => normalizeId(id) === normalizeId(contactPageId))) return;
+      if (existing.length >= 100) throw new Error('This contact relationship is too large to update safely.');
 
       await notionRequest(`/pages/${accountPageId}`, {
         method: 'PATCH',
@@ -210,7 +253,26 @@ export function createNotionContactCreationAdapter(): ContactCreationAdapter {
             },
           },
         }),
-      });
+      }, 1, false);
+    },
+
+    async previewPrimaryContact(accountPageId, contact) {
+      const before = readPrimaryContact(await getAccount(accountPageId));
+      return { before, after: { name: contact.name, email: contact.email, phone: contact.phone, position: before.position === null ? null : contact.position } };
+    },
+
+    async assignPrimaryContact(accountPageId, preview) {
+      const current = readPrimaryContact(await getAccount(accountPageId));
+      // Relation linking may change the page revision. Compare all primary fields after
+      // the earlier revision check, allowing only that unrelated relation update.
+      if (!samePrimaryContact({ ...current, revision: preview.before.revision }, preview.before)) {
+        throw new PrimaryContactChangedError({ before: current, after: preview.after });
+      }
+      await notionRequest(`/pages/${accountPageId}`, { method: 'PATCH', body: JSON.stringify({ properties: primaryContactPatch(preview.after) }) }, 1, false);
+      const verified = readPrimaryContact(await getAccount(accountPageId));
+      if (!samePrimaryContact({ ...verified, revision: '' }, { ...preview.after, revision: '' })) {
+        throw new Error('Primary contact update could not be verified. Save again to review current values; do not assume replacement succeeded.');
+      }
     },
 
     async getRoleAssignments(accountPageId, roles) {
@@ -219,7 +281,11 @@ export function createNotionContactCreationAdapter(): ContactCreationAdapter {
       const allIds = new Set<string>();
       for (const role of roles) {
         const propertyName = rolePropertyByValue.get(role);
-        const ids = propertyName ? relationIds(account.properties?.[propertyName]) : [];
+        const property = propertyName ? account.properties?.[propertyName] as RelationProperty | undefined : undefined;
+        if (!propertyName || property?.type !== 'relation' || !Array.isArray(property.relation)) {
+          throw new Error('Selected CRM roles are not configured as contact relations. Save as associated contact to keep existing roles unchanged.');
+        }
+        const ids = relationIds(property);
         idsByRole.set(role, ids);
         ids.forEach((id) => allIds.add(id));
       }
@@ -263,10 +329,10 @@ export function createNotionContactCreationAdapter(): ContactCreationAdapter {
         notionRequest<NotionPage>(`/pages/${contactPageId}`),
         getAccount(accountPageId),
       ]);
-      const contactHasAccount = relationIds(contact.properties?.Dispensary).some(
+      const contactHasAccount = (await completePageRelation(contact, 'Dispensary')).some(
         (id) => normalizeId(id) === normalizeId(accountPageId),
       );
-      const accountHasContact = relationIds(account.properties?.['Associated Contacts']).some(
+      const accountHasContact = (await completePageRelation(account, 'Associated Contacts')).some(
         (id) => normalizeId(id) === normalizeId(contactPageId),
       );
       return contactHasAccount && accountHasContact;

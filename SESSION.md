@@ -1,19 +1,9 @@
-# Territory address source change
+# Session: Add Contact save flow
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/220
+Issue #226. Continue the existing draft PR #227 from fix/contact-save-flow.
 
-Branch: `codex/220-full-address-pins`, based on current `origin/main`.
+Scope: retain the account-picker retry and disabled-Save hints; preserve the store across cancel and success; make titles optional; save and verify Associated Contacts in both directions; preview existing and proposed primary values and require confirmation before replacing them. Re-read before replacing and retain all existing Associated Contacts when reading a paginated relation.
 
-Scope: use Full Address as the sole territory location input; reuse existing geocoding/cache boundary; require the canonical address schema; add focused regressions and verify the browser map.
+Owned paths: the contact creation API, model, adapter and their tests; contact-create-flow, the store sheet integration, and contact workspace browser tests. Overlap checked: #215, #189, #135. Keep this change isolated from those open PRs. No integrations, PPP actions, production data changes, migrations, or unrelated contact editing.
 
-Owned paths: `lib/server/notion-territory.ts`, `lib/server/notion-territory-store-detail.ts`, focused `lib/server/notion-territory*.test.ts`, `lib/territory/cache-keys.ts`, `lib/dashboard/nabis-server.ts`, `SESSION.md`, and focused verification tests/scripts if needed. The dashboard shares the territory snapshot key; keep its reader aligned when versioning location semantics. Store detail must use the same canonical location as the list even when its read model is stale.
-
-Out of scope: map redesign, other product repos, provider/auth changes, database migrations, unrelated integrations. Source field removal is a separate conditional step after complete production coverage and private source preservation.
-
-Plan: failing schema/location behavior tests first, minimal adapter change, full `npm run verify`, browser verification and read-only production reconciliation. Never equate city-only or unavailable coordinates with a verified store pin.
-
-Architecture check: keep the existing thin UI and server-side provider/cache adapter. No new settings or parallel location source.
-
-Overlap reviewed: open PRs #219, #217, #215, #211, #189, #135, #82. Avoid shared UI owned by the design-review PR; recheck changed paths before merge. This slice is exclusive while the shared location adapter is changing.
-
-Source schema/data retirement is conditional on complete live pin verification. No private records or screenshots belong in this repository.
+Validation: synthetic fixture tests, full npm run verify, contact-workspace browser regressions and review of the PR preview. Notion has no conditional update for this write. Re-reading and avoiding automatic retries narrow the race, but cannot eliminate concurrent updates. Do not claim production verification or use live contacts for tests.
