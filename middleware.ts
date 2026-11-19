@@ -18,6 +18,7 @@ const isApiRoute = createRouteMatcher(['/api/(.*)']);
 const isAuthEntryRoute = createRouteMatcher(['/', '/sign-in(.*)', '/sso-callback(.*)']);
 const isCronSyncRoute = createRouteMatcher(['/api/cron/notion-sync', '/api/cron/nabis-sync', '/api/cron/daily-briefing']);
 const isPublicWebhookRoute = createRouteMatcher(['/api/webhooks/notion']);
+const isMcpRoute = createRouteMatcher(['/api/mcp']);
 const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 const secretKey = process.env.CLERK_SECRET_KEY ?? '';
 const isLiveClerkConfig = publishableKey.startsWith('pk_live_') && secretKey.startsWith('sk_live_');
@@ -34,6 +35,10 @@ const protectedMiddleware =
             }
 
             if (isPublicWebhookRoute(req)) {
+              return;
+            }
+
+            if (isMcpRoute(req)) {
               return;
             }
 

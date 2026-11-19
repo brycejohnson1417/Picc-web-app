@@ -56,4 +56,15 @@ describe('middleware cron route boundary', () => {
 
     expect(protect).not.toHaveBeenCalled();
   });
+
+  it('lets MCP clients reach their bearer-authorized route without a Clerk session', async () => {
+    const { default: middleware } = await import('../../middleware');
+
+    await middleware(
+      new NextRequest('https://piccnewyork.org/api/mcp'),
+      {} as NextFetchEvent,
+    );
+
+    expect(protect).not.toHaveBeenCalled();
+  });
 });
