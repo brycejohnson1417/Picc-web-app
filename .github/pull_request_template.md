@@ -21,7 +21,8 @@ Explain the user or operational problem this PR solves. Include the root cause f
 - Blocked by:
 - Blocks:
 - Parallel label: `parallel:ok` / `parallel:blocked` / `parallel:exclusive`
-- Lane: fast lane / approval lane
+- Lane: fast lane / flag lane / approval lane
+- Flag name and stage, if flag lane (`lib/flags.ts`, ships at `beta`):
 - Approval-lane reason, if any:
 - Large diff / boundary note, if any:
 
@@ -52,6 +53,10 @@ Add screenshots, video, or a clear note that this PR has no visual/browser surfa
 
 If this PR makes claims about production data or behavior, include the exact read-only verification performed. Do not paste secrets or connection strings.
 If production verification fails after merge, rollback first, open a follow-up issue, and comment here with the follow-up link.
+
+## Test Note For Bryce
+
+Plain English, no code: what changed, and two or three steps to try on piccnewyork.org once it is live.
 
 ## Risk And Rollback
 

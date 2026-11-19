@@ -1,9 +1,9 @@
-# Session: Add Contact save flow
+# Session: Agent workflow, feature flags and rollback
 
-Issue #226. Continue the existing draft PR #227 from fix/contact-save-flow.
+Branch `chore/agent-workflow-flags-rollback`. Labels: `meta:protocol-change`, `parallel:exclusive`.
 
-Scope: retain the account-picker retry and disabled-Save hints; preserve the store across cancel and success; make titles optional; save and verify Associated Contacts in both directions; preview existing and proposed primary values and require confirmation before replacing them. Re-read before replacing and retain all existing Associated Contacts when reading a paginated relation.
+Scope: automatic Claude review of every PR and direct push to main (`.github/workflows/claude.yml`); the Flag lane and narrowed Approval lane in `AGENTS.md`; agent roles (Muse, Claude, Codex, Dot) and the voice-to-fix loop; `lib/flags.ts` with tests; `docs/ROLLBACK.md`; PR template lane and test-note fields; `FLAG_BETA_EMAILS` in `.env.example`; repo-relative links in `AGENTS.md`.
 
-Owned paths: the contact creation API, model, adapter and their tests; contact-create-flow, the store sheet integration, and contact workspace browser tests. Overlap checked: #215, #189, #135. Keep this change isolated from those open PRs. No integrations, PPP actions, production data changes, migrations, or unrelated contact editing.
+Out of scope: any app behavior change, schema, Nabis/Distru work, the notion-territory split, dependency changes, branch protection settings (set in GitHub by an admin).
 
-Validation: synthetic fixture tests, full npm run verify, contact-workspace browser regressions and review of the PR preview. Notion has no conditional update for this write. Re-reading and avoiding automatic retries narrow the race, but cannot eliminate concurrent updates. Do not claim production verification or use live contacts for tests.
+Constraints: no production writes; `ANTHROPIC_API_KEY` must be added as a repo secret before the Claude workflow can run; `FLAG_BETA_EMAILS` must be set in Vercel before any flag is used.

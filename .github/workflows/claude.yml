@@ -1,0 +1,115 @@
+name: claude
+
+# Automatic Claude reviews and fixes. Nobody has to ask.
+# - Every PR gets a review against AGENTS.md and the rep-platform plan.
+# - Direct pushes to main (e.g. from Muse) get the same review after the fact.
+# - Issues labeled `agent:claude`, or comments mentioning @claude, get worked on.
+# Requires the repository secret ANTHROPIC_API_KEY.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+  push:
+    branches: [main]
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: claude-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  review-pr:
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            Read AGENTS.md first; it is the rulebook. Then review the diff against origin/${{ github.event.pull_request.base.ref }}.
+
+            Check, in this order:
+            1. Does the change do what its linked issue asks? Say plainly if it does not.
+            2. Will anything break: logic errors, missing error handling, missing or weakened tests.
+            3. Lane: is this a Flag-lane change (schema additions, auth/permissions, writes to Notion/Distru/Sheets,
+               orders/invoices/pricing, major upgrades) that is not behind a flag in lib/flags.ts at `beta`?
+               Is it an Approval-lane change (deleting data, dropping columns, secrets)?
+            4. Drift from the plan: business rules belong in lib/domain/, source clients in lib/sources/,
+               no new logic added to lib/server/notion-territory.ts or lib/server/nabis-sync.ts.
+            5. Bloat: dead code, duplicated helpers, unused dependencies added.
+
+            Post ONE review. Use inline comments for specific lines. End with a short plain-English summary
+            Bryce (who does not read code) can understand. If item 1, 2 or 3 fails, submit the review as
+            "request changes"; otherwise "comment". Do not push commits to this PR.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Bash(gh issue view:*),mcp__github_inline_comment__create_inline_comment"
+
+  review-direct-push:
+    # Muse may push small fixes straight to main. Review those after the fact.
+    # Pushes that came from a merged PR were already reviewed, so skip them.
+    if: github.event_name == 'push' && !contains(github.event.head_commit.message, '(#')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Commits were pushed directly to main in ${{ github.repository }}, without a PR.
+            Read AGENTS.md, then review `git diff ${{ github.event.before }}..${{ github.sha }}` with the same checks
+            as a PR review: does it work, will anything break, is a risky change missing its flag, does it drift
+            from the folder rules, does it add bloat.
+
+            If you find nothing wrong, do nothing.
+            If you find problems, open ONE GitHub issue titled "Review of direct push ${{ github.sha }}" labeled
+            `agent:claude` with: what is wrong, the exact fix, and a plain-English summary for Bryce. If the change
+            can break production or touches an Approval-lane area, say at the top of the issue that it should be
+            reverted first (see docs/ROLLBACK.md) and also label it `priority:urgent`.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(gh issue create:*),Bash(gh issue list:*)"
+
+  work-on-request:
+    # Fix issues labeled agent:claude, and answer @claude mentions on issues and PRs.
+    if: >-
+      (github.event_name == 'issues' && github.event.label.name == 'agent:claude') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          label_trigger: agent:claude
+          trigger_phrase: '@claude'
+          claude_args: |
+            --allowedTools "Read,Write,Edit,Grep,Glob,Bash(npm run:*),Bash(npm test:*),Bash(npx vitest:*),Bash(git:*),Bash(gh pr:*),Bash(gh issue:*)"
+            --append-system-prompt "Follow AGENTS.md exactly: one concern per branch, open a PR, run npm run verify before asking for merge, put risky changes behind a flag in lib/flags.ts at beta, and end the PR with a plain-English test note for Bryce."
