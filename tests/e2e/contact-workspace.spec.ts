@@ -233,13 +233,13 @@ test('add contact supports multiple CRM roles and requires explicit replacement 
   await page.getByRole('button', { name: 'Add contact' }).click();
   await page.getByRole('button', { name: /Example Store.*New York, NY/s }).click();
   await page.getByLabel('Full name *').fill('Jordan Lee');
-  await page.getByLabel('Role / position *').fill('Buyer');
+  await page.getByLabel('Role / position (optional)').fill('Buyer');
   await page.getByLabel('Primary Contact').check();
   await page.getByLabel('Billing Contact').check();
   await page.getByRole('button', { name: 'Save contact' }).click();
 
   await expect(page.getByText('Primary Contact: Existing Buyer')).toBeVisible();
-  await expect(page.getByText('Nothing has been overwritten yet.')).toBeVisible();
+  await expect(page.getByText('Nothing has been overwritten yet.', { exact: false })).toBeVisible();
   await page.getByLabel('Billing Contact').uncheck();
   await expect(page.getByRole('button', { name: 'Replace and save' })).toBeHidden();
   await page.getByLabel('Billing Contact').check();
@@ -397,4 +397,77 @@ test('saves action defaults and can explicitly send a daily debrief now', async 
   await page.getByRole('button', { name: 'Send debrief now' }).click();
   await expect(page.getByText('Daily debrief sent')).toBeVisible();
   expect(savedPayload).toMatchObject({ defaultEmailDays: 9, dailyBriefingEnabled: false, briefingRecipientEmail: 'review@example.com' });
+});
+
+
+test('store contact preselects its account across reopen and saves associated-only on mobile', async ({ page }) => {
+  const payloads: Array<Record<string, unknown>> = [];
+  let detailReads = 0;
+  await page.route('**/api/territory/stores/store-1', async (route) => {
+    detailReads += 1;
+    const detail = storeDetailResponse();
+    if (payloads.length === 2) detail.contacts.push({ ...detail.contacts[0], id: 'new', name: 'New Person' });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) });
+  });
+  await page.route('**/api/contacts', async (route) => {
+    const payload = route.request().postDataJSON();
+    payloads.push(payload);
+    const collision = payload.roles.length > 0;
+    await route.fulfill({ status: collision ? 409 : 201, contentType: 'application/json', body: JSON.stringify(collision ? {
+      status: 'role_collision', contact: null, collisions: [{ role: 'PRIMARY_CONTACT', label: 'Primary Contact', existingContacts: [{ id: 'old', name: 'Existing Buyer' }] }],
+    } : { status: 'created_verified', accountPageId: store.notionPageId, contact: { id: 'new', name: 'New Person' } }) });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /Example Store.*Customer.*Example Rep/s }).click();
+  await page.getByRole('button', { name: 'Add contact' }).last().click();
+  let dialog = page.getByRole('dialog', { name: 'Add contact' });
+  await expect(dialog.getByText('Example Store', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Change', exact: true })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Add contact' }).last().click();
+  dialog = page.getByRole('dialog', { name: 'Add contact' });
+  await expect(dialog.getByText('Example Store', { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Still needed: the contact's name.")).toBeVisible();
+  await dialog.getByLabel('Full name *').fill('New Person');
+  await expect(dialog.getByRole('button', { name: 'Save contact', exact: true })).toBeEnabled();
+  await dialog.getByLabel('Primary Contact').check();
+  await dialog.getByRole('button', { name: 'Save contact', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Save as associated contact' }).click();
+  await expect(dialog.getByText('Contact created and linked to the account in Notion.')).toBeVisible();
+  await expect.poll(() => detailReads).toBeGreaterThan(1);
+  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'New Person', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Add contact' }).last().click();
+  await expect(dialog.getByText('Example Store', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Full name *')).toHaveValue('');
+  expect(payloads).toHaveLength(2);
+  expect(payloads[0]).toMatchObject({ accountPageId: store.notionPageId, position: '', roles: ['PRIMARY_CONTACT'], overwriteRoles: false });
+  expect(payloads[1]).toMatchObject({ accountPageId: store.notionPageId, position: '', roles: [], overwriteRoles: false });
+});
+
+test('primary replacement displays exact current and new fields and submits confirmation snapshot', async ({ page }) => {
+  const before = { name: 'Existing Buyer', email: 'old@example.com', phone: '123', position: null, revision: 'rev1' };
+  const after = { name: 'New Person', email: null, phone: '456', position: null };
+  const payloads: Array<Record<string, unknown>> = [];
+  await page.route('**/api/contacts', async (route) => {
+    const payload = route.request().postDataJSON();
+    payloads.push(payload);
+    await route.fulfill({ status: payload.expectedPrimary ? 201 : 409, contentType: 'application/json', body: JSON.stringify(payload.expectedPrimary ? { status: 'created_verified', contact: { id: 'new', name: after.name } } : { status: 'role_collision', collisions: [], primaryPreview: { before, after } }) });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /Example Store.*Customer.*Example Rep/s }).click();
+  await page.getByRole('button', { name: 'Add contact' }).last().click();
+  const dialog = page.getByRole('dialog', { name: 'Add contact' });
+  await dialog.getByLabel('Full name *').fill('New Person');
+  await dialog.getByLabel('Phone', { exact: true }).fill('456');
+  await dialog.getByLabel('Primary Contact').check();
+  await dialog.getByRole('button', { name: 'Save contact', exact: true }).click();
+  await expect(dialog.getByText('Existing Buyer → New Person', { exact: false })).toBeVisible();
+  await expect(dialog.getByText('old@example.com → (blank)', { exact: false })).toBeVisible();
+  await expect(dialog.getByText('123 → 456', { exact: false })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Replace and save' }).click();
+  await expect(dialog.getByText('Contact created and linked to the account in Notion.')).toBeVisible();
+  expect(payloads[1]).toMatchObject({ expectedPrimary: before, expectedPrimaryReplacement: after, overwriteRoles: true });
 });

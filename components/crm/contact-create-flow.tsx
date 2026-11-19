@@ -7,13 +7,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   buildContactCreatePayload,
-  contactCreateMessage,
   contactCreateMissingFields,
+  type ContactSaveMode,
+  contactCreateMessage,
   filterContactAccounts,
   type ContactAccountOption,
   type ContactCreateStatus,
 } from '@/lib/contacts/contact-create-model';
 import { CONTACT_ROLE_OPTIONS, type ContactRole } from '@/lib/contacts/contact-profile';
+import type { PrimaryContactPreview } from '@/lib/contacts/primary-contact';
 import { cn } from '@/lib/utils';
 
 type ContactResponse = {
@@ -37,15 +39,15 @@ const emptyDraft = {
   roles: [] as ContactRole[],
 };
 
-export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVariant = 'default' }: { accounts: ContactAccountOption[]; initialAccountPageId?: string; triggerVariant?: 'default' | 'icon' }) {
+export function ContactCreateFlow({ accounts, lockedAccountPageId, onVerified, triggerVariant = 'default' }: { accounts: ContactAccountOption[]; lockedAccountPageId?: string; onVerified?: () => Promise<unknown>; triggerVariant?: 'default' | 'icon' }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedOpen = searchParams.get('new') === '1';
-  const requestedAccount = searchParams.get('account') ?? '';
+  const requestedAccount = lockedAccountPageId ?? searchParams.get('account') ?? '';
   const requestedName = searchParams.get('name') ?? '';
   const requestedEmail = searchParams.get('email') ?? '';
   const [open, setOpen] = useState(requestedOpen);
-  const [draft, setDraft] = useState({ ...emptyDraft, accountPageId: requestedAccount || initialAccountPageId || '', name: requestedName, email: requestedEmail });
+  const [draft, setDraft] = useState({ ...emptyDraft, accountPageId: requestedAccount, name: requestedName, email: requestedEmail });
   const [availableAccounts, setAvailableAccounts] = useState(accounts);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountsRequested, setAccountsRequested] = useState(false);
@@ -54,6 +56,7 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ContactResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [primaryPreview, setPrimaryPreview] = useState<PrimaryContactPreview | null>(null);
   const [roleCollisions, setRoleCollisions] = useState<RoleCollision[]>([]);
 
   useEffect(() => {
@@ -63,14 +66,8 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
     }
   }, [requestedAccount, requestedEmail, requestedName, requestedOpen]);
 
-  useEffect(() => {
-    if (!initialAccountPageId) return;
-    setDraft((current) => (current.accountPageId ? current : { ...current, accountPageId: initialAccountPageId }));
-  }, [initialAccountPageId]);
-
   function retryLoadAccounts() {
     setAccountsLoadFailed(false);
-    setError(null);
     setAccountsRequested(false);
   }
 
@@ -83,10 +80,8 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
       if (!response.ok) throw new Error('Accounts could not be loaded.');
       const payload = (await response.json()) as { accounts?: ContactAccountOption[] };
       setAvailableAccounts(payload.accounts ?? []);
-      setAccountsLoadFailed(false);
-    } catch (caught) {
+    } catch {
       setAccountsLoadFailed(true);
-      setError(caught instanceof Error ? caught.message : 'Accounts could not be loaded.');
     } finally {
       setLoadingAccounts(false);
     }
@@ -102,17 +97,20 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
     () => filterContactAccounts(availableAccounts, accountSearch).slice(0, 60),
     [accountSearch, availableAccounts],
   );
-  const selectedAccount = availableAccounts.find((account) => account.notionPageId === draft.accountPageId);
-  const missingFields = contactCreateMissingFields(draft);
+  const effectiveDraft = { ...draft, accountPageId: lockedAccountPageId ?? draft.accountPageId };
+  const selectedAccount = availableAccounts.find((account) => account.notionPageId === effectiveDraft.accountPageId);
+  const missingFields = contactCreateMissingFields(effectiveDraft);
   const saveDisabled = submitting || missingFields.length > 0;
 
   function selectAccount(accountPageId: string) {
     setRoleCollisions([]);
+    setPrimaryPreview(null);
     setDraft((current) => ({ ...current, accountPageId }));
   }
 
   function toggleRole(role: ContactRole, checked: boolean) {
     setRoleCollisions([]);
+    setPrimaryPreview(null);
     setDraft((current) => ({
       ...current,
       roles: checked ? current.roles.filter((value) => value !== role) : [...current.roles, role],
@@ -120,20 +118,32 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
   }
 
   function changeOpen(nextOpen: boolean) {
+    if (submitting && !nextOpen) return;
     setOpen(nextOpen);
     if (!nextOpen) {
       setResult(null);
       setError(null);
       setRoleCollisions([]);
+      setPrimaryPreview(null);
       setSubmitting(false);
-      setDraft(emptyDraft);
+      setDraft({ ...emptyDraft, accountPageId: lockedAccountPageId ?? '' });
       setAccountSearch('');
       if (requestedOpen) router.replace('/contacts', { scroll: false });
     }
   }
 
-  async function submit(event: { preventDefault(): void }, overwriteRoles = false) {
+  async function refreshVerifiedContact() {
+    router.refresh();
+    try {
+      await onVerified?.();
+    } catch {
+      toast.warning('Contact saved, but the account contact list could not refresh. Reopen the account to reload it.');
+    }
+  }
+
+  async function submit(event: { preventDefault(): void }, mode: ContactSaveMode = 'selected') {
     event.preventDefault();
+    if (saveDisabled) return;
     setSubmitting(true);
     setError(null);
 
@@ -141,13 +151,14 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
       const response = await fetch('/api/contacts', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(buildContactCreatePayload(draft, overwriteRoles)),
+        body: JSON.stringify({ ...buildContactCreatePayload(effectiveDraft, mode), ...(mode === 'replace' && primaryPreview ? { expectedPrimary: primaryPreview.before, expectedPrimaryReplacement: primaryPreview.after } : {}) }),
       });
       const payload = (await response.json().catch(() => ({}))) as
         | (ContactResponse & { error?: string })
-        | { status: 'role_collision'; contact: null; collisions: RoleCollision[]; error?: string };
+        | { status: 'role_collision'; contact: null; collisions: RoleCollision[]; primaryPreview?: PrimaryContactPreview; error?: string };
       if (response.status === 409 && payload.status === 'role_collision') {
         setRoleCollisions(payload.collisions ?? []);
+        setPrimaryPreview(payload.primaryPreview ?? null);
         return;
       }
       if (!response.ok && response.status !== 202) {
@@ -156,11 +167,14 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
       if (payload.status === 'role_collision') throw new Error('Contact roles need review before saving.');
       setResult(payload);
       setRoleCollisions([]);
+      setPrimaryPreview(null);
       toast[payload.status === 'partial_relation' ? 'warning' : 'success'](
         contactCreateMessage(payload.status),
       );
-      if (payload.status !== 'partial_relation') router.refresh();
+      if (payload.status !== 'partial_relation') await refreshVerifiedContact();
     } catch (caught) {
+      setPrimaryPreview(null);
+      setRoleCollisions([]);
       setError(caught instanceof Error ? caught.message : 'Contact could not be saved.');
     } finally {
       setSubmitting(false);
@@ -182,7 +196,7 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
       setResult(payload);
       if (payload.status !== 'partial_relation') {
         toast.success(contactCreateMessage(payload.status));
-        router.refresh();
+        await refreshVerifiedContact();
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Link verification failed.');
@@ -234,7 +248,7 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
               </div>
               {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <button type="button" onClick={() => changeOpen(false)} className="min-h-11 rounded-xl border border-[#cfd6e1] bg-white px-4 text-sm font-semibold text-[#263242]">Done</button>
+                <button type="button" disabled={submitting} onClick={() => changeOpen(false)} className="min-h-11 rounded-xl border border-[#cfd6e1] bg-white px-4 text-sm font-semibold text-[#263242]">Done</button>
                 {result.status === 'partial_relation' ? (
                   <button type="button" disabled={submitting} onClick={() => void retryRelationship()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#c93412] px-4 text-sm font-semibold text-white disabled:opacity-60">
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}
@@ -253,7 +267,7 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
                       <p className="truncate text-sm font-semibold text-[#18212d]">{selectedAccount.name}</p>
                       <p className="text-xs text-[#6a7483]">{[selectedAccount.city, selectedAccount.state].filter(Boolean).join(', ') || 'Location unavailable'}</p>
                     </div>
-                    <button type="button" onClick={() => selectAccount('')} className="text-sm font-semibold text-[#c93412]">Change</button>
+                    {!lockedAccountPageId ? <button type="button" onClick={() => selectAccount('')} className="text-sm font-semibold text-[#c93412]">Change</button> : null}
                   </div>
                 ) : (
                   <div className="mt-2 overflow-hidden rounded-xl border border-[#cfd6e1] bg-white">
@@ -282,15 +296,15 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
               </fieldset>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <ContactField label="Full name" required value={draft.name} onChange={(value) => setDraft((current) => ({ ...current, name: value }))} autoComplete="name" />
-                <ContactField label="Role / position" required value={draft.position} onChange={(value) => setDraft((current) => ({ ...current, position: value }))} autoComplete="organization-title" />
-                <ContactField label="Email" type="email" value={draft.email} onChange={(value) => setDraft((current) => ({ ...current, email: value }))} autoComplete="email" />
-                <ContactField label="Phone" type="tel" value={draft.phone} onChange={(value) => setDraft((current) => ({ ...current, phone: value }))} autoComplete="tel" />
+                <ContactField label="Full name" required value={draft.name} onChange={(value) => { setPrimaryPreview(null); setRoleCollisions([]); setDraft((current) => ({ ...current, name: value })); }} autoComplete="name" />
+                <ContactField label="Role / position (optional)" value={draft.position} onChange={(value) => { setPrimaryPreview(null); setRoleCollisions([]); setDraft((current) => ({ ...current, position: value })); }} autoComplete="organization-title" />
+                <ContactField label="Email" type="email" value={draft.email} onChange={(value) => { setPrimaryPreview(null); setRoleCollisions([]); setDraft((current) => ({ ...current, email: value })); }} autoComplete="email" />
+                <ContactField label="Phone" type="tel" value={draft.phone} onChange={(value) => { setPrimaryPreview(null); setRoleCollisions([]); setDraft((current) => ({ ...current, phone: value })); }} autoComplete="tel" />
               </div>
 
               <fieldset>
                 <legend className="text-sm font-semibold text-[#263242]">Contact type</legend>
-                <p className="mt-1 text-xs leading-5 text-[#6a7483]">Select every CRM role this person fills.</p>
+                <p className="mt-1 text-xs leading-5 text-[#6a7483]">Leave roles blank to add an associated contact without changing who holds any CRM role.</p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {CONTACT_ROLE_OPTIONS.map((role) => {
                     const checked = draft.roles.includes(role.value);
@@ -309,18 +323,26 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
                 </div>
               </fieldset>
 
-              {roleCollisions.length > 0 ? (
+              {roleCollisions.length > 0 || primaryPreview ? (
                 <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-                  <p className="font-semibold">These CRM roles already have a contact</p>
+                  <p className="font-semibold">Review CRM contact changes</p>
+                  {primaryPreview ? (
+                    <div className="mt-2 space-y-2">
+                      <p>Primary Contact: current → replacement (blank values will be cleared)</p>
+                      {(['name', 'email', 'phone', 'position'] as const).filter((field) => field !== 'position' || primaryPreview.before.position !== null).map((field) => (
+                        <p key={field}><strong>{field}:</strong> {primaryPreview.before[field] || '(blank)'} → {primaryPreview.after[field] || '(blank)'}</p>
+                      ))}
+                    </div>
+                  ) : null}
                   <ul className="mt-2 space-y-1">
                     {roleCollisions.map((collision) => (
                       <li key={collision.role}>{collision.label}: {collision.existingContacts.map((contact) => contact.name).join(', ')}</li>
                     ))}
                   </ul>
-                  <p className="mt-2 leading-5">Replacing them changes the live CRM. Nothing has been overwritten yet.</p>
+                  <p className="mt-2 leading-5">Save as associated contact keeps all existing CRM roles unchanged. Replace and save assigns the selected roles to this contact. Nothing has been overwritten yet.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => setRoleCollisions([])} className="min-h-10 rounded-lg border border-amber-300 bg-white px-3 font-semibold">Keep existing</button>
-                    <button type="button" disabled={submitting} onClick={(event) => void submit(event, true)} className="min-h-10 rounded-lg bg-[#9a3412] px-3 font-semibold text-white disabled:opacity-60">Replace and save</button>
+                    <button type="button" disabled={submitting} onClick={(event) => void submit(event, 'associated')} className="min-h-10 rounded-lg border border-amber-300 bg-white px-3 font-semibold">Save as associated contact</button>
+                    <button type="button" disabled={submitting} onClick={(event) => void submit(event, 'replace')} className="min-h-10 rounded-lg bg-[#9a3412] px-3 font-semibold text-white disabled:opacity-60">Replace and save</button>
                   </div>
                 </div>
               ) : null}
@@ -329,6 +351,9 @@ export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVaria
               {missingFields.length > 0 ? <p className="text-sm text-[#697281]">Still needed: {missingFields.join(', ')}.</p> : null}
               <div className="flex flex-col-reverse gap-2 border-t border-[#e0e5ed] pt-4 sm:flex-row sm:justify-end">
                 <Dialog.Close className="min-h-11 rounded-xl border border-[#cfd6e1] bg-white px-4 text-sm font-semibold text-[#263242]">Cancel</Dialog.Close>
+                {draft.roles.length > 0 && roleCollisions.length === 0 && !primaryPreview ? (
+                  <button type="button" disabled={saveDisabled} onClick={(event) => void submit(event, 'associated')} className="min-h-11 rounded-xl border border-[#cfd6e1] bg-white px-4 text-sm font-semibold text-[#263242] disabled:opacity-50">Save as associated contact</button>
+                ) : null}
                 <button type="submit" disabled={saveDisabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#c93412] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {submitting ? 'Saving and verifying…' : 'Save contact'}

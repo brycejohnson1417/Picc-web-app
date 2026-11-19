@@ -28,7 +28,20 @@ export function filterContactAccounts<T extends ContactAccountOption>(accounts: 
   );
 }
 
-export function buildContactCreatePayload(draft: ContactCreateDraft, overwriteRoles = false) {
+export type ContactSaveMode = 'selected' | 'associated' | 'replace';
+
+export function contactCreateMissingFields(draft: ContactCreateDraft) {
+  const missing: string[] = [];
+  if (!draft.accountPageId.trim()) missing.push('an account');
+  if (!draft.name.trim()) missing.push("the contact's name");
+  return missing;
+}
+
+export function canSubmitContactCreate(draft: ContactCreateDraft) {
+  return contactCreateMissingFields(draft).length === 0;
+}
+
+export function buildContactCreatePayload(draft: ContactCreateDraft, mode: ContactSaveMode = 'selected') {
   const optional = (value: string) => value.trim() || null;
   return {
     accountPageId: draft.accountPageId.trim(),
@@ -36,17 +49,9 @@ export function buildContactCreatePayload(draft: ContactCreateDraft, overwriteRo
     position: draft.position.trim(),
     email: optional(draft.email),
     phone: optional(draft.phone),
-    roles: draft.roles,
-    overwriteRoles,
+    roles: mode === 'associated' ? [] : draft.roles,
+    overwriteRoles: mode === 'replace',
   };
-}
-
-export function contactCreateMissingFields(draft: ContactCreateDraft) {
-  const missing: string[] = [];
-  if (!draft.accountPageId.trim()) missing.push('an account');
-  if (!draft.name.trim()) missing.push("the contact's name");
-  if (!draft.position.trim()) missing.push('their role / position');
-  return missing;
 }
 
 export function contactCreateMessage(status: ContactCreateStatus) {

@@ -595,13 +595,15 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                   <p className="text-[14px] uppercase tracking-wide text-[#8c9098]">Associated Contacts</p>
                   {appAccess.canEdit ? (
                     <ContactCreateFlow
+                      key={activeStore.notionPageId}
+                      lockedAccountPageId={activeStore.notionPageId}
+                      onVerified={() => refreshDetailFromServer(activeStore.id)}
                       accounts={[{
                         notionPageId: activeStore.notionPageId,
                         name: activeStore.name,
                         city: activeStore.city ?? null,
                         state: activeStore.state ?? null,
                       }]}
-                      initialAccountPageId={activeStore.notionPageId}
                     />
                   ) : null}
                 </div>
