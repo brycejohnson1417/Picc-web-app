@@ -41,6 +41,14 @@ export function buildContactCreatePayload(draft: ContactCreateDraft, overwriteRo
   };
 }
 
+export function contactCreateMissingFields(draft: ContactCreateDraft) {
+  const missing: string[] = [];
+  if (!draft.accountPageId.trim()) missing.push('an account');
+  if (!draft.name.trim()) missing.push("the contact's name");
+  if (!draft.position.trim()) missing.push('their role / position');
+  return missing;
+}
+
 export function contactCreateMessage(status: ContactCreateStatus) {
   if (status === 'created_verified') {
     return 'Contact created and linked to the account in Notion.';

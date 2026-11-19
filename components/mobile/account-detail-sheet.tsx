@@ -601,6 +601,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
                         city: activeStore.city ?? null,
                         state: activeStore.state ?? null,
                       }]}
+                      initialAccountPageId={activeStore.notionPageId}
                     />
                   ) : null}
                 </div>

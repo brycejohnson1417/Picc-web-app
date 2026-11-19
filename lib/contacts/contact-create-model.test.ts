@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildContactCreatePayload,
   contactCreateMessage,
+  contactCreateMissingFields,
   filterContactAccounts,
 } from '@/lib/contacts/contact-create-model';
 
@@ -35,6 +36,18 @@ describe('contact create UI model', () => {
       roles: ['PRIMARY_CONTACT', 'BILLING_CONTACT'],
       overwriteRoles: false,
     });
+  });
+
+  it('lists what is still missing before a contact can be saved', () => {
+    expect(
+      contactCreateMissingFields({ accountPageId: ' ', name: '', position: '', email: '', phone: '', roles: [] }),
+    ).toEqual(['an account', "the contact's name", 'their role / position']);
+    expect(
+      contactCreateMissingFields({ accountPageId: 'a', name: 'Maya Chen', position: ' ', email: '', phone: '', roles: [] }),
+    ).toEqual(['their role / position']);
+    expect(
+      contactCreateMissingFields({ accountPageId: 'a', name: 'Maya Chen', position: 'Buyer', email: '', phone: '', roles: [] }),
+    ).toEqual([]);
   });
 
   it('uses honest confirmation copy for verified, duplicate, and partial outcomes', () => {

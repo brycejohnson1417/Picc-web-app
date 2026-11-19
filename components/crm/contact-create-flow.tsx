@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import {
   buildContactCreatePayload,
   contactCreateMessage,
+  contactCreateMissingFields,
   filterContactAccounts,
   type ContactAccountOption,
   type ContactCreateStatus,
@@ -36,7 +37,7 @@ const emptyDraft = {
   roles: [] as ContactRole[],
 };
 
-export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { accounts: ContactAccountOption[]; triggerVariant?: 'default' | 'icon' }) {
+export function ContactCreateFlow({ accounts, initialAccountPageId, triggerVariant = 'default' }: { accounts: ContactAccountOption[]; initialAccountPageId?: string; triggerVariant?: 'default' | 'icon' }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedOpen = searchParams.get('new') === '1';
@@ -44,10 +45,11 @@ export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { ac
   const requestedName = searchParams.get('name') ?? '';
   const requestedEmail = searchParams.get('email') ?? '';
   const [open, setOpen] = useState(requestedOpen);
-  const [draft, setDraft] = useState({ ...emptyDraft, accountPageId: requestedAccount, name: requestedName, email: requestedEmail });
+  const [draft, setDraft] = useState({ ...emptyDraft, accountPageId: requestedAccount || initialAccountPageId || '', name: requestedName, email: requestedEmail });
   const [availableAccounts, setAvailableAccounts] = useState(accounts);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountsRequested, setAccountsRequested] = useState(false);
+  const [accountsLoadFailed, setAccountsLoadFailed] = useState(false);
   const [accountSearch, setAccountSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ContactResponse | null>(null);
@@ -61,6 +63,17 @@ export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { ac
     }
   }, [requestedAccount, requestedEmail, requestedName, requestedOpen]);
 
+  useEffect(() => {
+    if (!initialAccountPageId) return;
+    setDraft((current) => (current.accountPageId ? current : { ...current, accountPageId: initialAccountPageId }));
+  }, [initialAccountPageId]);
+
+  function retryLoadAccounts() {
+    setAccountsLoadFailed(false);
+    setError(null);
+    setAccountsRequested(false);
+  }
+
   async function loadAccountsIfNeeded() {
     if (availableAccounts.length > 0 || loadingAccounts || accountsRequested) return;
     setAccountsRequested(true);
@@ -70,7 +83,9 @@ export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { ac
       if (!response.ok) throw new Error('Accounts could not be loaded.');
       const payload = (await response.json()) as { accounts?: ContactAccountOption[] };
       setAvailableAccounts(payload.accounts ?? []);
+      setAccountsLoadFailed(false);
     } catch (caught) {
+      setAccountsLoadFailed(true);
       setError(caught instanceof Error ? caught.message : 'Accounts could not be loaded.');
     } finally {
       setLoadingAccounts(false);
@@ -88,6 +103,8 @@ export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { ac
     [accountSearch, availableAccounts],
   );
   const selectedAccount = availableAccounts.find((account) => account.notionPageId === draft.accountPageId);
+  const missingFields = contactCreateMissingFields(draft);
+  const saveDisabled = submitting || missingFields.length > 0;
 
   function selectAccount(accountPageId: string) {
     setRoleCollisions([]);
@@ -253,7 +270,12 @@ export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { ac
                           <span className="truncate text-sm font-medium text-[#253142]">{account.name}</span>
                           <span className="shrink-0 text-xs text-[#7a8492]">{[account.city, account.state].filter(Boolean).join(', ')}</span>
                         </button>
-                      )) : <p className="px-3 py-6 text-center text-sm text-[#77818f]">No matching accounts</p>}
+                      )) : accountsLoadFailed ? (
+                        <div className="px-3 py-6 text-center">
+                          <p className="text-sm text-[#77818f]">Accounts could not be loaded.</p>
+                          <button type="button" onClick={retryLoadAccounts} className="mt-2 text-sm font-semibold text-[#c93412]">Retry</button>
+                        </div>
+                      ) : <p className="px-3 py-6 text-center text-sm text-[#77818f]">No matching accounts</p>}
                     </div>
                   </div>
                 )}
@@ -304,9 +326,10 @@ export function ContactCreateFlow({ accounts, triggerVariant = 'default' }: { ac
               ) : null}
 
               {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
+              {missingFields.length > 0 ? <p className="text-sm text-[#697281]">Still needed: {missingFields.join(', ')}.</p> : null}
               <div className="flex flex-col-reverse gap-2 border-t border-[#e0e5ed] pt-4 sm:flex-row sm:justify-end">
                 <Dialog.Close className="min-h-11 rounded-xl border border-[#cfd6e1] bg-white px-4 text-sm font-semibold text-[#263242]">Cancel</Dialog.Close>
-                <button type="submit" disabled={submitting || !draft.accountPageId || !draft.name.trim() || !draft.position.trim()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#c93412] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="submit" disabled={saveDisabled} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#c93412] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {submitting ? 'Saving and verifying…' : 'Save contact'}
                 </button>

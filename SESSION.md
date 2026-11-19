@@ -1,19 +1,18 @@
-# Territory address source change
+# Session: Add Contact save flow fix (2026-11-19)
 
-Issue: https://github.com/brycejohnson1417/Picc-web-app/issues/220
+Agent: Vesper (Muse), working at Bryce's direction while Codex is offline.
+Issue: #226. Branch: fix/contact-save-flow.
 
-Branch: `codex/220-full-address-pins`, based on current `origin/main`.
+## Scope
+- ContactCreateFlow accepts an optional initialAccountPageId; the account detail sheet passes the open store so the account starts selected there.
+- "Still needed: ..." hint next to Save whenever Save is disabled, computed by a new unit-tested contactCreateMissingFields helper in lib/contacts/contact-create-model.ts.
+- Account-list load failure renders inside the picker with a Retry button instead of "No matching accounts".
 
-Scope: use Full Address as the sole territory location input; reuse existing geocoding/cache boundary; require the canonical address schema; add focused regressions and verify the browser map.
+## Out of scope
+- /api/contacts, the Notion contact-creation adapter, role/collision semantics, contacts page behavior.
+- PPP setup actions (separate issue).
 
-Owned paths: `lib/server/notion-territory.ts`, `lib/server/notion-territory-store-detail.ts`, focused `lib/server/notion-territory*.test.ts`, `lib/territory/cache-keys.ts`, `lib/dashboard/nabis-server.ts`, `SESSION.md`, and focused verification tests/scripts if needed. The dashboard shares the territory snapshot key; keep its reader aligned when versioning location semantics. Store detail must use the same canonical location as the list even when its read model is stale.
-
-Out of scope: map redesign, other product repos, provider/auth changes, database migrations, unrelated integrations. Source field removal is a separate conditional step after complete production coverage and private source preservation.
-
-Plan: failing schema/location behavior tests first, minimal adapter change, full `npm run verify`, browser verification and read-only production reconciliation. Never equate city-only or unavailable coordinates with a verified store pin.
-
-Architecture check: keep the existing thin UI and server-side provider/cache adapter. No new settings or parallel location source.
-
-Overlap reviewed: open PRs #219, #217, #215, #211, #189, #135, #82. Avoid shared UI owned by the design-review PR; recheck changed paths before merge. This slice is exclusive while the shared location adapter is changing.
-
-Source schema/data retirement is conditional on complete live pin verification. No private records or screenshots belong in this repository.
+## Validation
+- Unit: lib/contacts/contact-create-model.test.ts (new missing-fields cases).
+- Existing e2e tests/e2e/contact-workspace.spec.ts must stay green.
+- CI: npm run verify.
