@@ -20,6 +20,7 @@ export type SalesOrder = {
   number: string;
   status: string;
   date: string;
+  dueDate: string | null;
   updatedAt: string;
   url: string | null;
   editable: boolean;
@@ -64,25 +65,46 @@ export function planSamples(history: SalesOrder[], catalog: CatalogProduct[], pr
   const commercial = relevant
     .filter(order => order.rows.some(row => !row.sample && row.quantity > 0 && row.price > samplePrice &&
       products.get(row.productId)?.kind !== 'display'))
-    .sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
-  const current = commercial[0];
-  const order = current ? { number: current.number, status: current.status, url: current.url, date: current.date } : null;
-  const blocked = (reason: string) => ({ order, reason, lines: [], skipped: [], unitPriceCents: policy.unitPriceCents });
+    .sort((a, b) => a.date.localeCompare(b.date) || a.number.localeCompare(b.number));
+  const first = commercial[0];
+  const blocked = (reason: string, target?: SalesOrder) => ({
+    order: target ? { number: target.number, status: target.status, url: target.url, date: target.date } : null,
+    reason, lines: [], skipped: [], unitPriceCents: policy.unitPriceCents });
 
-  if (!current) return blocked('No commercial order was found for this store location in Distru.');
-  if (previousChannelPurchase || commercial.length > 1) return blocked('An additional commercial order was found for this location. First-order samples are unavailable.');
-  if (!current.editable || !current.locationId) return blocked('The suggested order cannot accept sample lines. It must be an editable, pending order with a stock location.');
-  if (current.rows.some(row => !products.has(row.productId))) return blocked('Distru could not identify every product on the suggested order.');
+  if (!first) return blocked('No commercial order was found for this store location in Distru.');
+  if (previousChannelPurchase) return blocked('A purchase was recorded for this location in another channel. First-order samples are unavailable.', first);
+  // A first purchase is often split into two orders, one COD and one Net 30.
+  // Orders placed within a day of the first are that same purchase; anything
+  // later is a second purchase, and the first-order moment has passed.
+  const splitWindowMs = 24 * 60 * 60 * 1000;
+  const group = commercial.filter(order => Date.parse(order.date) - Date.parse(first.date) <= splitWindowMs);
+  if (group.length < commercial.length) return blocked('An additional commercial order was found for this location. First-order samples are unavailable.', first);
+  // Samples default to the Net 30 order of a split purchase: the order whose
+  // due date falls well after its order date. A lone order is its own target.
+  // A split with no Net 30 order is the rep's call, never a guess.
+  const net30 = group.filter(order => order.dueDate &&
+    Date.parse(order.dueDate) - Date.parse(order.date) >= 20 * 24 * 60 * 60 * 1000)
+    .sort((a, b) => (b.dueDate as string).localeCompare(a.dueDate as string));
+  const current = net30[0] ?? (group.length === 1 ? group[0] : undefined);
+  if (!current) return blocked('This first purchase is split across orders and none of them shows Net 30 terms. Pick the target order before adding samples.', first);
+  const order = { number: current.number, status: current.status, url: current.url, date: current.date };
+  if (!current.editable || !current.locationId) return blocked('The suggested order cannot accept sample lines. It must be an editable, pending order with a stock location.', current);
+  const groupRows = group.flatMap(item => item.rows);
+  if (groupRows.some(row => !products.has(row.productId))) return blocked('Distru could not identify every product on the suggested order.', current);
 
-  const existing = current.rows.reduce((totals, row) =>
+  const existing = groupRows.reduce((totals, row) =>
     totals.set(row.productId, (totals.get(row.productId) ?? 0) + row.quantity), new Map<string, number>());
   const available = (product: CatalogProduct) => Math.max(0, Math.floor(product.available - (existing.get(product.id) ?? 0)));
   const mostStock = (a: CatalogProduct, b: CatalogProduct) => available(b) - available(a) || a.sku.localeCompare(b.sku);
-  const paidProducts = current.rows.flatMap(row => {
+  const paidProducts = groupRows.flatMap(row => {
     const product = products.get(row.productId);
     return product && !row.sample && row.price > samplePrice && row.quantity > 0 && product.kind !== 'display' ? [product] : [];
   });
   const carried = [...new Set(paidProducts.map(product => product.brand))].filter(brand => brand && !policy.exclusions.some(exclusion => keyOf(exclusion) === keyOf(brand)));
+  // Displays follow every ordered brand, including brands excluded from
+  // product samples (Champs): a store that ordered the brand and has no
+  // display for it yet gets the display.
+  const displayBrands = [...new Set(paidProducts.map(product => product.brand))].filter(Boolean);
   const lines: SampleLine[] = [];
   const skipped: string[] = [];
 
@@ -94,15 +116,16 @@ export function planSamples(history: SalesOrder[], catalog: CatalogProduct[], pr
     const bought = paidProducts.filter(product => product.brand === brand);
     const sameStrain = (product: CatalogProduct) => Boolean(product.strain && bought.some(row => row.strain === product.strain));
     const priority = (product: CatalogProduct) => bought.some(row => row.id === product.id) ? 2 : sameStrain(product) ? 1 : 0;
-    const alreadyAdded = current.rows.filter(row => row.sample).reduce((sum, row) => {
+    const alreadyAdded = groupRows.filter(row => row.sample).reduce((sum, row) => {
       const product = products.get(row.productId);
       return sum + (product?.brand === brand && product.kind === 'pre-roll' ? row.quantity : 0);
     }, 0);
     let remaining = Math.max(0, policy.preRollCap - alreadyAdded);
     if (!remaining) continue;
     const candidates = catalog.filter(p => p.brand === brand && p.kind === 'pre-roll' && available(p) > 0);
-    const matches = candidates.filter(product => priority(product) > 0);
-    const choices = (matches.length ? matches : candidates.slice().sort(mostStock).slice(0, 1))
+    // Samples come only from SKUs the store actually ordered. There is no
+    // same-brand substitution: an unordered strain is never sampled.
+    const choices = candidates.filter(product => priority(product) > 0)
       .sort((a, b) => priority(b) - priority(a) || (existing.get(b.id) ?? 0) - (existing.get(a.id) ?? 0) || a.sku.localeCompare(b.sku));
     const quantities = choices.map(() => 0);
     while (remaining > 0 && choices.some((p, index) => available(p) > quantities[index])) {
@@ -114,14 +137,14 @@ export function planSamples(history: SalesOrder[], catalog: CatalogProduct[], pr
       });
     }
     choices.forEach((product, index) => {
-      if (quantities[index]) add(product, quantities[index], ['Same-brand substitution', 'Ordered strain', 'Ordered SKU'][priority(product)]);
+      if (quantities[index]) add(product, quantities[index], priority(product) === 2 ? 'Ordered SKU' : 'Ordered strain');
     });
     if (remaining) skipped.push(`${brand}: ${remaining} pre-roll unit${remaining === 1 ? '' : 's'} unavailable.`);
   }
 
   for (const group of policy.gummyGroups) {
     const kind = `gummy:${group.label}`;
-    if (current.rows.some(row => row.sample && row.quantity > 0 && products.get(row.productId)?.kind === kind)) continue;
+    if (groupRows.some(row => row.sample && row.quantity > 0 && products.get(row.productId)?.kind === kind)) continue;
     const best = catalog.filter(product => product.kind === kind && available(product) > 0).sort(mostStock)[0];
     if (best) add(best, 1, 'Most available in its gummy line');
     else skipped.push(`No verified ${policy.gummyBrand} ${group.label} gummy packs in stock.`);
@@ -131,7 +154,7 @@ export function planSamples(history: SalesOrder[], catalog: CatalogProduct[], pr
     const product = products.get(row.productId);
     return product && (product.kind !== 'display' || (product.brand && keyOf(product.brand) !== 'picc'));
   }));
-  for (const brand of carried) {
+  for (const brand of displayBrands) {
     if (!displayHistoryComplete) {
       skipped.push(`${brand}: display history could not be verified.`);
       continue;

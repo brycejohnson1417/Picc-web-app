@@ -21,7 +21,7 @@ import { applySamples, previewSamples } from './service';
 
 const actor = { orgId: 'org', userId: 'rep' };
 const order: SalesOrder = {
-  id: 'order', number: 'SO-1', status: 'pending', editable: true, date: '2026-11-25',
+  id: 'order', number: 'SO-1', status: 'pending', editable: true, date: '2026-11-25', dueDate: null,
   updatedAt: 't1', url: null, locationId: 'stock-location', snapshot: 'header',
   rows: [{ id: 'original', productId: 'roll', quantity: 9, price: 10, sample: false, snapshot: 'original paid line' }],
 };

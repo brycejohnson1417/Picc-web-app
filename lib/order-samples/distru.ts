@@ -15,7 +15,7 @@ const rowSchema = z.object({
   note: z.string().nullish(), priceTierMode: z.string().nullish(), priceTier: z.unknown().optional(),
 });
 const orderSchema = z.object({
-  id: z.string(), orderNumber: z.string(), orderDate: z.string(), updatedDate: z.string(), status: z.string(),
+  id: z.string(), orderNumber: z.string(), orderDate: z.string(), dueDate: z.string().nullish(), updatedDate: z.string(), status: z.string(),
   url: z.string(), customer: entity.nullish(), shippingLocation: location.nullish(), location: entity.nullish(),
   combinedOrder: entity.nullish(), invoices: z.array(entity), orderCharges: z.array(z.unknown()),
   complianceManifestNumber: z.string().nullish(), orderItems: z.array(rowSchema),
@@ -174,7 +174,7 @@ function normalizeOrder(raw: z.infer<typeof orderSchema>, recordOnly = false): S
       line.priceTier ?? null]),
   }));
   return {
-    id: raw.id, number: raw.orderNumber, status, date: raw.orderDate, updatedAt: raw.updatedDate, url,
+    id: raw.id, number: raw.orderNumber, status, date: raw.orderDate, dueDate: raw.dueDate ?? null, updatedAt: raw.updatedDate, url,
     editable: status === 'pending' && !recordOnly && !raw.complianceManifestNumber &&
       !raw.combinedOrder && raw.invoices.length === 0 && rows.length > 0,
     locationId: raw.location?.id ?? null,
@@ -198,7 +198,10 @@ export function classifySampleProduct(product: z.infer<typeof productSchema>, av
   const weightType = product.unitNetWeightAndServingSizeUnitType?.name ?? '';
   const oneGram = netWeight === 1 && /^(g|gram|grams)$/i.test(weightType);
   const labeledOneGram = /(?:^|[^.\d])1(?:\.0+)?\s*g\b/i.test(product.name);
-  const multipack = /\b(?:[2-9]|\d{2,})[\s-]*(?:pack|pk)\b/i.test(product.name);
+  // Chopsticks is the standing exception: its unit is two 0.5g joints, the
+  // brand's 1G equivalent, so its 2-pack is a single unit, not a multipack.
+  const multipack = /\b(?:[2-9]|\d{2,})[\s-]*(?:pack|pk)\b/i.test(product.name) &&
+    !(brand === 'Chopsticks' && (oneGram || labeledOneGram));
   let kind: CatalogProduct['kind'] = 'other';
   if (/\bdisplays?\b/i.test(labels)) kind = 'display';
   else if (brand === policy.gummyBrand && /gumm/i.test(labels) && !/uninfused/i.test(labels)) {

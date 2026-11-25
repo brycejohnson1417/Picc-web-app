@@ -25,6 +25,12 @@ describe('Distru sample catalog classification', () => {
     expect(classifySampleProduct(candidate('EXAMPLE HALF | Uninfused Pre-roll | .5g 2-Pack'), 20, policy).kind).toBe('other');
   });
 
+  it('treats the Chopsticks twin 0.5g pack as the brand 1G unit', () => {
+    const chopPolicy: SamplePolicy = { ...policy, preRollBrands: ['Chopsticks'], exclusions: [] };
+    expect(classifySampleProduct(candidate('CHOPSTICKS | Uninfused Pre-roll | .5g 2-Pack (1g)'), 20, chopPolicy))
+      .toMatchObject({ kind: 'pre-roll', brand: 'Chopsticks' });
+  });
+
   it('separates the two gummy lines and honors the catalog count unit', () => {
     expect(classifySampleProduct(candidate('Example Edible Co | Hash Rosin Infused Gummies', null), 15, policy))
       .toMatchObject({ kind: 'gummy:rosin', brand: 'Example Gummies', available: 15 });
