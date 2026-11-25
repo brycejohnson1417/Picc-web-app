@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SalesOrder } from './plan';
 
 const mocks = vi.hoisted(() => {
@@ -28,10 +28,6 @@ const order: SalesOrder = {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.stubEnv('FIRST_ORDER_SAMPLE_POLICY', JSON.stringify({
-    unitPriceCents: 1, preRollCap: 5, preRollBrands: ['Example Roll'], brandAliases: {}, exclusions: [],
-    gummyBrand: 'Example Gummies', gummyGroups: [{ label: 'rosin', terms: ['rosin'] }],
-  }));
   mocks.identity.mockResolvedValue({ accountId: 'account' });
   mocks.prisma.account.findFirst.mockResolvedValue({ id: 'account', name: 'Example Store', address1: '8 Main St', zipcode: '10001' });
   mocks.prisma.nabisOrder.findFirst.mockResolvedValue(null);
@@ -40,13 +36,11 @@ beforeEach(() => {
   mocks.prisma.activityLog.create.mockResolvedValue({ id: 'audit' });
   mocks.prisma.activityLog.update.mockResolvedValue({});
   mocks.open.mockResolvedValue({
-    history: [order], catalog: [{ id: 'roll', sku: 'R', name: 'Roll', brand: 'Example Roll', kind: 'pre-roll', available: 15, strain: null }],
+    history: [order], catalog: [{ id: 'roll', sku: 'R', name: 'Roll', brand: 'Ichi Roll', kind: 'pre-roll', available: 15, strain: null }],
     canWrite: true, readOrder: mocks.read, apply: mocks.apply,
   });
   mocks.read.mockResolvedValue(order);
 });
-
-afterEach(() => vi.unstubAllEnvs());
 
 describe('confirmed first-order sample updates', () => {
   it('rejects a stale reviewed order before a write', async () => {

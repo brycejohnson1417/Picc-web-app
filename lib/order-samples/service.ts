@@ -1,32 +1,15 @@
 import 'server-only';
 
 import { createHash } from 'node:crypto';
-import { z } from 'zod';
 import { ActivityType } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { resolveAccountIdentity } from '@/lib/server/account-identity';
 import { openDistruSampleOrders, SampleOrderError } from './distru';
 import { planSamples, type SalesOrder, type SampleLine } from './plan';
+import { firstOrderSamplePolicy as policy } from './policy';
 
 type Actor = { orgId: string; userId: string };
 const activityTitle = 'First-order sample update';
-const samplePolicySchema = z.object({
-  unitPriceCents: z.number().int().min(0).max(99),
-  preRollCap: z.number().int().min(1).max(20),
-  preRollBrands: z.array(z.string().min(1)).min(1).max(30),
-  brandAliases: z.record(z.string(), z.array(z.string().min(1))),
-  exclusions: z.array(z.string().min(1)),
-  gummyBrand: z.string().min(1),
-  gummyGroups: z.array(z.object({ label: z.string().min(1), terms: z.array(z.string().min(1)).min(1) })).min(1).max(6),
-});
-
-function loadPolicy() {
-  try {
-    return samplePolicySchema.parse(JSON.parse(process.env.FIRST_ORDER_SAMPLE_POLICY ?? 'null'));
-  } catch {
-    throw new SampleOrderError('First-order sample rules have not been configured for PICC.', 503);
-  }
-}
 
 function version(order: SalesOrder) {
   return [order.id, order.updatedAt, order.snapshot, order.rows.map(row => [row.id, row.snapshot]).sort()];
@@ -71,7 +54,6 @@ async function loadAccount(accountIdOrPageId: string, { orgId }: Actor, samplePr
 }
 
 async function prepare(accountId: string, actor: Actor) {
-  const policy = loadPolicy();
   const { account, previousPurchase } = await loadAccount(accountId, actor, policy.unitPriceCents / 100);
   const vendors = await openDistruSampleOrders(account, policy);
   const plan = planSamples(vendors.history, vendors.catalog, previousPurchase, policy);
