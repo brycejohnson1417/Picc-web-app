@@ -471,3 +471,35 @@ test('primary replacement displays exact current and new fields and submits conf
   await expect(dialog.getByText('Contact created and linked to the account in Notion.')).toBeVisible();
   expect(payloads[1]).toMatchObject({ expectedPrimary: before, expectedPrimaryReplacement: after, overwriteRoles: true });
 });
+
+test('reviews first-order samples in the AI tab and saves only the selected lines', async ({ page }, testInfo) => {
+  const order = { number: 'SO-TEST', date: '2026-11-25', status: 'pending', url: null };
+  const fingerprint = 'a'.repeat(64);
+  let post: unknown;
+  await page.route('**/api/accounts/*/first-order-samples', async route => {
+    if (route.request().method() === 'POST') {
+      post = route.request().postDataJSON();
+      await route.fulfill({ json: { order, added: 3 } });
+      return;
+    }
+    await route.fulfill({ json: { order, reason: null, fingerprint, unitPriceCents: 1, skipped: ['Example Roll already has a display.'],
+      lines: [
+        { productId: 'roll', sku: 'ROLL', name: 'Example Roll 1 g pre-roll', quantity: 3, reason: 'Ordered SKU', availableUnits: 20 },
+        { productId: 'gummy', sku: 'GUMMY', name: 'Example rosin gummy pack', quantity: 1, reason: 'Most available in its gummy line', availableUnits: 12 },
+      ] } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /Example Store.*Customer.*Example Rep/s }).click();
+  await page.getByText('AI', { exact: true }).click();
+  await page.getByRole('button', { name: 'Review first-order samples' }).click();
+  await expect(page.getByText('SO-TEST', { exact: true })).toBeVisible();
+  await expect(page.getByText('4 units · $0.04')).toBeVisible();
+  expect(post).toBeUndefined();
+  await page.getByRole('checkbox', { name: /Example rosin/ }).uncheck();
+  await expect(page.getByText('3 units · $0.03')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('first-order-samples-review.png') });
+  await page.getByRole('button', { name: 'Confirm and add to order' }).click();
+  await expect(page.getByText('Verified in Distru · 3 units added')).toBeVisible();
+  expect(post).toEqual({ fingerprint, productIds: ['roll'] });
+});
