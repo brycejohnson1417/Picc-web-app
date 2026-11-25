@@ -19,7 +19,7 @@ function row(productId: string, quantity: number, sample = false, price = sample
   return { id: productId, productId, quantity, sample, price, snapshot: productId };
 }
 function order(overrides: Partial<SalesOrder> = {}): SalesOrder {
-  return { id: 'order', number: 'SO-1', status: 'pending', updatedAt: 'v1', date: '2026-11-25',
+  return { id: 'order', number: 'SO-1', status: 'pending', updatedAt: 'v1', date: '2026-11-25', dueDate: null,
     url: null, editable: true, locationId: 'warehouse', rows: [row('roll', 8), row('excluded', 5)], snapshot: 'v1', ...overrides };
 }
 
@@ -41,11 +41,38 @@ describe('first-order sample plan', () => {
     ]);
   });
 
-  it('blocks commercial reorders, ambiguous open orders, and recorded purchases in another channel', () => {
+  it('blocks commercial reorders and recorded purchases in another channel', () => {
     const earlier = order({ id: 'old', status: 'complete', date: '2026-11-02' });
     expect(planSamples([order(), earlier], catalog, false, policy).lines).toEqual([]);
     expect(planSamples([order(), { ...earlier, status: 'pending' }], catalog, false, policy).lines).toEqual([]);
     expect(planSamples([order()], catalog, true, policy).lines).toEqual([]);
+  });
+
+  it('plans a split first purchase on its Net 30 order, pooling both orders', () => {
+    const cod = order({ id: 'cod', number: 'SO-2', dueDate: '2026-11-25', rows: [row('roll', 2)] });
+    const net30 = order({ id: 'net30', number: 'SO-3', dueDate: '2026-12-25', rows: [row('roll', 2)] });
+    const result = planSamples([cod, net30], catalog, false, policy);
+    expect(result.order?.number).toBe('SO-3');
+    expect(result.lines.map(({ productId, quantity }) => [productId, quantity])).toEqual([
+      ['roll', 5], ['rosin', 1], ['mood', 1], ['display', 1],
+    ]);
+  });
+
+  it('never substitutes an unordered strain when the ordered SKU runs out', () => {
+    const orderedRoll = product('roll-a', 'Example Roll', 'pre-roll', 8);
+    const otherRoll = product('roll-b', 'Example Roll', 'pre-roll', 10);
+    const result = planSamples(
+      [order({ rows: [row('roll-a', 8)] })],
+      [...catalog, orderedRoll, otherRoll], false, policy);
+    expect(result.lines.some(line => line.productId === 'roll-b')).toBe(false);
+    expect(result.skipped).toContain('Example Roll: 5 pre-roll units unavailable.');
+  });
+
+  it('plans a display for a samples-excluded brand that was ordered, without sampling it', () => {
+    const excludedDisplay = product('excluded-display', 'Excluded Brand', 'display', 3);
+    const result = planSamples([order()], [...catalog, excludedDisplay], false, policy);
+    expect(result.lines.map(({ productId }) => productId)).toContain('excluded-display');
+    expect(result.lines.some(line => line.productId === 'excluded')).toBe(false);
   });
 
   it('refuses a non-editable order and never offers a display when past product classification is missing', () => {
