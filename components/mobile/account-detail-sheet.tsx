@@ -9,6 +9,7 @@ import { useAppAccess } from '@/components/auth/app-access-provider';
 import { GmailConversations } from '@/components/crm/gmail-conversations';
 import { ContactCreateFlow } from '@/components/crm/contact-create-flow';
 import { ContactQuickActions } from '@/components/crm/contact-quick-actions';
+import { FirstOrderSamplesPanel } from '@/components/crm/first-order-samples-panel';
 import { MockOrderProposalPanel } from '@/components/crm/mock-order-proposal-panel';
 import { PreferredPartnerProposalPanel } from '@/components/crm/preferred-partner-proposal-panel';
 import { PreferredPartnerSavingsPanel } from '@/components/crm/preferred-partner-savings-panel';
@@ -717,6 +718,7 @@ export function AccountDetailSheet({ store, onClose, onAddToRoute, routeSelected
           {tab === 'ai' ? (
             <div className="border-b border-[#c6c7cb] px-5 py-5">
               <div className="space-y-4">
+                <FirstOrderSamplesPanel key={aiAccountId} accountId={aiAccountId} />
                 <PreferredPartnerProposalPanel accountId={aiAccountId} />
                 <PreferredPartnerSavingsPanel accountId={aiAccountId} year={savingsYear} />
                 <MockOrderProposalPanel accountId={aiAccountId} />
