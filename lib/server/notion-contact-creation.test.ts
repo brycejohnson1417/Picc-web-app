@@ -94,6 +94,14 @@ describe('Notion contact creation adapter', () => {
     });
   });
 
+  it.each([undefined, { type: 'rich_text', rich_text: [] }])('rejects unavailable role relations before writing (%j)', async (property) => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(() => jsonResponse({ id: createInput().accountPageId, properties: { 'Primary Contact': property } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = createNotionContactCreationAdapter();
+    await expect(adapter.getRoleAssignments!(createInput().accountPageId, ['PRIMARY_CONTACT'])).rejects.toThrow('Save as associated contact');
+    expect(fetchMock.mock.calls.every((call) => !call[1]?.method || call[1].method === 'GET')).toBe(true);
+  });
+
   it('creates a page beneath the resolved contacts data source with supported fields', async () => {
     const fetchMock = vi
       .fn()
@@ -147,6 +155,39 @@ describe('Notion contact creation adapter', () => {
       { id: 'contact-b' },
       { id: 'contact-c' },
     ]);
+  });
+
+  it('preserves all relation pages when adding a contact beyond the Notion inline limit', async () => {
+    const accountId = createInput().accountPageId;
+    const first = Array.from({ length: 25 }, (_, i) => ({ id: `existing-${i}` }));
+    const inline = { type: 'relation', id: 'assoc%3A', relation: first, has_more: true };
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => jsonResponse({ id: accountId, properties: { 'Associated Contacts': inline } }))
+      .mockImplementationOnce(() => jsonResponse({ results: first.map(relation => ({ type: 'relation', relation })), has_more: true, next_cursor: 'next' }))
+      .mockImplementationOnce(() => jsonResponse({ results: [{ type: 'relation', relation: { id: 'existing-extra' } }], has_more: false }))
+      .mockImplementationOnce(() => jsonResponse({ id: accountId }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createNotionContactCreationAdapter().ensureAccountContact(accountId, 'new-contact');
+
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/properties/assoc%3A?page_size=100');
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain('start_cursor=next');
+    const patches = fetchMock.mock.calls.filter(([, request]) => request?.method === 'PATCH');
+    expect(patches).toHaveLength(1);
+    expect(JSON.parse(String(patches[0]?.[1]?.body)).properties['Associated Contacts'].relation)
+      .toEqual([...first, { id: 'existing-extra' }, { id: 'new-contact' }]);
+  });
+
+  it('never replaces a relation from an incomplete property response', async () => {
+    const accountId = createInput().accountPageId;
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => jsonResponse({ id: accountId, properties: { 'Associated Contacts': {
+        type: 'relation', id: 'assoc', relation: [{ id: 'existing' }], has_more: true,
+      } } }))
+      .mockImplementationOnce(() => jsonResponse({ results: [], has_more: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(createNotionContactCreationAdapter().ensureAccountContact(accountId, 'new-contact')).rejects.toThrow();
+    expect(fetchMock.mock.calls.some(([, request]) => request?.method === 'PATCH')).toBe(false);
   });
 
   it('does not patch an account that already contains the contact', async () => {
@@ -263,5 +304,43 @@ describe('Notion contact creation adapter', () => {
 
     await expect(adapter.requireAccount(createInput().accountPageId)).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+
+describe('live-shaped primary scalar write', () => {
+  const before = { name: 'Old', email: 'old@example.com', phone: '123', position: null, revision: 'rev1' };
+  const after = { name: 'New', email: null, phone: '456', position: null };
+  const page = (values: { name: string; email: string | null; phone: string | null; position: string | null }, revision = 'rev1') => ({ id: 'account', last_edited_time: revision, properties: { Contact: { type: 'rich_text', rich_text: [{ plain_text: values.name }] }, 'Contact Email': { type: 'email', email: values.email }, 'Contact Phone': { type: 'phone_number', phone_number: values.phone } } });
+  afterEach(() => { vi.restoreAllMocks(); process.env = originalEnv; });
+  it('rereads before PATCH, preserves omitted position and verifies fields afterward', async () => {
+    process.env = { ...originalEnv, NOTION_API_KEY: 'test' };
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => jsonResponse(page(before)))
+      .mockImplementationOnce(() => jsonResponse({}))
+      .mockImplementationOnce(() => jsonResponse(page(after, 'rev2')));
+    vi.stubGlobal('fetch', fetchMock);
+    await createNotionContactCreationAdapter().assignPrimaryContact!('account', { before, after });
+    expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
+    const patch = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(patch.properties).toEqual({ Contact: { rich_text: [{ text: { content: 'New' } }] }, 'Contact Email': { email: null }, 'Contact Phone': { phone_number: '456' } });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+  it('does not automatically retry an uncertain primary PATCH', async () => {
+    process.env = { ...originalEnv, NOTION_API_KEY: 'test' };
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => jsonResponse(page(before)))
+      .mockImplementationOnce(() => jsonResponse({ code: 'internal_server_error' }, 500));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(createNotionContactCreationAdapter().assignPrimaryContact!('account', { before, after })).rejects.toThrow('Notion request failed');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+  it('does not PATCH if live old values changed immediately before write', async () => {
+    process.env = { ...originalEnv, NOTION_API_KEY: 'test' };
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(() => jsonResponse(page({ ...before, phone: 'changed' })));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(createNotionContactCreationAdapter().assignPrimaryContact!('account', { before, after })).rejects.toThrow('changed since preview');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
   });
 });

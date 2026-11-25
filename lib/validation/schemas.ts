@@ -32,11 +32,13 @@ const notionPageIdSchema = z
 export const notionContactCreateSchema = z.object({
   accountPageId: notionPageIdSchema,
   name: z.string().trim().min(1).max(160),
-  position: z.string().trim().min(1).max(160),
+  position: z.string().trim().max(160).default(''),
   email: z.string().trim().email().max(320).nullable(),
   phone: z.string().trim().max(40).nullable(),
   roles: z.array(z.enum(['PRIMARY_CONTACT', 'SECOND_CONTACT', 'PPP_2', 'PPP_3', 'BILLING_CONTACT'])).max(5).default([]),
   overwriteRoles: z.boolean().default(false),
+  expectedPrimaryReplacement: z.object({ name: z.string().max(2000), email: z.string().nullable(), phone: z.string().nullable(), position: z.string().nullable() }).optional(),
+  expectedPrimary: z.object({ name: z.string().max(2000), email: z.string().nullable(), phone: z.string().nullable(), position: z.string().nullable(), revision: z.string().min(1) }).optional(),
 });
 
 export const notionContactRetrySchema = z.object({

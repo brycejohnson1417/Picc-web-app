@@ -1,3 +1,4 @@
+import { PrimaryContactChangedError } from '@/lib/contacts/primary-contact';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createVerifiedContact,
@@ -99,6 +100,16 @@ describe('verified contact creation', () => {
     expect(adapter.assignRoles).not.toHaveBeenCalled();
   });
 
+  it('saves an associated contact without touching existing role assignments', async () => {
+    const adapter = fakeAdapter();
+    adapter.getRoleAssignments.mockResolvedValue({ PRIMARY_CONTACT: [{ id: 'old', name: 'Existing' }] });
+    const result = await createVerifiedContact(input({ position: '', roles: [], overwriteRoles: false }), adapter);
+    expect(result.status).toBe('created_verified');
+    expect(adapter.ensureAccountContact).toHaveBeenCalledWith('account-page', 'contact-page');
+    expect(adapter.assignRoles).not.toHaveBeenCalled();
+    expect(adapter.getRoleAssignments).not.toHaveBeenCalled();
+  });
+
   it('assigns multiple selected roles after explicit overwrite confirmation', async () => {
     const adapter = fakeAdapter({ existing: null });
     adapter.getRoleAssignments.mockResolvedValue({
@@ -185,5 +196,50 @@ describe('verified contact creation', () => {
     expect(adapter.createContact).not.toHaveBeenCalled();
     expect(adapter.ensureAccountContact).toHaveBeenCalledTimes(1);
     expect(adapter.refreshContacts).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('scalar primary contact confirmation', () => {
+  const before = { name: 'Existing Buyer', email: 'old@example.com', phone: '123', position: 'Buyer', revision: 'rev1' };
+  const after = { name: 'Maya Chen', email: 'maya@example.com', phone: '212-555-0187', position: 'Buyer' };
+  function primaryAdapter() {
+    return { ...fakeAdapter(), previewPrimaryContact: vi.fn().mockResolvedValue({ before, after }), assignPrimaryContact: vi.fn().mockResolvedValue(undefined) };
+  }
+  it('previews old and new fields without writing, including when overwrite has no expected snapshot', async () => {
+    const adapter = primaryAdapter();
+    const result = await createVerifiedContact(input({ roles: ['PRIMARY_CONTACT'], overwriteRoles: true }), adapter);
+    expect(result).toMatchObject({ status: 'role_collision', primaryPreview: { before, after } });
+    expect(adapter.createContact).not.toHaveBeenCalled();
+    expect(adapter.assignPrimaryContact).not.toHaveBeenCalled();
+  });
+  it('requires renewed confirmation when old or replacement values change', async () => {
+    const adapter = primaryAdapter();
+    for (const expected of [{ ...before, phone: 'changed' }, before]) {
+      const result = await createVerifiedContact(input({ roles: ['PRIMARY_CONTACT'], overwriteRoles: true, expectedPrimary: expected, expectedPrimaryReplacement: { ...after, name: 'Different' } }), adapter);
+      expect(result.status).toBe('role_collision');
+    }
+    expect(adapter.createContact).not.toHaveBeenCalled();
+  });
+  it('writes scalar primary only after confirmation, never via relation assignment', async () => {
+    const adapter = primaryAdapter();
+    const result = await createVerifiedContact(input({ roles: ['PRIMARY_CONTACT'], overwriteRoles: true, expectedPrimary: before, expectedPrimaryReplacement: after }), adapter);
+    expect(result.status).toBe('created_verified');
+    expect(adapter.assignPrimaryContact).toHaveBeenCalledWith('account-page', { before, after });
+    expect(adapter.assignRoles).not.toHaveBeenCalled();
+  });
+  it('returns a fresh confirmation preview if primary changes immediately before PATCH', async () => {
+    const adapter = primaryAdapter();
+    const updated = { before: { ...before, phone: 'changed', revision: 'rev2' }, after };
+    adapter.assignPrimaryContact.mockRejectedValue(new PrimaryContactChangedError(updated));
+    const result = await createVerifiedContact(input({ roles: ['PRIMARY_CONTACT'], overwriteRoles: true, expectedPrimary: before, expectedPrimaryReplacement: after }), adapter);
+    expect(result).toMatchObject({ status: 'role_collision', primaryPreview: updated });
+    expect(adapter.assignPrimaryContact).toHaveBeenCalledTimes(1);
+  });
+  it('associated-only never previews or changes primary fields', async () => {
+    const adapter = primaryAdapter();
+    await createVerifiedContact(input({ roles: [] }), adapter);
+    expect(adapter.previewPrimaryContact).not.toHaveBeenCalled();
+    expect(adapter.assignPrimaryContact).not.toHaveBeenCalled();
   });
 });

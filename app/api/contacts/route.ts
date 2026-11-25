@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   try {
     const payload = await parseJsonBody(req, notionContactCreateSchema);
     await requireNotionAccountOwnership(ctx.orgId, payload.accountPageId);
-    const result = await createVerifiedContact(payload, createNotionContactCreationAdapter());
+    const result = await createVerifiedContact({ ...payload, position: payload.position ?? '' }, createNotionContactCreationAdapter());
     const status = result.status === 'role_collision' ? 409 : result.status === 'partial_relation' ? 202 : result.status === 'created_verified' ? 201 : 200;
     return NextResponse.json(result, { status });
   } catch (error) {
